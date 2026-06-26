@@ -59,7 +59,7 @@ final prediosListProvider = FutureProvider<List<Predio>>((ref) async {
       usoSuelo: filtros.usoSuelo,
       zona: filtros.zona,
       propietarioId: filtros.propietarioId,
-      limit: 1000,
+      limit: 100000,
     );
   } catch (_) {
     remotos = const [];
@@ -137,7 +137,7 @@ final prediosMapaProvider = FutureProvider<List<Predio>>((ref) async {
   final repo = ref.read(prediosRepositoryProvider);
   List<Predio> remotos = const [];
   try {
-    remotos = await repo.getPredios(limit: 200);
+    remotos = await repo.getPredios(limit: 100000);
   } catch (_) {
     remotos = const [];
   }

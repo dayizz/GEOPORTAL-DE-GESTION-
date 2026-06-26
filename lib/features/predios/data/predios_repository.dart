@@ -145,7 +145,7 @@ class PrediosRepository {
     String? usoSuelo,
     String? zona,
     String? propietarioId,
-    int limit = 50,
+    int limit = 10000,
     int offset = 0,
   }) async {
     // Si hay ApiClient, usar backend FastAPI

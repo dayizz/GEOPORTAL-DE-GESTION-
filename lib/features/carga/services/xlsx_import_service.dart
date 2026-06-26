@@ -653,6 +653,7 @@ class XlsxImportService {
     final upper = _normalizeUpperCode(value);
     if (upper.contains('SOC')) return 'SOCIAL';
     if (upper.contains('PRI')) return 'PRIVADA';
+    if (upper.contains('DOMINIO') || upper.contains('PLENO')) return 'DOMINIO PLENO';
     return upper;
   }
 

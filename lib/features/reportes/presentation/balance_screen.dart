@@ -754,31 +754,61 @@ class _BalanceScreenState extends ConsumerState<BalanceScreen> {
         children: [
           Text(titulo, style: const TextStyle(fontSize: 14, fontWeight: FontWeight.bold)),
           const SizedBox(height: 16),
+          // Cuadro de cuantificación
+          Container(
+            padding: const EdgeInsets.all(12),
+            decoration: BoxDecoration(
+              color: const Color(0xFFF5F5F5),
+              borderRadius: BorderRadius.circular(10),
+            ),
+            child: Row(
+              children: [
+                Expanded(
+                  child: Row(
+                    children: [
+                      const Icon(Icons.terrain, size: 20, color: AppColors.primary),
+                      const SizedBox(width: 8),
+                      Text(
+                        'Total de Predios: ',
+                        style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600),
+                      ),
+                      Text(
+                        fmtInt.format(total),
+                        style: const TextStyle(fontSize: 14, fontWeight: FontWeight.bold, color: AppColors.primary),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(height: 20),
+          // Gráficas de dona separadas
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceEvenly,
             children: [
-              _buildDonaIndividual(
+              _buildDonaSeparada(
                 titulo: 'Identificación',
                 completado: identificados,
                 total: total,
                 color: AppColors.info,
                 icon: Icons.search,
               ),
-              _buildDonaIndividual(
+              _buildDonaSeparada(
                 titulo: 'Levantamiento',
                 completado: levantados,
                 total: total,
                 color: AppColors.warning,
                 icon: Icons.architecture,
               ),
-              _buildDonaIndividual(
+              _buildDonaSeparada(
                 titulo: 'Negociación',
                 completado: negociados,
                 total: total,
                 color: AppColors.primary,
                 icon: Icons.handshake,
               ),
-              _buildDonaIndividual(
+              _buildDonaSeparada(
                 titulo: 'Liberados',
                 completado: liberados,
                 total: total,
@@ -865,6 +895,83 @@ class _BalanceScreenState extends ConsumerState<BalanceScreen> {
         children: [
           Text(value, style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: color)),
           Text(label, style: const TextStyle(fontSize: 9, color: AppColors.textSecondary)),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildDonaSeparada({
+    required String titulo,
+    required int completado,
+    required int total,
+    required Color color,
+    required IconData icon,
+  }) {
+    if (total == 0) {
+      return SizedBox(
+        width: 80,
+        child: Column(
+          children: [
+            Icon(icon, color: color.withValues(alpha: 0.3), size: 20),
+            const SizedBox(height: 4),
+            Text(
+              titulo,
+              style: const TextStyle(fontSize: 10, fontWeight: FontWeight.w600),
+              textAlign: TextAlign.center,
+            ),
+            Text(
+              '0',
+              style: const TextStyle(fontSize: 9, color: AppColors.textSecondary),
+            ),
+          ],
+        ),
+      );
+    }
+    
+    final restante = total - completado;
+
+    return SizedBox(
+      width: 80,
+      child: Column(
+        children: [
+          Icon(icon, color: color, size: 20),
+          const SizedBox(height: 4),
+          SizedBox(
+            width: 60,
+            height: 60,
+            child: PieChart(
+              PieChartData(
+                sectionsSpace: 1,
+                centerSpaceRadius: 15,
+                sections: [
+                  PieChartSectionData(
+                    color: color,
+                    value: completado.toDouble(),
+                    title: completado.toString(),
+                    radius: 14,
+                    titleStyle: const TextStyle(
+                      color: Colors.white,
+                      fontWeight: FontWeight.bold,
+                      fontSize: 9,
+                    ),
+                  ),
+                  if (restante > 0)
+                    PieChartSectionData(
+                      color: Colors.grey.shade300,
+                      value: restante.toDouble(),
+                      title: '',
+                      radius: 14,
+                    ),
+                ],
+              ),
+            ),
+          ),
+          const SizedBox(height: 4),
+          Text(
+            titulo,
+            style: const TextStyle(fontSize: 10, fontWeight: FontWeight.w600),
+            textAlign: TextAlign.center,
+          ),
         ],
       ),
     );

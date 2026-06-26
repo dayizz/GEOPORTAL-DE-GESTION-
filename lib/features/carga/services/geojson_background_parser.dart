@@ -164,6 +164,36 @@ Map<String, dynamic> _parseGeoJsonPayload(Map<String, dynamic> request) {
       }
     }
 
+    // Búsqueda optimizada de km_inicio
+    double kmInicio = 0;
+    for (final key in kmInicioKeys) {
+      final val = _toDouble(props[key]);
+      if (val != null) {
+        kmInicio = val;
+        break;
+      }
+    }
+
+    // Búsqueda optimizada de km_fin
+    double kmFin = 0;
+    for (final key in kmFinKeys) {
+      final val = _toDouble(props[key]);
+      if (val != null) {
+        kmFin = val;
+        break;
+      }
+    }
+
+    // Búsqueda optimizada de km_efectivos
+    double kmEfectivos = 0;
+    for (final key in kmEfectivosKeys) {
+      final val = _toDouble(props[key]);
+      if (val != null) {
+        kmEfectivos = val;
+        break;
+      }
+    }
+
     // Crear enriched properties
     final propsEnriched = <String, dynamic>{
       ...props,
