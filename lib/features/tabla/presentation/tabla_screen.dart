@@ -128,7 +128,8 @@ class _TablaScreenState extends ConsumerState<TablaScreen> {
       return _lastFiltered!;
     }
     final filtered = all.where((p) {
-      if (_predioProyecto(p) != _proyectoActual) return false;
+      //暂时注释掉项目过滤器以调试问题
+      // if (_predioProyecto(p) != _proyectoActual) return false;
       if (_filtroTramo != null && p.tramo != _filtroTramo) return false;
       if (_filtroTipo != null && p.tipoPropiedad != _filtroTipo) return false;
       if (_filtroEstatus != null) {
