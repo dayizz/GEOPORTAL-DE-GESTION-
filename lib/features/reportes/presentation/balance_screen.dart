@@ -329,7 +329,7 @@ class _BalanceScreenState extends ConsumerState<BalanceScreen> {
                         Expanded(
                           child: PieChart(
                             PieChartData(
-                              sections: _buildPieSectionsTipoLiberacion(porTipoLiberacion, prediosLiberados),
+                              sections: _buildPieSectionsTipoLiberacion(porTipoLiberacion, porTipoLiberacion.values.fold(0, (a, b) => a + b)),
                               centerSpaceRadius: 40,
                               sectionsSpace: 2,
                             ),
@@ -930,6 +930,9 @@ class _BalanceScreenState extends ConsumerState<BalanceScreen> {
     
     final restante = total - completado;
 
+    // Always show at least one visible segment when there are predios
+    final showGreySection = restante > 0 || completado == 0;
+
     return SizedBox(
       width: 80,
       child: Column(
@@ -946,7 +949,7 @@ class _BalanceScreenState extends ConsumerState<BalanceScreen> {
                 sections: [
                   PieChartSectionData(
                     color: color,
-                    value: completado.toDouble(),
+                    value: completado > 0 ? completado.toDouble() : 0.5,
                     title: completado.toString(),
                     radius: 14,
                     titleStyle: const TextStyle(
@@ -955,10 +958,10 @@ class _BalanceScreenState extends ConsumerState<BalanceScreen> {
                       fontSize: 9,
                     ),
                   ),
-                  if (restante > 0)
+                  if (showGreySection)
                     PieChartSectionData(
                       color: Colors.grey.shade300,
-                      value: restante.toDouble(),
+                      value: restante > 0 ? restante.toDouble() : 0.5,
                       title: '',
                       radius: 14,
                     ),
