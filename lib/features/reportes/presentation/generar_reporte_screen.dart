@@ -1,5 +1,7 @@
 import 'dart:typed_data';
+import 'dart:math' as math;
 import 'package:flutter/material.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:pdf/pdf.dart';
 import 'package:pdf/widgets.dart' as pw;
@@ -8,6 +10,7 @@ import 'package:intl/intl.dart';
 import 'dart:io';
 import 'package:path_provider/path_provider.dart';
 import 'package:flutter/services.dart' show rootBundle;
+import 'dart:html' as html show Blob, Url, AnchorElement, document;
 import '../../../shared/widgets/app_scaffold.dart';
 import '../../../core/constants/app_colors.dart';
 import '../../predios/providers/predios_provider.dart';
@@ -33,31 +36,86 @@ class _GenerarReporteScreenState extends ConsumerState<GenerarReporteScreen> {
   static const _proyectos = ['TQI', 'TSNL', 'TAP', 'TQM'];
   
   String _proyectoActual = 'TQI';
+  String _datosNumericosDe = 'Proyecto';
+  String? _segmentoSeleccionado;
   
   // Controladores para el formulario
   final _paraNombreCtrl = TextEditingController();
   final _paraCargoCtrl = TextEditingController();
   final _deNombreCtrl = TextEditingController();
   final _deCargoCtrl = TextEditingController();
+  int _previewTimestamp = 0;
   final _asuntoCtrl = TextEditingController();
   final _contenidoCtrl = TextEditingController();
   
   // Controladores para elaborar y revisar
   final _elaboroCtrl = TextEditingController();
   final _revisoCtrl = TextEditingController();
-  
+
+  final Map<String, int> _consecutivoReportePorProyecto = {
+    'TQI': 1,
+    'TSNL': 1,
+    'TAP': 1,
+    'TQM': 1,
+  };
   int _numeroReporte = 1;
   bool _isGenerating = false;
   bool _showPreview = false;
   Uint8List? _previewPdfBytes;
+  Future<List<Uint8List>>? _webPreviewImagesFuture;
+  pw.MemoryImage? _membretadaImage;
+  Future<void>? _pdfAssetsInitFuture;
+
+  Future<List<Uint8List>> _rasterizeWebPreview(Uint8List pdfBytes) async {
+    final pages = <Uint8List>[];
+    await for (final page in Printing.raster(pdfBytes, pages: const [0, 1], dpi: 120)) {
+      pages.add(await page.toPng());
+      if (pages.length >= 2) break;
+    }
+    return pages;
+  }
+
+  Future<void> _ensurePdfAssetsReady() {
+    _pdfAssetsInitFuture ??= () async {
+      // Intentar fuentes remotas en paralelo; si fallan, usar fallback local inmediato.
+      try {
+        final fonts = await Future.wait<pw.Font>([
+          PdfGoogleFonts.notoSansRegular().timeout(const Duration(seconds: 4)),
+          PdfGoogleFonts.notoSansBold().timeout(const Duration(seconds: 4)),
+        ]);
+        notoSansRegular = fonts[0];
+        notoSansBold = fonts[1];
+      } catch (_) {
+        notoSansRegular = pw.Font.helvetica();
+        notoSansBold = pw.Font.helveticaBold();
+      }
+
+      final membretadaBytes = await rootBundle.load('assets/reportes/hoja_membretada.png');
+      _membretadaImage = pw.MemoryImage(membretadaBytes.buffer.asUint8List());
+    }();
+    return _pdfAssetsInitFuture!;
+  }
+
+  void _sincronizarNumeroReportePorProyecto() {
+    _numeroReporte = _consecutivoReportePorProyecto[_proyectoActual] ?? 1;
+  }
+
+  void _avanzarConsecutivoProyectoActual() {
+    _consecutivoReportePorProyecto[_proyectoActual] = _numeroReporte + 1;
+    _sincronizarNumeroReportePorProyecto();
+  }
 
   @override
   void initState() {
     super.initState();
+    // Fallback inmediato para no bloquear en caso de red lenta.
+    notoSansRegular = pw.Font.helvetica();
+    notoSansBold = pw.Font.helveticaBold();
     // Usar el proyecto inicial si se proporcionó
     if (widget.proyectoInicial != null && _proyectos.contains(widget.proyectoInicial)) {
       _proyectoActual = widget.proyectoInicial!;
     }
+    _sincronizarNumeroReportePorProyecto();
     // Establecer el asunto por defecto según el proyecto inicial
     _asuntoCtrl.text = 'Informe del balance actual del proyecto $_proyectoActual';
   }
@@ -82,13 +140,6 @@ class _GenerarReporteScreenState extends ConsumerState<GenerarReporteScreen> {
     _revisoCtrl.dispose();
     super.dispose();
   }
-  /// Helper para generar la cadena ELABORO/REVISO
-  String _getElaboroReviso() {
-    final elaboro = _elaboroCtrl.text.isNotEmpty ? _elaboroCtrl.text : 'BDVV';
-    final reviso = _revisoCtrl.text.isNotEmpty ? _revisoCtrl.text : 'EJJQ';
-    return '$elaboro/$reviso';
-  }
-
   String _predioProyecto(Predio predicado) {
     final proyectoDirecto = predicado.proyecto?.trim().toUpperCase();
     if (proyectoDirecto != null && _proyectos.contains(proyectoDirecto)) {
@@ -117,40 +168,187 @@ class _GenerarReporteScreenState extends ConsumerState<GenerarReporteScreen> {
     return 'Sin proyecto';
   }
 
+  List<String> _segmentosDelProyecto(List<Predio> prediosProyecto) {
+    final segmentos = prediosProyecto
+        .map((p) => p.tramo.trim())
+        .where((t) => t.isNotEmpty && t != '-')
+        .toSet()
+        .toList();
+    segmentos.sort();
+    return segmentos;
+  }
+
+  String _origenNumericoLabel() {
+    if (_datosNumericosDe == 'Segmento' && _segmentoSeleccionado != null) {
+      return 'Segmento (${_segmentoSeleccionado!})';
+    }
+    return 'Proyecto';
+  }
+
+  String _normalizarTextoPdf(String value, String fallback) {
+    final cleaned = value
+        .replaceAll('\u00A0', ' ')
+        .replaceAll(RegExp(r'^[ \t]+', multiLine: true), '')
+        .trimRight();
+    if (cleaned.trim().isEmpty) return fallback;
+    return cleaned;
+  }
+
+  String _buildDonutSvg({
+    required int completado,
+    required int total,
+    required String colorHex,
+  }) {
+    final progress = total > 0 ? (completado / total).clamp(0.0, 1.0) : 0.0;
+    const radius = 38.0;
+    final circumference = 2 * math.pi * radius;
+    final dash = circumference * progress;
+    final gap = circumference - dash;
+    final percent = (progress * 100).round();
+
+    return '''
+<svg xmlns="http://www.w3.org/2000/svg" width="120" height="120" viewBox="0 0 120 120">
+  <g transform="rotate(-90 60 60)">
+    <circle cx="60" cy="60" r="$radius" fill="none" stroke="#E5E7EB" stroke-width="14"/>
+    <circle cx="60" cy="60" r="$radius" fill="none" stroke="$colorHex" stroke-width="14" stroke-linecap="round" stroke-dasharray="$dash $gap"/>
+  </g>
+  <text x="60" y="58" text-anchor="middle" font-family="Helvetica" font-size="9" font-weight="700" fill="#111827">$percent%</text>
+  <text x="60" y="72" text-anchor="middle" font-family="Helvetica" font-size="9" fill="#6B7280">$completado/$total</text>
+</svg>
+''';
+  }
+
+  pw.Widget _buildPdfDonutCard({
+    required String titulo,
+    required int completado,
+    required int totalReferencia,
+  }) {
+    return pw.SizedBox(
+      height: 94,
+      child: pw.Column(
+        crossAxisAlignment: pw.CrossAxisAlignment.center,
+        children: [
+          pw.SizedBox(
+            height: 10,
+            child: pw.Center(
+              child: pw.Text(
+                titulo,
+                style: pw.TextStyle(fontSize: _fontSize, font: notoSansBold),
+                textAlign: pw.TextAlign.center,
+              ),
+            ),
+          ),
+          pw.SizedBox(height: 0),
+          pw.SizedBox(
+            width: 74,
+            height: 74,
+            child: pw.SvgImage(
+              svg: _buildDonutSvg(
+                completado: completado,
+                total: totalReferencia,
+                colorHex: '#611232',
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  pw.Widget _buildPdfTipoPropiedadSection({
+    required String titulo,
+    required List<Predio> predios,
+  }) {
+    final total = predios.length;
+    final liberados = predios.where((p) => p.cop).length;
+    final identificados = predios.where((p) => p.identificacion).length;
+    final levantados = predios.where((p) => p.levantamiento).length;
+    final negociados = predios.where((p) => p.negociacion).length;
+
+    return pw.Column(
+      crossAxisAlignment: pw.CrossAxisAlignment.start,
+      children: [
+        pw.SizedBox(
+          height: 9,
+          child: pw.Align(
+            alignment: pw.Alignment.topLeft,
+            child: pw.Text(
+              titulo,
+              style: pw.TextStyle(fontSize: _fontSize, font: notoSansBold),
+            ),
+          ),
+        ),
+        pw.SizedBox(
+          height: 9,
+          child: pw.Text(
+            'Total de predios: $total',
+            style: pw.TextStyle(fontSize: _fontSize, font: notoSansRegular),
+          ),
+        ),
+        pw.SizedBox(height: 16),
+        _buildPdfDonutCard(
+          titulo: 'Predios liberados',
+          completado: liberados,
+          totalReferencia: total,
+        ),
+        pw.SizedBox(height: 0),
+        _buildPdfDonutCard(
+          titulo: 'Predios con identificación',
+          completado: identificados,
+          totalReferencia: total,
+        ),
+        pw.SizedBox(height: 0),
+        _buildPdfDonutCard(
+          titulo: 'Predios con levantamiento',
+          completado: levantados,
+          totalReferencia: total,
+        ),
+        pw.SizedBox(height: 0),
+        _buildPdfDonutCard(
+          titulo: 'Predios con negociación',
+          completado: negociados,
+          totalReferencia: total,
+        ),
+      ],
+    );
+  }
+
   /// Genera el PDF y guarda en bytes para previsualización
   Future<Uint8List?> _generarPreviewPdf() async {
     if (_isGenerating) return null;
-    
+
     setState(() => _isGenerating = true);
 
-    // Inicializar fuentes
-    notoSansRegular = await PdfGoogleFonts.notoSansRegular();
-    notoSansBold = await PdfGoogleFonts.notoSansBold();
-
     try {
-      // Cargar imagen membretada
-      final membretadaBytes = await rootBundle.load('assets/reportes/hoja_membretada.png');
-      final membretadaImage = pw.MemoryImage(membretadaBytes.buffer.asUint8List());
+      await _ensurePdfAssetsReady();
+      final membretadaImage = _membretadaImage!;
 
       final prediosAsync = ref.read(prediosListProvider);
-      final predios = prediosAsync.asData?.value ?? [];
+      final predios = prediosAsync.asData?.value ?? <Predio>[];
       final prediosProyecto = predios.where((p) => _predioProyecto(p) == _proyectoActual).toList();
-      
-      // Calcular estadísticas
-      final totalPredios = prediosProyecto.length;
-      final social = prediosProyecto.where((p) => p.tipoPropiedad == 'SOCIAL').length;
-      final dominioPleno = prediosProyecto.where((p) => p.tipoPropiedad == 'DOMINIO PLENO').length;
-      final privada = prediosProyecto.where((p) => p.tipoPropiedad == 'PRIVADA').length;
-      final conCop = prediosProyecto.where((p) => p.cop).length;
-      final sinCop = prediosProyecto.where((p) => !p.cop).length;
-      
-      // Calcular superficie total
-      double superficieTotal = 0;
-      for (final p in prediosProyecto) {
-        if (p.superficie != null) {
-          superficieTotal += p.superficie!;
-        }
-      }
+      final segmentosDisponibles = _segmentosDelProyecto(prediosProyecto);
+      final aplicarSegmento =
+          _datosNumericosDe == 'Segmento' &&
+          _segmentoSeleccionado != null &&
+          segmentosDisponibles.contains(_segmentoSeleccionado);
+      final prediosBase = aplicarSegmento
+          ? prediosProyecto.where((p) => p.tramo.trim() == _segmentoSeleccionado).toList()
+          : prediosProyecto;
+
+      final totalPredios = prediosBase.length;
+      final conCop = prediosBase.where((p) => p.cop).length;
+      final sinCop = prediosBase.where((p) => !p.cop).length;
+      final kmEfectivosLiberados = prediosBase
+          .where((p) => p.cop)
+          .fold<double>(0, (sum, p) => sum + (p.kmEfectivos ?? 0));
+      final superficieLiberada = prediosBase
+          .where((p) => p.cop)
+          .fold<double>(0, (sum, p) => sum + (p.superficie ?? 0));
+
+      final prediosPrivada = prediosBase.where((p) => p.tipoPropiedad.toUpperCase() == 'PRIVADA').toList();
+      final prediosSocialDominio = prediosBase
+          .where((p) => p.tipoPropiedad.toUpperCase() == 'SOCIAL' || p.tipoPropiedad.toUpperCase() == 'DOMINIO PLENO')
+          .toList();
 
       final pdf = pw.Document(
         theme: pw.ThemeData.withFont(
@@ -162,8 +360,18 @@ class _GenerarReporteScreenState extends ConsumerState<GenerarReporteScreen> {
       final ahora = DateTime.now();
       final fechaFormateada = DateFormat('dd/MM/yyyy').format(ahora);
       final proyectoNombre = _proyectoActual;
+      final tituloBalance = _datosNumericosDe == 'Segmento'
+          ? 'Balance general del segmento'
+          : 'Balance general del proyecto';
+      final paraNombrePdf = _normalizarTextoPdf(_paraNombreCtrl.text, '(Nombre)');
+      final paraCargoPdf = _normalizarTextoPdf(_paraCargoCtrl.text, '(Cargo)');
+      final deNombrePdf = _normalizarTextoPdf(_deNombreCtrl.text, '(Nombre)');
+      final deCargoPdf = _normalizarTextoPdf(_deCargoCtrl.text, '(Cargo)');
+      final elaboroIniciales = _normalizarTextoPdf(_elaboroCtrl.text, '').replaceAll(RegExp(r'\s+'), '').toUpperCase();
+      final revisoIniciales = _normalizarTextoPdf(_revisoCtrl.text, '').replaceAll(RegExp(r'\s+'), '').toUpperCase();
+      final firmaIniciales =
+          '${elaboroIniciales.isNotEmpty ? elaboroIniciales : 'N/A'}/${revisoIniciales.isNotEmpty ? revisoIniciales : 'N/A'}';
 
-      // Primera página con membrete - márgenes mínimos para imagen de corner a corner
       pdf.addPage(
         pw.Page(
           pageFormat: PdfPageFormat.letter,
@@ -171,22 +379,20 @@ class _GenerarReporteScreenState extends ConsumerState<GenerarReporteScreen> {
           build: (context) {
             return pw.Stack(
               children: [
-                // Imagen membretada como fondo - de corner a corner
                 pw.Positioned.fill(
                   child: pw.Image(membretadaImage, fit: pw.BoxFit.fill),
                 ),
-                // Contenido del reporte con márgenes
                 pw.Padding(
                   padding: const pw.EdgeInsets.only(left: 60, right: 60, top: 100, bottom: 60),
                   child: pw.Column(
                     crossAxisAlignment: pw.CrossAxisAlignment.start,
                     children: [
-                      // Encabezado - alineado a la derecha
                       pw.Align(
                         alignment: pw.Alignment.topRight,
                         child: pw.Column(
                           crossAxisAlignment: pw.CrossAxisAlignment.end,
                           children: [
+                            pw.SizedBox(height: 9),
                             pw.Text(
                               'Agencia de Trenes y Transporte Público Integrado',
                               style: pw.TextStyle(fontSize: _fontSize, font: notoSansBold),
@@ -215,7 +421,9 @@ class _GenerarReporteScreenState extends ConsumerState<GenerarReporteScreen> {
                                   style: pw.TextStyle(fontSize: _fontSize, font: notoSansBold),
                                 ),
                                 pw.Text(
-                                  _asuntoCtrl.text.isNotEmpty ? _asuntoCtrl.text : 'Informe del balance actual del proyecto $proyectoNombre',
+                                  _asuntoCtrl.text.isNotEmpty
+                                      ? _asuntoCtrl.text
+                                      : 'Informe del balance actual del proyecto $proyectoNombre',
                                   style: pw.TextStyle(fontSize: _fontSize, font: notoSansRegular),
                                 ),
                               ],
@@ -224,155 +432,91 @@ class _GenerarReporteScreenState extends ConsumerState<GenerarReporteScreen> {
                         ),
                       ),
                       pw.SizedBox(height: 30),
-                      
-                      // Reporte informativo - centrado y en negritas
                       pw.Center(
                         child: pw.Text(
                           'Reporte informativo ($_numeroReporte)',
-                          style: pw.TextStyle(
-                            fontSize: _fontSize + 2,
-                            font: notoSansBold,
-                          ),
+                          style: pw.TextStyle(fontSize: _fontSize, font: notoSansBold),
                         ),
                       ),
                       pw.SizedBox(height: 20),
-                      
-                      // PARA - en la misma línea: PARA: Nombre (en negritas)
                       pw.Row(
                         crossAxisAlignment: pw.CrossAxisAlignment.start,
                         children: [
                           pw.Text(
                             'PARA: ',
-                            style: pw.TextStyle(
-                              fontSize: _fontSize,
-                              font: notoSansBold,
-                            ),
+                            style: pw.TextStyle(fontSize: _fontSize, font: notoSansBold),
                           ),
                           pw.Expanded(
-                            child: pw.Column(
-                              crossAxisAlignment: pw.CrossAxisAlignment.start,
-                              children: [
-                                pw.Text(
-                                  _paraNombreCtrl.text.isNotEmpty ? _paraNombreCtrl.text : '(Nombre)',
-                                  style: pw.TextStyle(fontSize: _fontSize, font: notoSansBold),
-                                ),
-                                pw.SizedBox(height: 2),
-                                pw.Text(
-                                  _paraCargoCtrl.text.isNotEmpty ? _paraCargoCtrl.text : '(Cargo)',
-                                  style: pw.TextStyle(fontSize: _fontSize, font: notoSansBold),
-                                ),
-                              ],
+                            child: pw.Text(
+                              paraNombrePdf,
+                              style: pw.TextStyle(fontSize: _fontSize, font: notoSansBold),
+                              textAlign: pw.TextAlign.left,
                             ),
                           ),
                         ],
                       ),
+                      pw.SizedBox(height: 2),
+                      pw.Text(
+                        paraCargoPdf,
+                        style: pw.TextStyle(fontSize: _fontSize, font: notoSansBold),
+                        textAlign: pw.TextAlign.left,
+                      ),
                       pw.SizedBox(height: 12),
-                      // DE - en la misma línea: DE: Nombre (en negritas)
                       pw.Row(
                         crossAxisAlignment: pw.CrossAxisAlignment.start,
                         children: [
                           pw.Text(
                             'DE: ',
-                            style: pw.TextStyle(
-                              fontSize: _fontSize,
-                              font: notoSansBold,
-                            ),
+                            style: pw.TextStyle(fontSize: _fontSize, font: notoSansBold),
                           ),
                           pw.Expanded(
-                            child: pw.Column(
-                              crossAxisAlignment: pw.CrossAxisAlignment.start,
-                              children: [
-                                pw.Text(
-                                  _deNombreCtrl.text.isNotEmpty ? _deNombreCtrl.text : '(Nombre)',
-                                  style: pw.TextStyle(fontSize: _fontSize, font: notoSansBold),
-                                ),
-                                pw.SizedBox(height: 2),
-                                pw.Text(
-                                  _deCargoCtrl.text.isNotEmpty ? _deCargoCtrl.text : '(Cargo)',
-                                  style: pw.TextStyle(fontSize: _fontSize, font: notoSansBold),
-                                ),
-                              ],
+                            child: pw.Text(
+                              deNombrePdf,
+                              style: pw.TextStyle(fontSize: _fontSize, font: notoSansBold),
+                              textAlign: pw.TextAlign.left,
                             ),
                           ),
                         ],
                       ),
+                      pw.SizedBox(height: 2),
+                      pw.Text(
+                        deCargoPdf,
+                        style: pw.TextStyle(fontSize: _fontSize, font: notoSansBold),
+                        textAlign: pw.TextAlign.left,
+                      ),
                       pw.SizedBox(height: 20),
-                      
-                      // Presente
                       pw.Text(
                         'Presente',
-                        style: pw.TextStyle(
-                          fontSize: _fontSize,
-                          font: notoSansBold,
-                        ),
+                        style: pw.TextStyle(fontSize: _fontSize, font: notoSansBold),
                       ),
                       pw.SizedBox(height: 15),
-                      
-                      // Contenido personalizado
                       if (_contenidoCtrl.text.isNotEmpty) ...[
                         pw.Text(
                           _contenidoCtrl.text,
                           style: pw.TextStyle(fontSize: _fontSize, font: notoSansRegular),
+                          textAlign: pw.TextAlign.justify,
                         ),
                         pw.SizedBox(height: 20),
                       ],
-                      
-                      // Resumen de información del proyecto (sin cuadro)
                       pw.Column(
                         crossAxisAlignment: pw.CrossAxisAlignment.start,
                         children: [
                           pw.Text(
-                            'RESUMEN DEL PROYECTO $proyectoNombre',
-                            style: pw.TextStyle(
-                              fontSize: _fontSize + 1,
-                              font: notoSansBold,
-                            ),
+                            tituloBalance,
+                            style: pw.TextStyle(fontSize: _fontSize, font: notoSansBold),
                           ),
                           pw.SizedBox(height: 10),
                           pw.Text(
-                            'Total de predios: $totalPredios',
-                            style: pw.TextStyle(fontSize: _fontSize, font: notoSansRegular),
-                          ),
-                          pw.SizedBox(height: 4),
-                          pw.Text(
-                            'Superficie total: ${NumberFormat('#,##0.00').format(superficieTotal)} m²',
-                            style: pw.TextStyle(fontSize: _fontSize, font: notoSansRegular),
-                          ),
-                          pw.SizedBox(height: 10),
-                          pw.Text(
-                            'Por tipo de propiedad:',
+                            'Total de predios: $totalPredios\n'
+                            'Liberados: $conCop\n'
+                            'No liberados: $sinCop\n'
+                            'KM efectivos liberados: ${NumberFormat('#,##0.00', 'es_MX').format(kmEfectivosLiberados)}\n'
+                            'Superficie liberada: ${NumberFormat('#,##0.00', 'es_MX').format(superficieLiberada)} m²',
                             style: pw.TextStyle(
                               fontSize: _fontSize,
-                              font: notoSansBold,
+                              font: notoSansRegular,
+                                lineSpacing: 3.0,
                             ),
-                          ),
-                          pw.Text(
-                            '  - SOCIAL: $social',
-                            style: pw.TextStyle(fontSize: _fontSize, font: notoSansRegular),
-                          ),
-                          pw.Text(
-                            '  - DOMINIO PLENO: $dominioPleno',
-                            style: pw.TextStyle(fontSize: _fontSize, font: notoSansRegular),
-                          ),
-                          pw.Text(
-                            '  - PRIVADA: $privada',
-                            style: pw.TextStyle(fontSize: _fontSize, font: notoSansRegular),
-                          ),
-                          pw.SizedBox(height: 10),
-                          pw.Text(
-                            'Estatus COP:',
-                            style: pw.TextStyle(
-                              fontSize: _fontSize,
-                              font: notoSansBold,
-                            ),
-                          ),
-                          pw.Text(
-                            '  - Liberados: $conCop',
-                            style: pw.TextStyle(fontSize: _fontSize, font: notoSansRegular),
-                          ),
-                          pw.Text(
-                            '  - No liberados: $sinCop',
-                            style: pw.TextStyle(fontSize: _fontSize, font: notoSansRegular),
                           ),
                         ],
                       ),
@@ -385,209 +529,68 @@ class _GenerarReporteScreenState extends ConsumerState<GenerarReporteScreen> {
         ),
       );
 
-      // Páginas adicionales con tabla de predios si hay contenido
-      if (prediosProyecto.isNotEmpty) {
-        // Dividir en páginas de 25 registros cada una
-        const registrosPorPagina = 25;
-        final totalPaginas = (prediosProyecto.length / registrosPorPagina).ceil();
-        
-        for (var pagina = 0; pagina < totalPaginas; pagina++) {
-          final inicio = pagina * registrosPorPagina;
-          final fin = (inicio + registrosPorPagina).clamp(0, prediosProyecto.length);
-          final prediosPagina = prediosProyecto.sublist(inicio, fin);
-          final esUltimaPagina = (pagina == totalPaginas - 1);
-          
-          pdf.addPage(
-            pw.Page(
-              pageFormat: PdfPageFormat.letter,
-              margin: pw.EdgeInsets.zero,
-              build: (context) {
-                return pw.Stack(
-                  children: [
-                    // Imagen membretada como fondo - de corner a corner
-                    pw.Positioned.fill(
-                      child: pw.Image(membretadaImage, fit: pw.BoxFit.fill),
-                    ),
-                    // Contenido de la tabla con márgenes
-                    pw.Padding(
-                      padding: const pw.EdgeInsets.only(left: 60, right: 60, top: 100, bottom: 60),
-                      child: pw.Column(
+      pdf.addPage(
+        pw.Page(
+          pageFormat: PdfPageFormat.letter,
+          margin: pw.EdgeInsets.zero,
+          build: (context) {
+            return pw.Stack(
+              children: [
+                pw.Positioned.fill(
+                  child: pw.Image(membretadaImage, fit: pw.BoxFit.fill),
+                ),
+                pw.Padding(
+                  padding: const pw.EdgeInsets.only(left: 60, right: 60, top: 100, bottom: 60),
+                  child: pw.Column(
+                    crossAxisAlignment: pw.CrossAxisAlignment.start,
+                    children: [
+                      pw.SizedBox(height: 12),
+                      pw.Text(
+                        'Avance por tipo de propiedad',
+                        style: pw.TextStyle(fontSize: _fontSize, font: notoSansBold),
+                      ),
+                      pw.SizedBox(height: 8),
+                      pw.Row(
                         crossAxisAlignment: pw.CrossAxisAlignment.start,
-                        mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
                         children: [
-                          pw.Column(
-                            crossAxisAlignment: pw.CrossAxisAlignment.start,
-                            children: [
-                              pw.Text(
-                                'Proyecto $proyectoNombre - Predios (continuación)',
-                                style: pw.TextStyle(
-                                  fontSize: _fontSize + 1,
-                                  font: notoSansBold,
-                                ),
-                              ),
-                              pw.SizedBox(height: 10),
-                              pw.Table(
-                                border: pw.TableBorder.all(color: PdfColors.grey400),
-                                columnWidths: {
-                                  0: const pw.FlexColumnWidth(2.5),
-                                  1: const pw.FlexColumnWidth(2),
-                                  2: const pw.FlexColumnWidth(1.5),
-                                  3: const pw.FlexColumnWidth(1),
-                                  4: const pw.FlexColumnWidth(1.5),
-                                  5: const pw.FlexColumnWidth(2),
-                                },
-                                children: [
-                                  // Encabezado de la tabla
-                                  pw.TableRow(
-                                    decoration: const pw.BoxDecoration(
-                                      color: PdfColors.grey300,
-                                    ),
-                                    children: [
-                                      pw.Padding(
-                                        padding: const pw.EdgeInsets.all(4),
-                                        child: pw.Text('Clave', style: pw.TextStyle(fontSize: _fontSize - 1, font: notoSansBold)),
-                                      ),
-                                      pw.Padding(
-                                        padding: const pw.EdgeInsets.all(4),
-                                        child: pw.Text('Tipo', style: pw.TextStyle(fontSize: _fontSize - 1, font: notoSansBold)),
-                                      ),
-                                      pw.Padding(
-                                        padding: const pw.EdgeInsets.all(4),
-                                        child: pw.Text('Tramo', style: pw.TextStyle(fontSize: _fontSize - 1, font: notoSansBold)),
-                                      ),
-                                      pw.Padding(
-                                        padding: const pw.EdgeInsets.all(4),
-                                        child: pw.Text('Estatus', style: pw.TextStyle(fontSize: _fontSize - 1, font: notoSansBold)),
-                                      ),
-                                      pw.Padding(
-                                        padding: const pw.EdgeInsets.all(4),
-                                        child: pw.Text('Superficie', style: pw.TextStyle(fontSize: _fontSize - 1, font: notoSansBold)),
-                                      ),
-                                      pw.Padding(
-                                        padding: const pw.EdgeInsets.all(4),
-                                        child: pw.Text('Propietario', style: pw.TextStyle(fontSize: _fontSize - 1, font: notoSansBold)),
-                                      ),
-                                    ],
-                                  ),
-                                  // Filas de datos
-                                  ...prediosPagina.map((p) => pw.TableRow(
-                                    children: [
-                                      pw.Padding(
-                                        padding: const pw.EdgeInsets.all(4),
-                                        child: pw.Text(p.claveCatastral, style: const pw.TextStyle(fontSize: _fontSize - 2)),
-                                      ),
-                                      pw.Padding(
-                                        padding: const pw.EdgeInsets.all(4),
-                                        child: pw.Text(p.tipoPropiedad, style: const pw.TextStyle(fontSize: _fontSize - 2)),
-                                      ),
-                                      pw.Padding(
-                                        padding: const pw.EdgeInsets.all(4),
-                                        child: pw.Text(p.tramo, style: const pw.TextStyle(fontSize: _fontSize - 2)),
-                                      ),
-                                      pw.Padding(
-                                        padding: const pw.EdgeInsets.all(4),
-                                        child: pw.Text(p.cop ? 'Liberado' : 'No liberado', style: const pw.TextStyle(fontSize: _fontSize - 2)),
-                                      ),
-                                      pw.Padding(
-                                        padding: const pw.EdgeInsets.all(4),
-                                        child: pw.Text(p.superficie != null ? NumberFormat('#,##0.00').format(p.superficie) : '-', style: const pw.TextStyle(fontSize: _fontSize - 2)),
-                                      ),
-                                      pw.Padding(
-                                        padding: const pw.EdgeInsets.all(4),
-                                        child: pw.Text(p.propietarioNombre ?? '-', style: const pw.TextStyle(fontSize: _fontSize - 2)),
-                                      ),
-                                    ],
-                                  )),
-                                ],
-                              ),
-                              pw.SizedBox(height: 10),
-                              pw.Text(
-                                'Página ${pagina + 2} de ${totalPaginas + 1}',
-                                style: pw.TextStyle(fontSize: _fontSize - 1, font: notoSansRegular),
-                              ),
-                            ],
+                          pw.Expanded(
+                            child: _buildPdfTipoPropiedadSection(
+                              titulo: 'Propiedad privada',
+                              predios: prediosPrivada,
+                            ),
                           ),
-                          // Footer en la última página
-                          if (esUltimaPagina) ...[
-                            pw.SizedBox(height: 30),
-                            // ATENTAMENTE centrado y en negritas
-                            pw.Center(
-                              child: pw.Text(
-                                'ATENTAMENTE',
-                                style: pw.TextStyle(
-                                  fontSize: _fontSize,
-                                  font: notoSansBold,
-                                ),
-                              ),
+                          pw.SizedBox(width: 22),
+                          pw.Expanded(
+                            child: _buildPdfTipoPropiedadSection(
+                              titulo: 'Propiedad social / dominio pleno',
+                              predios: prediosSocialDominio,
                             ),
-                            pw.SizedBox(height: 20),
-                            // ELABORO/REVISO al final de la última hoja, lado izquierdo
-                            pw.Align(
-                              alignment: pw.Alignment.centerLeft,
-                              child: pw.Text(
-                                'ELABORO/REVISO: ${_getElaboroReviso()}',
-                                style: pw.TextStyle(fontSize: 6, font: notoSansRegular),
-                              ),
-                            ),
-                          ],
+                          ),
                         ],
                       ),
-                    ),
-                  ],
-                );
-              },
-            ),
-          );
-        }
-      } else {
-        // Si no hay predios, agregar una página final con ATENTAMENTE y ELABORO/REVISO
-        pdf.addPage(
-          pw.Page(
-            pageFormat: PdfPageFormat.letter,
-            margin: pw.EdgeInsets.zero,
-            build: (context) {
-              return pw.Stack(
-                children: [
-                  // Imagen membretada como fondo
-                  pw.Positioned.fill(
-                    child: pw.Image(membretadaImage, fit: pw.BoxFit.fill),
-                  ),
-                  // Contenido
-                  pw.Padding(
-                    padding: const pw.EdgeInsets.only(left: 60, right: 60, top: 100, bottom: 60),
-                    child: pw.Column(
-                      mainAxisAlignment: pw.MainAxisAlignment.center,
-                      crossAxisAlignment: pw.CrossAxisAlignment.center,
-                      children: [
-                        pw.SizedBox(height: 100),
-                        // ATENTAMENTE centrado y en negritas
-                        pw.Center(
-                          child: pw.Text(
-                            'ATENTAMENTE',
-                            style: pw.TextStyle(
-                              fontSize: _fontSize,
-                              font: notoSansBold,
-                            ),
-                          ),
+                      pw.SizedBox(height: 40),
+                      pw.Center(
+                        child: pw.Text(
+                          'ATENTAMENTE',
+                          style: pw.TextStyle(fontSize: _fontSize, font: notoSansBold),
                         ),
-                        pw.SizedBox(height: 30),
-                        // ELABORO/REVISO al final de la última hoja, lado izquierdo
-                        pw.Align(
-                          alignment: pw.Alignment.centerLeft,
-                          child: pw.Text(
-                            'ELABORO/REVISO: ${_getElaboroReviso()}',
-                            style: pw.TextStyle(fontSize: 6, font: notoSansRegular),
-                          ),
+                      ),
+                      pw.SizedBox(height: 12),
+                      pw.Align(
+                        alignment: pw.Alignment.centerLeft,
+                        child: pw.Text(
+                          firmaIniciales,
+                          style: pw.TextStyle(fontSize: 4.5, font: notoSansRegular),
                         ),
-                      ],
-                    ),
+                      ),
+                    ],
                   ),
-                ],
-              );
-            },
-          ),
-        );
-      }
+                ),
+              ],
+            );
+          },
+        ),
+      );
 
       return await pdf.save();
       
@@ -610,22 +613,36 @@ class _GenerarReporteScreenState extends ConsumerState<GenerarReporteScreen> {
 
   /// Método para aceptar y generar la previsualización
   Future<void> _aceptar() async {
-    final pdfBytes = await _generarPreviewPdf();
-    if (pdfBytes != null && mounted) {
-      setState(() {
-        _previewPdfBytes = pdfBytes;
-        _showPreview = true;
-      });
+    if (_datosNumericosDe == 'Segmento' && (_segmentoSeleccionado == null || _segmentoSeleccionado!.trim().isEmpty)) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Selecciona un segmento para generar datos numéricos por segmento.'),
+          backgroundColor: AppColors.warning,
+        ),
+      );
+      return;
     }
+
+    final pdfBytes = await _generarPreviewPdf();
+    if (pdfBytes == null || !mounted) return;
+
+    setState(() {
+      _previewPdfBytes = pdfBytes;
+      _showPreview = true;
+      _previewTimestamp = DateTime.now().millisecondsSinceEpoch;
+      if (kIsWeb) {
+        _webPreviewImagesFuture = _rasterizeWebPreview(pdfBytes);
+      }
+    });
   }
 
   /// Método para generar y descargar el PDF con nombre automático
   Future<void> _generarPdf() async {
-    if (_previewPdfBytes == null) {
-      // Si no hay previsualización, generarla primero
-      final pdfBytes = await _generarPreviewPdf();
-      if (pdfBytes == null) return;
-    }
+    // Siempre regenerar para evitar descargar una versión en caché.
+    final pdfBytes = await _generarPreviewPdf();
+    if (pdfBytes == null) return;
+    _previewPdfBytes = pdfBytes;
+    _previewTimestamp = DateTime.now().millisecondsSinceEpoch;
 
     try {
       // Generar nombre automático: REPORTE_NUMERO_PROYECTO_FECHA
@@ -633,6 +650,29 @@ class _GenerarReporteScreenState extends ConsumerState<GenerarReporteScreen> {
       final ahora = DateTime.now();
       final fechaArchivo = DateFormat('yyMMdd').format(ahora);
       final nombreArchivo = 'REPORTE_${_numeroReporte}_${_proyectoActual}_$fechaArchivo.pdf';
+
+      if (kIsWeb) {
+        final blob = html.Blob(<dynamic>[_previewPdfBytes!], 'application/pdf');
+        final url = html.Url.createObjectUrlFromBlob(blob);
+        final anchor = html.AnchorElement(href: url)
+          ..setAttribute('download', nombreArchivo)
+          ..style.display = 'none';
+        html.document.body!.children.add(anchor);
+        anchor.click();
+        anchor.remove();
+        html.Url.revokeObjectUrl(url);
+
+        if (mounted) {
+          setState(_avanzarConsecutivoProyectoActual);
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text('PDF descargado: $nombreArchivo'),
+              backgroundColor: AppColors.primary,
+            ),
+          );
+        }
+        return;
+      }
 
       // Determinar directorio de descarga según la plataforma
       String directorioDescarga;
@@ -656,6 +696,7 @@ class _GenerarReporteScreenState extends ConsumerState<GenerarReporteScreen> {
       await file.writeAsBytes(_previewPdfBytes!);
 
       if (mounted) {
+        setState(_avanzarConsecutivoProyectoActual);
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text('PDF descargado: $nombreArchivo'),
@@ -688,6 +729,14 @@ class _GenerarReporteScreenState extends ConsumerState<GenerarReporteScreen> {
 
   /// Vista del formulario
   Widget _buildFormView() {
+    final prediosAsync = ref.watch(prediosListProvider);
+    final predios = prediosAsync.asData?.value ?? <Predio>[];
+    final prediosProyecto = predios.where((p) => _predioProyecto(p) == _proyectoActual).toList();
+    final segmentosDisponibles = _segmentosDelProyecto(prediosProyecto);
+    final selectedSegmento = segmentosDisponibles.contains(_segmentoSeleccionado)
+        ? _segmentoSeleccionado
+        : null;
+
     return SingleChildScrollView(
       padding: const EdgeInsets.all(16),
       child: Column(
@@ -720,7 +769,11 @@ class _GenerarReporteScreenState extends ConsumerState<GenerarReporteScreen> {
                     )).toList(),
                     onChanged: (v) {
                       if (v != null) {
-                        setState(() => _proyectoActual = v);
+                        setState(() {
+                          _proyectoActual = v;
+                          _segmentoSeleccionado = null;
+                          _sincronizarNumeroReportePorProyecto();
+                        });
                         _actualizarAsuntoPorProyecto(v);
                       }
                     },
@@ -747,7 +800,7 @@ class _GenerarReporteScreenState extends ConsumerState<GenerarReporteScreen> {
                   ),
                   const SizedBox(height: 16),
                   
-// Número de reporte automático: proyecto-numero
+// Número de reporte automático: proyecto-fechaHora
                   Row(
                     children: [
                       const Text('Número de reporte:'),
@@ -763,12 +816,6 @@ class _GenerarReporteScreenState extends ConsumerState<GenerarReporteScreen> {
                           '$_proyectoActual-$_numeroReporte',
                           style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: Colors.blue),
                         ),
-                      ),
-                      const SizedBox(width: 8),
-                      IconButton(
-                        icon: const Icon(Icons.refresh, size: 20),
-                        tooltip: 'Siguiente número',
-                        onPressed: () => setState(() => _numeroReporte++),
                       ),
                     ],
                   ),
@@ -866,7 +913,7 @@ class _GenerarReporteScreenState extends ConsumerState<GenerarReporteScreen> {
                               decoration: const InputDecoration(
                                 labelText: 'Iniciales',
                                 border: OutlineInputBorder(),
-                                hintText: 'Ejemplo: BDVV',
+                                hintText: 'Ejemplo: ABCD',
                               ),
                             ),
                           ],
@@ -887,7 +934,7 @@ class _GenerarReporteScreenState extends ConsumerState<GenerarReporteScreen> {
                               decoration: const InputDecoration(
                                 labelText: 'Iniciales',
                                 border: OutlineInputBorder(),
-                                hintText: 'Ejemplo: JLPC',
+                                hintText: 'Ejemplo: EFGH',
                               ),
                             ),
                           ],
@@ -895,6 +942,59 @@ class _GenerarReporteScreenState extends ConsumerState<GenerarReporteScreen> {
                       ),
                     ],
                   ),
+                  const SizedBox(height: 16),
+
+                  const Divider(),
+                  const SizedBox(height: 8),
+                  const Text(
+                    'Colocar Datos Numéricos de:',
+                    style: TextStyle(fontWeight: FontWeight.bold),
+                  ),
+                  const SizedBox(height: 6),
+                  RadioListTile<String>(
+                    dense: true,
+                    contentPadding: EdgeInsets.zero,
+                    value: 'Proyecto',
+                    groupValue: _datosNumericosDe,
+                    title: const Text('Proyecto'),
+                    onChanged: (v) {
+                      if (v == null) return;
+                      setState(() => _datosNumericosDe = v);
+                    },
+                  ),
+                  RadioListTile<String>(
+                    dense: true,
+                    contentPadding: EdgeInsets.zero,
+                    value: 'Segmento',
+                    groupValue: _datosNumericosDe,
+                    title: const Text('Segmento'),
+                    onChanged: (v) {
+                      if (v == null) return;
+                      setState(() => _datosNumericosDe = v);
+                    },
+                  ),
+                  if (_datosNumericosDe == 'Segmento') ...[
+                    const SizedBox(height: 8),
+                    DropdownButtonFormField<String>(
+                      value: selectedSegmento,
+                      decoration: const InputDecoration(
+                        labelText: 'Selecciona segmento',
+                        border: OutlineInputBorder(),
+                      ),
+                      items: segmentosDisponibles
+                          .map((s) => DropdownMenuItem(value: s, child: Text(s)))
+                          .toList(),
+                      onChanged: (v) => setState(() => _segmentoSeleccionado = v),
+                    ),
+                    if (segmentosDisponibles.isEmpty)
+                      const Padding(
+                        padding: EdgeInsets.only(top: 8),
+                        child: Text(
+                          'No hay segmentos disponibles para el proyecto seleccionado.',
+                          style: TextStyle(fontSize: 12, color: Colors.grey),
+                        ),
+                      ),
+                  ],
                 ],
               ),
             ),
@@ -1009,12 +1109,6 @@ class _GenerarReporteScreenState extends ConsumerState<GenerarReporteScreen> {
                                 style: const TextStyle(fontSize: 14, fontWeight: FontWeight.bold, color: Colors.blue),
                               ),
                             ),
-                            const SizedBox(width: 8),
-                            IconButton(
-                              icon: const Icon(Icons.refresh, size: 18),
-                              tooltip: 'Siguiente número',
-                              onPressed: () => setState(() => _numeroReporte++),
-                            ),
                           ],
                         ),
                         const SizedBox(height: 12),
@@ -1026,6 +1120,7 @@ class _GenerarReporteScreenState extends ConsumerState<GenerarReporteScreen> {
                         ),
                         Text(
                           '${_paraCargoCtrl.text.isNotEmpty ? _paraCargoCtrl.text : "(Sin cargo)"}',
+                          textAlign: TextAlign.left,
                           style: TextStyle(fontSize: 11, color: Colors.grey[600]),
                         ),
                         const SizedBox(height: 8),
@@ -1037,14 +1132,14 @@ class _GenerarReporteScreenState extends ConsumerState<GenerarReporteScreen> {
                         ),
                         Text(
                           '${_deCargoCtrl.text.isNotEmpty ? _deCargoCtrl.text : "(Sin cargo)"}',
+                          textAlign: TextAlign.left,
                           style: TextStyle(fontSize: 11, color: Colors.grey[600]),
                         ),
                         const SizedBox(height: 8),
-                        
-                        // ELABORO/REVISO
+
                         Text(
-                          'ELABORO/REVISO: ${_getElaboroReviso()}',
-                          style: TextStyle(fontSize: 11, color: Colors.grey[600]),
+                          'Datos numéricos de: ${_origenNumericoLabel()}',
+                          style: TextStyle(fontSize: 11, color: Colors.grey[700], fontWeight: FontWeight.w600),
                         ),
                       ],
                     ),
@@ -1138,19 +1233,85 @@ class _GenerarReporteScreenState extends ConsumerState<GenerarReporteScreen> {
                 
                 // Visor del PDF
                 Expanded(
-                  child: _previewPdfBytes != null
-                      ? PdfPreview(
-                          build: (format) async => _previewPdfBytes!,
-                          canChangeOrientation: false,
-                          canChangePageFormat: false,
-                          canDebug: false,
-                          allowPrinting: false,
-                          allowSharing: false,
-                          pdfFileName: 'preview.pdf',
-                        )
-                      : const Center(
+                  child: _previewPdfBytes == null
+                      ? const Center(
                           child: CircularProgressIndicator(),
-                        ),
+                        )
+                      : kIsWeb
+                          ? FutureBuilder<List<Uint8List>>(
+                              future: _webPreviewImagesFuture,
+                              builder: (context, snapshot) {
+                                if (snapshot.connectionState == ConnectionState.waiting) {
+                                  return const Center(
+                                    child: CircularProgressIndicator(),
+                                  );
+                                }
+                                if (snapshot.hasError) {
+                                  return Center(
+                                    child: Padding(
+                                      padding: const EdgeInsets.all(16),
+                                      child: Column(
+                                        mainAxisSize: MainAxisSize.min,
+                                        children: [
+                                          const Text(
+                                            'No fue posible renderizar la previsualización en web.',
+                                            textAlign: TextAlign.center,
+                                          ),
+                                          const SizedBox(height: 10),
+                                          OutlinedButton.icon(
+                                            onPressed: () {
+                                              final bytes = _previewPdfBytes;
+                                              if (bytes == null) return;
+                                              setState(() {
+                                                _webPreviewImagesFuture = _rasterizeWebPreview(bytes);
+                                              });
+                                            },
+                                            icon: const Icon(Icons.refresh),
+                                            label: const Text('Reintentar'),
+                                          ),
+                                        ],
+                                      ),
+                                    ),
+                                  );
+                                }
+
+                                final images = snapshot.data ?? const <Uint8List>[];
+                                if (images.isEmpty) {
+                                  return const Center(
+                                    child: Text('No hay páginas para mostrar.'),
+                                  );
+                                }
+
+                                return ListView.separated(
+                                  padding: const EdgeInsets.all(16),
+                                  itemCount: images.length,
+                                  separatorBuilder: (_, __) => const SizedBox(height: 16),
+                                  itemBuilder: (context, index) {
+                                    return Card(
+                                      elevation: 2,
+                                      margin: EdgeInsets.zero,
+                                      child: Padding(
+                                        padding: const EdgeInsets.all(8),
+                                        child: Image.memory(
+                                          images[index],
+                                          fit: BoxFit.contain,
+                                        ),
+                                      ),
+                                    );
+                                  },
+                                );
+                              },
+                            )
+                          : PdfPreview(
+                              key: ValueKey<int>(_previewTimestamp),
+                              build: (format) async => _previewPdfBytes!,
+                              canChangeOrientation: false,
+                              canChangePageFormat: false,
+                              canDebug: false,
+                              allowPrinting: false,
+                              allowSharing: false,
+                              pdfFileName: 'preview.pdf',
+                            ),
                 ),
               ],
             ),

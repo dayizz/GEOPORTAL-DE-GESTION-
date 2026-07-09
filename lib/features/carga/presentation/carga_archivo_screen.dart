@@ -11,16 +11,22 @@ import '../../../shared/widgets/app_scaffold.dart';
 import '../../mapa/providers/mapa_provider.dart';
 import '../../predios/providers/predios_provider.dart';
 import '../../predios/providers/local_predios_provider.dart';
+import '../../predios/data/predios_repository.dart';
+import '../../auth/providers/auth_provider.dart';
 import '../../predios/models/predio.dart';
 import '../../predios/models/propietario.dart';
 import '../../propietarios/providers/propietarios_provider.dart';
 import '../../propietarios/providers/local_propietarios_provider.dart';
+import '../../mapa/providers/mapa_state_cleanup.dart';
 import '../data/local_archivos_repository.dart';
 import '../providers/carga_provider.dart';
 import '../services/geojson_background_parser.dart';
 import '../services/sincronizacion_service.dart';
 import '../services/xlsx_import_service.dart';
+import '../utils/archive_exporter.dart';
+import '../utils/file_download.dart';
 import '../utils/geojson_mapper.dart';
+import '../utils/imported_file_cleanup.dart';
 
 class CargaArchivoScreen extends ConsumerStatefulWidget {
   const CargaArchivoScreen({super.key});
@@ -87,6 +93,10 @@ class _CargaArchivoScreenState extends ConsumerState<CargaArchivoScreen> {
           .toList();
       if (!mounted) return;
       ref.read(cargaProvider.notifier).initFromBD(bdFiles);
+      if (bdFiles.isEmpty) {
+        clearImportedMapState(ref.read);
+        ref.read(importacionAsyncProvider.notifier).reset();
+      }
       _yaCargoDesdeDB = true;
     } catch (e) {
       // ignore: avoid_print
@@ -273,6 +283,11 @@ class _CargaArchivoScreenState extends ConsumerState<CargaArchivoScreen> {
     );
 
     try {
+      if (_isPksPointImport(fileName: nombre, features: features)) {
+        await _guardarPksSoloMapa(nombre: nombre, features: features);
+        return;
+      }
+
       final syncService = ref.read(sincronizacionServiceProvider);
       final resultado = await syncService.sincronizar(
         features,
@@ -333,8 +348,10 @@ class _CargaArchivoScreenState extends ConsumerState<CargaArchivoScreen> {
 
         final proyectoDetectado =
             GeoJsonMapper.detectarProyectoDesdeFeatures(features);
-        if (proyectoDetectado != null) {
-          ref.read(gestionProyectoProvider.notifier).state = proyectoDetectado;
+        final proyectoObjetivo =
+            proyectoDetectado ?? ref.read(proyectoActivoProvider);
+        if (proyectoObjetivo != null) {
+          ref.read(gestionProyectoProvider.notifier).state = proyectoObjetivo;
         }
 
         ref.read(importacionAsyncProvider.notifier).completar(
@@ -368,8 +385,10 @@ class _CargaArchivoScreenState extends ConsumerState<CargaArchivoScreen> {
       if (resultado.creados > 0 || resultado.encontrados > 0) {
         final proyectoDetectado =
             GeoJsonMapper.detectarProyectoDesdeFeatures(resultado.features);
-        if (proyectoDetectado != null) {
-          ref.read(gestionProyectoProvider.notifier).state = proyectoDetectado;
+        final proyectoObjetivo =
+            proyectoDetectado ?? ref.read(proyectoActivoProvider);
+        if (proyectoObjetivo != null) {
+          ref.read(gestionProyectoProvider.notifier).state = proyectoObjetivo;
         }
 
         ref.read(importacionAsyncProvider.notifier).completar(
@@ -404,8 +423,10 @@ class _CargaArchivoScreenState extends ConsumerState<CargaArchivoScreen> {
 
       final proyectoDetectado =
           GeoJsonMapper.detectarProyectoDesdeFeatures(features);
-      if (proyectoDetectado != null) {
-        ref.read(gestionProyectoProvider.notifier).state = proyectoDetectado;
+      final proyectoObjetivo =
+          proyectoDetectado ?? ref.read(proyectoActivoProvider);
+      if (proyectoObjetivo != null) {
+        ref.read(gestionProyectoProvider.notifier).state = proyectoObjetivo;
       }
 
       if (insertadosLocales > 0) {
@@ -436,13 +457,41 @@ class _CargaArchivoScreenState extends ConsumerState<CargaArchivoScreen> {
   void _verEnMapaDesdeTabla(String fileId) {
     final importedFiles = ref.read(cargaProvider);
     final file = importedFiles.firstWhere((f) => f.id == fileId);
-    ref.read(importedFeaturesProvider.notifier).state = file.features;
+    if (_isPksPointImport(fileName: file.name, features: file.features)) {
+      ref.read(pksPointFeaturesProvider.notifier).state = file.features;
+      ref.read(importedFeaturesProvider.notifier).state = const [];
+    } else {
+      ref.read(importedFeaturesProvider.notifier).state = file.features;
+      ref.read(pksPointFeaturesProvider.notifier).state = const [];
+    }
     context.go('/mapa');
   }
 
   /// Elimina un archivo: del provider en memoria y, si tiene bdId, también de la BD.
   Future<void> _eliminarArchivo(ImportedFile file) async {
+    final currentImported = ref.read(importedFeaturesProvider);
+    final shouldClearMap = shouldClearImportedMapAfterFileDeletion(
+      currentImported: currentImported,
+      fileFeatures: file.features,
+    );
+    final currentPks = ref.read(pksPointFeaturesProvider);
+    final shouldClearPks = _shouldClearPksPointsAfterFileDeletion(
+      currentPks: currentPks,
+      fileFeatures: file.features,
+    );
+    final claves = extractClavesFromFeatures(file.features);
+
     ref.read(cargaProvider.notifier).removeFile(file.id);
+    if (shouldClearMap) {
+      ref.read(importedFeaturesProvider.notifier).state = const [];
+      ref.read(importacionAsyncProvider.notifier).reset();
+    }
+    if (shouldClearPks) {
+      ref.read(pksPointFeaturesProvider.notifier).state = const [];
+    }
+
+    final eliminadosGestion = await _eliminarPrediosDeGestionPorClaves(claves);
+
     if (file.guardadoEnBD && file.bdId != null) {
       try {
         final repo = ref.read(localArchivosRepositoryProvider);
@@ -451,14 +500,76 @@ class _CargaArchivoScreenState extends ConsumerState<CargaArchivoScreen> {
         // Error silencioso: el archivo ya fue quitado de la UI.
       }
     }
+
+    ref.invalidate(prediosListProvider);
+    ref.invalidate(prediosMapaProvider);
+    if (mounted) {
+      _mostrarSnackBar(
+        eliminadosGestion > 0
+            ? 'Archivo eliminado y $eliminadosGestion predio(s) removido(s) de Gestión.'
+            : 'Archivo eliminado de Gestión y Mapa.',
+      );
+    }
   }
 
   Future<void> _eliminarTodos(List<ImportedFile> files) async {
+    final claves = <String>{};
+    for (final file in files) {
+      claves.addAll(extractClavesFromFeatures(file.features));
+    }
+
     ref.read(cargaProvider.notifier).clearAll();
+    ref.read(importedFeaturesProvider.notifier).state = const [];
+    ref.read(pksPointFeaturesProvider.notifier).state = const [];
+    ref.read(importacionAsyncProvider.notifier).reset();
+
+    final eliminadosGestion = await _eliminarPrediosDeGestionPorClaves(claves);
+
     try {
       final repo = ref.read(localArchivosRepositoryProvider);
       await repo.deleteAll();
     } catch (_) {}
+
+    ref.invalidate(prediosListProvider);
+    ref.invalidate(prediosMapaProvider);
+    if (mounted) {
+      _mostrarSnackBar(
+        eliminadosGestion > 0
+            ? 'Archivos eliminados y $eliminadosGestion predio(s) removido(s) de Gestión.'
+            : 'Archivos eliminados de Gestión y Mapa.',
+      );
+    }
+  }
+
+  Future<int> _eliminarPrediosDeGestionPorClaves(Set<String> claves) async {
+    if (claves.isEmpty) return 0;
+
+    var eliminados = 0;
+
+    eliminados +=
+        ref.read(localPrediosProvider.notifier).removeByClaves(claves);
+
+    try {
+      final predios = await ref.read(prediosListProvider.future);
+      final repo = ref.read(prediosRepositoryProvider);
+      final toDelete = predios.where((p) {
+        final clave = p.claveCatastral.trim().toUpperCase();
+        return !p.id.startsWith('local-') && claves.contains(clave);
+      }).toList(growable: false);
+
+      for (final predio in toDelete) {
+        try {
+          await repo.deletePredio(predio.id);
+          eliminados++;
+        } catch (_) {
+          // Continuar con los siguientes predios aunque alguno falle.
+        }
+      }
+    } catch (_) {
+      // Si la consulta remota falla, al menos ya se limpió local.
+    }
+
+    return eliminados;
   }
 
   Future<void> _inyectarXlsxEnTablas() async {
@@ -618,11 +729,10 @@ class _CargaArchivoScreenState extends ConsumerState<CargaArchivoScreen> {
                     row['propietario_nombre']?.toString().trim(),
                 tramo: row['tramo']?.toString().trim().isNotEmpty == true
                     ? row['tramo'].toString().trim()
-                    : 'T1',
-                tipoPropiedad:
-                    row['tipo_propiedad']?.toString().trim().isNotEmpty == true
-                        ? row['tipo_propiedad'].toString().trim()
-                        : 'PRIVADA',
+                  : '',
+                tipoPropiedad: _normalizeTipoPropiedad(
+                    row['tipo_propiedad']?.toString().trim(),
+                ),
                 ejido: _optionalText(row['ejido']),
                 kmInicio: _toDouble(row['km_inicio']),
                 kmFin: _toDouble(row['km_fin']),
@@ -851,6 +961,313 @@ class _CargaArchivoScreenState extends ConsumerState<CargaArchivoScreen> {
     return null;
   }
 
+  Future<void> _guardarPksSoloMapa({
+    required String nombre,
+    required List<Map<String, dynamic>> features,
+  }) async {
+    final normalizedFeatures = _normalizePksPointFeatures(features);
+    try {
+      String? bdId;
+      try {
+        final archivosRepo = ref.read(localArchivosRepositoryProvider);
+        final saved = await archivosRepo.saveArchivo(
+          nombre: nombre,
+          features: normalizedFeatures,
+          sincronizado: false,
+          encontrados: 0,
+          creados: 0,
+          errores: 0,
+        );
+        bdId = saved['id'] as String?;
+      } catch (_) {
+        // Si falla el guardado del archivo, continuar con mapa en memoria.
+      }
+
+      ref.read(cargaProvider.notifier).addFile(
+        nombre,
+        normalizedFeatures,
+        bdId: bdId,
+        guardadoEnBD: bdId != null,
+        sincronizado: false,
+        encontrados: 0,
+        creados: 0,
+        errores: 0,
+      );
+
+      ref.read(pksPointFeaturesProvider.notifier).state = normalizedFeatures;
+      ref.read(importedFeaturesProvider.notifier).state = const [];
+      ref.read(importacionAsyncProvider.notifier).completar(
+        total: normalizedFeatures.length,
+        etapa: 'Completado PKS',
+      );
+
+      if (!mounted) return;
+      setState(() => _sincronizando = false);
+      _mostrarSnackBar(
+        'Archivo PKS detectado: ${normalizedFeatures.length} punto(s) cargado(s) solo en mapa.',
+      );
+      context.go('/mapa');
+    } catch (e) {
+      if (!mounted) return;
+      setState(() => _sincronizando = false);
+      ref.read(importacionAsyncProvider.notifier).fallar(
+        procesados: 0,
+        total: normalizedFeatures.length,
+        etapa: 'Error PKS',
+        mensaje: e.toString(),
+      );
+      _mostrarSnackBar('No se pudo cargar el archivo PKS: $e', exito: false);
+    }
+  }
+
+  bool _isPksPointImport({
+    required String fileName,
+    required List<Map<String, dynamic>> features,
+  }) {
+    if (features.isEmpty) return false;
+
+    final fromName = _normalizeValue(fileName).contains('PKS');
+    final fromProps = features.any(_featureMentionsPks);
+    if (!fromName && !fromProps) return false;
+
+    var geometries = 0;
+    var pointGeometries = 0;
+    for (final feature in features) {
+      final type = _geometryType(feature);
+      if (type == null || type.isEmpty) continue;
+      geometries++;
+      if (type == 'POINT' || type == 'MULTIPOINT') {
+        pointGeometries++;
+      }
+    }
+
+    if (geometries == 0) return false;
+    return pointGeometries == geometries;
+  }
+
+  String? _geometryType(Map<String, dynamic> feature) {
+    final geometry = _asStringDynamicMap(feature['geometry']);
+    final type = geometry?['type']?.toString().trim().toUpperCase();
+    if (type == null || type.isEmpty) return null;
+    return type;
+  }
+
+  bool _featureMentionsPks(Map<String, dynamic> feature) {
+    final rawProps = feature['properties'];
+    if (rawProps is! Map) return false;
+    final props = Map<String, dynamic>.from(rawProps);
+
+    final direct = _pickTextByAliases(props, const [
+      'proyecto',
+      'linea',
+      'origen',
+      'tipo',
+      'sistema',
+      'corredor',
+    ]);
+    if (direct != null && _normalizeValue(direct).contains('PKS')) {
+      return true;
+    }
+
+    for (final value in props.values) {
+      final text = value?.toString();
+      if (text == null) continue;
+      if (_normalizeValue(text).contains('PKS')) {
+        return true;
+      }
+    }
+
+    return false;
+  }
+
+  List<Map<String, dynamic>> _normalizePksPointFeatures(
+    List<Map<String, dynamic>> features,
+  ) {
+    final normalized = <Map<String, dynamic>>[];
+
+    for (var i = 0; i < features.length; i++) {
+      final feature = features[i];
+      final geometry = _normalizePksGeometry(feature['geometry']);
+      final geometryType = geometry?['type']?.toString().toUpperCase();
+      if (geometryType != 'POINT' && geometryType != 'MULTIPOINT') {
+        continue;
+      }
+
+      final rawProps = feature['properties'];
+      final props = rawProps is Map
+          ? Map<String, dynamic>.from(rawProps)
+          : <String, dynamic>{};
+
+      final label = _pickTextByAliases(props, const [
+            'propiedad',
+            'etiqueta',
+            'label',
+            'nombre',
+            'name',
+            'descripcion',
+            'pk',
+        'pks',
+        'pks_num',
+        'pks_numero',
+        'numero_pk',
+        'numero_pks',
+            'id',
+            'clave',
+          ]);
+
+      final normalizedProps = <String, dynamic>{
+        ...props,
+        if (label != null && label.isNotEmpty) 'pks_label': label,
+      };
+
+      normalized.add(
+        <String, dynamic>{
+          'type': 'Feature',
+          'geometry': geometry,
+          'properties': normalizedProps,
+        },
+      );
+    }
+
+    return normalized;
+  }
+
+  Map<String, dynamic>? _normalizePksGeometry(dynamic rawGeometry) {
+    final geometry = _asStringDynamicMap(rawGeometry);
+    if (geometry == null) return null;
+
+    final type = geometry['type']?.toString();
+    final coords = geometry['coordinates'];
+    if (type == null || coords is! List) return null;
+
+    if (type == 'Point') {
+      final point = _normalizePointCoordinate(coords);
+      if (point == null) return null;
+      return {
+        'type': 'Point',
+        'coordinates': point,
+      };
+    }
+
+    if (type == 'MultiPoint') {
+      final points = coords
+          .whereType<List>()
+          .map(_normalizePointCoordinate)
+          .whereType<List<double>>()
+          .toList(growable: false);
+      if (points.isEmpty) return null;
+      return {
+        'type': 'MultiPoint',
+        'coordinates': points,
+      };
+    }
+
+    return null;
+  }
+
+  List<double>? _normalizePointCoordinate(List<dynamic> coord) {
+    if (coord.length < 2) return null;
+    final x = _toDoubleCoord(coord[0]);
+    final y = _toDoubleCoord(coord[1]);
+    if (x == null || y == null) return null;
+    return [x, y];
+  }
+
+  double? _toDoubleCoord(dynamic value) {
+    if (value is num) return value.toDouble();
+    final text = value?.toString().trim();
+    if (text == null || text.isEmpty) return null;
+    final normalized = text
+        .replaceAll(' ', '')
+        .replaceAll(',', '.')
+        .replaceAll(RegExp(r'[^0-9.\-]'), '');
+    return double.tryParse(normalized);
+  }
+
+  String? _pickTextByAliases(Map<String, dynamic> props, List<String> aliases) {
+    final aliasKeys = aliases
+        .map(_normalizeKey)
+        .toSet();
+
+    for (final entry in props.entries) {
+      final key = _normalizeKey(entry.key);
+      if (!aliasKeys.contains(key)) continue;
+      final value = entry.value?.toString().trim();
+      if (value == null || value.isEmpty || value.toLowerCase() == 'null') {
+        continue;
+      }
+      return value;
+    }
+
+    return null;
+  }
+
+  String _normalizeKey(String raw) {
+    return _normalizeValue(raw).replaceAll(RegExp(r'[^A-Z0-9]'), '');
+  }
+
+  String _normalizeValue(String raw) {
+    const accentMap = {
+      'Á': 'A',
+      'À': 'A',
+      'Ä': 'A',
+      'Â': 'A',
+      'É': 'E',
+      'È': 'E',
+      'Ë': 'E',
+      'Ê': 'E',
+      'Í': 'I',
+      'Ì': 'I',
+      'Ï': 'I',
+      'Î': 'I',
+      'Ó': 'O',
+      'Ò': 'O',
+      'Ö': 'O',
+      'Ô': 'O',
+      'Ú': 'U',
+      'Ù': 'U',
+      'Ü': 'U',
+      'Û': 'U',
+      'Ñ': 'N',
+    };
+
+    var out = raw.toUpperCase().trim();
+    accentMap.forEach((k, v) {
+      out = out.replaceAll(k, v);
+    });
+    return out;
+  }
+
+  bool _shouldClearPksPointsAfterFileDeletion({
+    required List<Map<String, dynamic>> currentPks,
+    required List<Map<String, dynamic>> fileFeatures,
+  }) {
+    if (currentPks.isEmpty || fileFeatures.isEmpty) return false;
+    if (identical(currentPks, fileFeatures)) return true;
+
+    if (currentPks.length != fileFeatures.length) return false;
+    try {
+      return jsonEncode(currentPks.first) == jsonEncode(fileFeatures.first);
+    } catch (_) {
+      return false;
+    }
+  }
+
+  /// Normaliza el valor de tipo_propiedad a los valores válidos del sistema
+  String _normalizeTipoPropiedad(String? value) {
+    if (value == null || value.isEmpty) return 'PRIVADA';
+    final upper = value.toUpperCase().trim();
+    final compact = upper.replaceAll(RegExp(r'[^A-Z0-9]'), '');
+    if (compact.contains('SOC')) return 'SOCIAL';
+    if (compact.contains('DOMINIOPLENO') || (compact.contains('DOMINIO') && compact.contains('PLENO'))) return 'DOMINIO PLENO';
+    if (upper.contains('FEDERAL')) return 'FEDERAL';
+    if (upper.contains('GUBERNAMENTAL') || upper.contains('GUBERNAM') || upper.contains('GOBIERNO')) return 'GUBERNAMENTAL';
+    if (upper.contains('EJIDAL')) return 'EJIDAL';
+    if (upper.contains('MIXTO')) return 'MIXTO';
+    if (compact.contains('PRIVAD') || compact == 'PRI') return 'PRIVADA';
+    return upper.isEmpty ? 'PRIVADA' : upper;
+  }
+
   double? _toDouble(dynamic value) {
     if (value == null) return null;
     if (value is num) return value.toDouble();
@@ -959,6 +1376,40 @@ class _CargaArchivoScreenState extends ConsumerState<CargaArchivoScreen> {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text('No se pudo exportar el reporte: $e'),
+          backgroundColor: AppColors.danger,
+        ),
+      );
+    }
+  }
+
+  Future<void> _descargarArchivoImportado(
+    ImportedFile file, {
+    required String formato,
+  }) async {
+    try {
+      final predios = await ref.read(prediosListProvider.future);
+      final payload = await buildArchiveExportPayload(
+        file: file,
+        currentPredios: predios,
+        formato: formato,
+        fallbackProject: ref.read(gestionProyectoProvider),
+      );
+
+      await downloadBytes(
+        payload.bytes,
+        fileName: payload.fileName,
+        mimeType: payload.mimeType,
+      );
+
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Descarga generada: ${payload.fileName}')),
+      );
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('No se pudo descargar el archivo: $e'),
           backgroundColor: AppColors.danger,
         ),
       );
@@ -1581,6 +2032,25 @@ class _CargaArchivoScreenState extends ConsumerState<CargaArchivoScreen> {
           trailing: Row(
             mainAxisSize: MainAxisSize.min,
             children: [
+              PopupMenuButton<String>(
+                tooltip: 'Descargar',
+                icon: const Icon(Icons.download_outlined, size: 18),
+                onSelected: (value) => _descargarArchivoImportado(
+                  file,
+                  formato: value,
+                ),
+                itemBuilder: (context) => const [
+                  PopupMenuItem(
+                    value: 'geojson',
+                    child: Text('Descargar GeoJSON'),
+                  ),
+                  PopupMenuItem(
+                    value: 'xlsx',
+                    child: Text('Descargar XLSX'),
+                  ),
+                ],
+              ),
+              const SizedBox(width: 2),
               Tooltip(
                 message: 'Ver en mapa',
                 child: IconButton(

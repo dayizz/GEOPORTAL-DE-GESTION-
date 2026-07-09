@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
-import 'package:file_picker/file_picker.dart';
+import 'package:intl/intl.dart';
 import 'package:url_launcher/url_launcher.dart';
 import '../providers/predios_provider.dart';
 import '../providers/demo_predios_notifier.dart';
@@ -20,22 +20,23 @@ class PredioFormScreen extends ConsumerStatefulWidget {
 }
 
 class _PredioFormScreenState extends ConsumerState<PredioFormScreen> {
+  static const List<String> _tipoLiberacionOpciones = ['COP', 'DOT', 'AOP'];
+
   final _formKey = GlobalKey<FormState>();
   bool _loading = false;
   bool _loadingData = true;
 
   final _claveCtrl = TextEditingController();
   final _ejidoCtrl = TextEditingController();
+  final _estadoCtrl = TextEditingController();
+  final _municipioCtrl = TextEditingController();
+  final _tipoLiberacionCtrl = TextEditingController();
   final _kmInicioCtrl = TextEditingController();
   final _kmFinCtrl = TextEditingController();
-  final _kmLinealesCtrl = TextEditingController();
   final _kmEfectivosCtrl = TextEditingController();
   final _superficieCtrl = TextEditingController();
   final _poligonoDwgCtrl = TextEditingController();
-  final _oficioCtrl = TextEditingController();
   final _situacionSocialCtrl = TextEditingController();
-  final _latCtrl = TextEditingController();
-  final _lngCtrl = TextEditingController();
   final _propietarioNombreCtrl = TextEditingController();
 
   String _tramo = 'T1';
@@ -51,7 +52,6 @@ class _PredioFormScreenState extends ConsumerState<PredioFormScreen> {
   String? _propietarioId;
   String? _pdfUrl;
   DateTime? _copFecha;
-  bool _uploadingPdf = false;
 
   String _buildTramoValue() {
     const prefijos = {
@@ -65,7 +65,7 @@ class _PredioFormScreenState extends ConsumerState<PredioFormScreen> {
 
   void _setTramoFromValue(String valor) {
     final limpio = valor.trim().toUpperCase();
-    final match = RegExp(r'^([TFS])\s*([1-5])$').firstMatch(limpio);
+    final match = RegExp(r'^([TFS])\s*(\d+)$').firstMatch(limpio);
 
     if (match != null) {
       final prefijo = match.group(1)!;
@@ -81,7 +81,8 @@ class _PredioFormScreenState extends ConsumerState<PredioFormScreen> {
     }
 
     _tramoTipo = 'TRAMO';
-    _tramoNumero = '1';
+    final numero = RegExp(r'(\d+)').firstMatch(limpio)?.group(1);
+    _tramoNumero = numero ?? '1';
     _tramo = _buildTramoValue();
   }
 
@@ -101,18 +102,17 @@ class _PredioFormScreenState extends ConsumerState<PredioFormScreen> {
       if (predio != null && mounted) {
         _claveCtrl.text = predio.claveCatastral;
         _ejidoCtrl.text = predio.ejido ?? '';
+        _estadoCtrl.text = predio.estado ?? '';
+        _municipioCtrl.text = predio.municipio ?? '';
+        _tipoLiberacionCtrl.text = predio.tipoLiberacion ?? '';
         _kmInicioCtrl.text = predio.kmInicio?.toString() ?? '';
         _kmFinCtrl.text = predio.kmFin?.toString() ?? '';
-        _kmLinealesCtrl.text = predio.kmLineales?.toString() ?? '';
         _kmEfectivosCtrl.text = predio.kmEfectivos?.toString() ?? '';
         _superficieCtrl.text = predio.superficie?.toString() ?? '';
         _pdfUrl = predio.pdfUrl ?? predio.copFirmado;
         _copFecha = predio.copFecha;
         _poligonoDwgCtrl.text = predio.poligonoDwg ?? '';
-        _oficioCtrl.text = predio.oficio ?? '';
         _situacionSocialCtrl.text = predio.situacionSocial ?? '';
-        _latCtrl.text = predio.latitud?.toString() ?? '';
-        _lngCtrl.text = predio.longitud?.toString() ?? '';
         _propietarioNombreCtrl.text = predio.propietarioNombre ?? '';
         _setTramoFromValue(predio.tramo);
         _tipoPropiedad = predio.tipoPropiedad;
@@ -132,9 +132,9 @@ class _PredioFormScreenState extends ConsumerState<PredioFormScreen> {
   @override
   void dispose() {
     for (final c in [
-      _claveCtrl, _ejidoCtrl, _kmInicioCtrl, _kmFinCtrl, _kmLinealesCtrl,
+      _claveCtrl, _ejidoCtrl, _estadoCtrl, _municipioCtrl, _tipoLiberacionCtrl, _kmInicioCtrl, _kmFinCtrl,
       _kmEfectivosCtrl, _superficieCtrl, _poligonoDwgCtrl,
-      _oficioCtrl, _situacionSocialCtrl, _latCtrl, _lngCtrl, _propietarioNombreCtrl,
+      _situacionSocialCtrl, _propietarioNombreCtrl,
     ]) {
       c.dispose();
     }
@@ -157,131 +157,22 @@ class _PredioFormScreenState extends ConsumerState<PredioFormScreen> {
     }
   }
 
-  Future<void> _persistPdfUrl(String url) async {
-    final isEdit = widget.id != null;
-    if (!isEdit) {
-      setState(() => _pdfUrl = url);
-      return;
-    }
-
-    final isDemo = ref.read(demoModeProvider);
-    final isLocalPredio = widget.id!.startsWith('local-');
+  Future<void> _pickCopFecha() async {
     final now = DateTime.now();
-
-    if (isDemo) {
-      final predioActual = ref
-          .read(demoPrediosNotifierProvider)
-          .firstWhere((p) => p.id == widget.id);
-      ref.read(demoPrediosNotifierProvider.notifier).updatePredio(
-            predioActual.copyWith(
-              pdfUrl: url,
-              copFirmado: url,
-              copFecha: now,
-              updatedAt: now,
-            ),
-          );
-    } else if (isLocalPredio) {
-      final predioActual = ref
-          .read(localPrediosProvider)
-          .firstWhere((p) => p.id == widget.id);
-      ref.read(localPrediosProvider.notifier).updatePredio(
-            predioActual.copyWith(
-              pdfUrl: url,
-              copFirmado: url,
-              copFecha: now,
-              updatedAt: now,
-            ),
-          );
-    } else {
-      await ref.read(prediosRepositoryProvider).updatePredio(
-        widget.id!,
-        {
-          'pdf_url': url,
-          'cop_firmado': url,
-          'cop_fecha': now.toIso8601String(),
-        },
-      );
-    }
-
-    ref.invalidate(prediosListProvider);
-    ref.invalidate(prediosMapaProvider);
-    ref.invalidate(predioDetalleProvider(widget.id!));
-    if (mounted) {
-      setState(() {
-        _pdfUrl = url;
-        _copFecha = now;
-      });
-    }
-  }
-
-  Future<void> _pickAndUploadPdf() async {
-    if (_uploadingPdf) return;
-    if (widget.id == null) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Guarda el predio primero para habilitar la carga del PDF.'),
-          backgroundColor: AppColors.warning,
-        ),
-      );
-      return;
-    }
-
-    final picked = await FilePicker.platform.pickFiles(
-      type: FileType.custom,
-      allowedExtensions: const ['pdf'],
-      withData: true,
+    final initialDate = _copFecha ?? now;
+    final picked = await showDatePicker(
+      context: context,
+      initialDate: initialDate,
+      firstDate: DateTime(2000),
+      lastDate: DateTime(now.year + 10),
+      locale: const Locale('es', 'MX'),
+      helpText: 'Selecciona fecha',
     );
 
-    if (picked == null || picked.files.isEmpty) return;
-
-    final file = picked.files.single;
-    final bytes = file.bytes;
-    if (bytes == null) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('No se pudieron leer los bytes del PDF seleccionado.'),
-            backgroundColor: AppColors.danger,
-          ),
-        );
-      }
-      return;
-    }
-
-    setState(() => _uploadingPdf = true);
-
-    try {
-      final extension = (file.extension?.isNotEmpty ?? false)
-          ? file.extension!
-          : 'pdf';
-      final url = await ref.read(prediosRepositoryProvider).uploadPredioPdf(
-            predioId: widget.id!,
-            bytes: bytes,
-            extension: extension,
-          );
-      await _persistPdfUrl(url);
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('PDF vinculado correctamente.'),
-            backgroundColor: AppColors.secondary,
-          ),
-        );
-      }
-    } catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(e.toString()),
-            backgroundColor: AppColors.danger,
-          ),
-        );
-      }
-    } finally {
-      if (mounted) {
-        setState(() => _uploadingPdf = false);
-      }
-    }
+    if (picked == null || !mounted) return;
+    setState(() {
+      _copFecha = DateTime(picked.year, picked.month, picked.day);
+    });
   }
 
   Future<void> _submit() async {
@@ -305,9 +196,10 @@ class _PredioFormScreenState extends ConsumerState<PredioFormScreen> {
           tramo: _tramo,
           tipoPropiedad: _tipoPropiedad,
           ejido: _ejidoCtrl.text.isEmpty ? null : _ejidoCtrl.text.trim(),
+          estado: _estadoCtrl.text.isEmpty ? null : _estadoCtrl.text.trim(),
+          municipio: _municipioCtrl.text.isEmpty ? null : _municipioCtrl.text.trim(),
           kmInicio: _kmInicioCtrl.text.isEmpty ? null : double.tryParse(_kmInicioCtrl.text),
           kmFin: _kmFinCtrl.text.isEmpty ? null : double.tryParse(_kmFinCtrl.text),
-          kmLineales: _kmLinealesCtrl.text.isEmpty ? null : double.tryParse(_kmLinealesCtrl.text),
           kmEfectivos: _kmEfectivosCtrl.text.isEmpty ? null : double.tryParse(_kmEfectivosCtrl.text),
           superficie: _superficieCtrl.text.isEmpty ? null : double.tryParse(_superficieCtrl.text),
           cop: estatusLiberado,
@@ -315,14 +207,13 @@ class _PredioFormScreenState extends ConsumerState<PredioFormScreen> {
           pdfUrl: _resolvedPdfUrl(),
           copFecha: _copFecha,
           poligonoDwg: _poligonoDwgCtrl.text.isEmpty ? null : _poligonoDwgCtrl.text.trim(),
-          oficio: _oficioCtrl.text.isEmpty ? null : _oficioCtrl.text.trim(),
           situacionSocial: _situacionSocialCtrl.text.isEmpty ? null : _situacionSocialCtrl.text.trim(),
+            tipoLiberacion:
+              _tipoLiberacionCtrl.text.isEmpty ? null : _tipoLiberacionCtrl.text.trim(),
           poligonoInsertado: _poligonoInsertado,
           identificacion: _identificacion,
           levantamiento: _levantamiento,
           negociacion: estatusNoLiberado,
-          latitud: _latCtrl.text.isEmpty ? null : double.tryParse(_latCtrl.text),
-          longitud: _lngCtrl.text.isEmpty ? null : double.tryParse(_lngCtrl.text),
           propietarioNombre: _propietarioNombreCtrl.text.isEmpty ? null : _propietarioNombreCtrl.text.trim(),
           updatedAt: DateTime.now(),
         );
@@ -335,9 +226,10 @@ class _PredioFormScreenState extends ConsumerState<PredioFormScreen> {
           tramo: _tramo,
           tipoPropiedad: _tipoPropiedad,
           ejido: _ejidoCtrl.text.isEmpty ? null : _ejidoCtrl.text.trim(),
+          estado: _estadoCtrl.text.isEmpty ? null : _estadoCtrl.text.trim(),
+          municipio: _municipioCtrl.text.isEmpty ? null : _municipioCtrl.text.trim(),
           kmInicio: _kmInicioCtrl.text.isEmpty ? null : double.tryParse(_kmInicioCtrl.text),
           kmFin: _kmFinCtrl.text.isEmpty ? null : double.tryParse(_kmFinCtrl.text),
-          kmLineales: _kmLinealesCtrl.text.isEmpty ? null : double.tryParse(_kmLinealesCtrl.text),
           kmEfectivos: _kmEfectivosCtrl.text.isEmpty ? null : double.tryParse(_kmEfectivosCtrl.text),
           superficie: _superficieCtrl.text.isEmpty ? null : double.tryParse(_superficieCtrl.text),
           cop: estatusLiberado,
@@ -345,14 +237,13 @@ class _PredioFormScreenState extends ConsumerState<PredioFormScreen> {
           pdfUrl: _resolvedPdfUrl(),
           copFecha: _copFecha,
           poligonoDwg: _poligonoDwgCtrl.text.isEmpty ? null : _poligonoDwgCtrl.text.trim(),
-          oficio: _oficioCtrl.text.isEmpty ? null : _oficioCtrl.text.trim(),
           situacionSocial: _situacionSocialCtrl.text.isEmpty ? null : _situacionSocialCtrl.text.trim(),
+            tipoLiberacion:
+              _tipoLiberacionCtrl.text.isEmpty ? null : _tipoLiberacionCtrl.text.trim(),
           poligonoInsertado: _poligonoInsertado,
           identificacion: _identificacion,
           levantamiento: _levantamiento,
           negociacion: estatusNoLiberado,
-          latitud: _latCtrl.text.isEmpty ? null : double.tryParse(_latCtrl.text),
-          longitud: _lngCtrl.text.isEmpty ? null : double.tryParse(_lngCtrl.text),
           propietarioNombre: _propietarioNombreCtrl.text.isEmpty ? null : _propietarioNombreCtrl.text.trim(),
           propietarioId: _propietarioId,
           updatedAt: DateTime.now(),
@@ -364,9 +255,10 @@ class _PredioFormScreenState extends ConsumerState<PredioFormScreen> {
           'tramo': _tramo,
           'tipo_propiedad': _tipoPropiedad,
           'ejido': _ejidoCtrl.text.isEmpty ? null : _ejidoCtrl.text.trim(),
+          'estado': _estadoCtrl.text.isEmpty ? null : _estadoCtrl.text.trim(),
+          'municipio': _municipioCtrl.text.isEmpty ? null : _municipioCtrl.text.trim(),
           'km_inicio': _kmInicioCtrl.text.isEmpty ? null : double.tryParse(_kmInicioCtrl.text),
           'km_fin': _kmFinCtrl.text.isEmpty ? null : double.tryParse(_kmFinCtrl.text),
-          'km_lineales': _kmLinealesCtrl.text.isEmpty ? null : double.tryParse(_kmLinealesCtrl.text),
           'km_efectivos': _kmEfectivosCtrl.text.isEmpty ? null : double.tryParse(_kmEfectivosCtrl.text),
           'superficie': _superficieCtrl.text.isEmpty ? null : double.tryParse(_superficieCtrl.text),
           'cop': estatusLiberado,
@@ -374,14 +266,13 @@ class _PredioFormScreenState extends ConsumerState<PredioFormScreen> {
           'pdf_url': _resolvedPdfUrl(),
           'cop_fecha': _copFecha?.toIso8601String(),
           'poligono_dwg': _poligonoDwgCtrl.text.isEmpty ? null : _poligonoDwgCtrl.text.trim(),
-          'oficio': _oficioCtrl.text.isEmpty ? null : _oficioCtrl.text.trim(),
           'situacion_social': _situacionSocialCtrl.text.isEmpty ? null : _situacionSocialCtrl.text.trim(),
+            'tipo_liberacion':
+              _tipoLiberacionCtrl.text.isEmpty ? null : _tipoLiberacionCtrl.text.trim(),
           'poligono_insertado': _poligonoInsertado,
           'identificacion': _identificacion,
           'levantamiento': _levantamiento,
           'negociacion': estatusNoLiberado,
-          'latitud': _latCtrl.text.isEmpty ? null : double.tryParse(_latCtrl.text),
-          'longitud': _lngCtrl.text.isEmpty ? null : double.tryParse(_lngCtrl.text),
           'propietario_nombre': _propietarioNombreCtrl.text.isEmpty ? null : _propietarioNombreCtrl.text.trim(),
           'propietario_id': _propietarioId,
         };
@@ -484,14 +375,13 @@ class _PredioFormScreenState extends ConsumerState<PredioFormScreen> {
                 ),
                 const SizedBox(width: 12),
                 Expanded(
-                  child: DropdownButtonFormField<String>(
-                    value: _tramoNumero,
+                  child: TextFormField(
+                    initialValue: _tramoNumero,
+                    keyboardType: TextInputType.number,
                     decoration: const InputDecoration(labelText: 'Numero'),
-                    items: const ['1', '2', '3', '4', '5']
-                        .map((n) => DropdownMenuItem(value: n, child: Text(n)))
-                        .toList(),
                     onChanged: (v) => setState(() {
-                      _tramoNumero = v ?? _tramoNumero;
+                      final limpio = v.trim();
+                      _tramoNumero = limpio.isEmpty ? '1' : limpio;
                       _tramo = _buildTramoValue();
                     }),
                   ),
@@ -501,7 +391,7 @@ class _PredioFormScreenState extends ConsumerState<PredioFormScreen> {
               DropdownButtonFormField<String>(
                     value: _tipoPropiedad,
                     decoration: const InputDecoration(labelText: 'Tipo Propiedad'),
-                    items: ['SOCIAL','DOMINIO PLENO','PRIVADA'].map((t) => DropdownMenuItem(value: t, child: Text(t))).toList(),
+                    items: ['SOCIAL','DOMINIO PLENO','PRIVADA','DESCONOCIDO','FEDERAL','GUBERNAMENTAL','ESTATAL','MUNICIPAL'].map((t) => DropdownMenuItem(value: t, child: Text(t))).toList(),
                     onChanged: (v) => setState(() => _tipoPropiedad = v ?? _tipoPropiedad),
                   ),
               const SizedBox(height: 14),
@@ -509,6 +399,28 @@ class _PredioFormScreenState extends ConsumerState<PredioFormScreen> {
                 controller: _ejidoCtrl,
                 decoration: const InputDecoration(labelText: 'Ejido', prefixIcon: Icon(Icons.agriculture_outlined)),
               ),
+              const SizedBox(height: 14),
+              Row(children: [
+                Expanded(
+                  child: TextFormField(
+                    controller: _estadoCtrl,
+                    decoration: const InputDecoration(
+                      labelText: 'Estado',
+                      prefixIcon: Icon(Icons.map_outlined),
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: TextFormField(
+                    controller: _municipioCtrl,
+                    decoration: const InputDecoration(
+                      labelText: 'Municipio',
+                      prefixIcon: Icon(Icons.location_city_outlined),
+                    ),
+                  ),
+                ),
+              ]),
               const SizedBox(height: 24),
               _buildSectionTitle('Cadenamiento (km)', Icons.linear_scale),
               const SizedBox(height: 12),
@@ -519,8 +431,6 @@ class _PredioFormScreenState extends ConsumerState<PredioFormScreen> {
               ]),
               const SizedBox(height: 14),
               Row(children: [
-                Expanded(child: TextFormField(controller: _kmLinealesCtrl, keyboardType: const TextInputType.numberWithOptions(decimal: true), decoration: const InputDecoration(labelText: 'km Lineales'))),
-                const SizedBox(width: 12),
                 Expanded(child: TextFormField(controller: _kmEfectivosCtrl, keyboardType: const TextInputType.numberWithOptions(decimal: true), decoration: const InputDecoration(labelText: 'km Efectivos'))),
               ]),
               const SizedBox(height: 14),
@@ -583,41 +493,24 @@ class _PredioFormScreenState extends ConsumerState<PredioFormScreen> {
                       ],
                     ),
                     const SizedBox(height: 12),
-                    Wrap(
-                      spacing: 8,
-                      runSpacing: 8,
-                      children: [
-                        ElevatedButton.icon(
-                          onPressed: _uploadingPdf ? null : _pickAndUploadPdf,
-                          icon: _uploadingPdf
-                              ? const SizedBox(
-                                  width: 16,
-                                  height: 16,
-                                  child: CircularProgressIndicator(
-                                    strokeWidth: 2,
-                                    color: Colors.white,
-                                  ),
-                                )
-                              : Icon(_resolvedPdfUrl() == null
-                                  ? Icons.upload_file
-                                  : Icons.sync),
-                          label: Text(_resolvedPdfUrl() == null
-                              ? 'Subir PDF'
-                              : 'Actualizar PDF'),
-                        ),
-                        if (_resolvedPdfUrl() != null)
-                          OutlinedButton.icon(
-                            onPressed: () => _openPdf(_resolvedPdfUrl()!),
-                            icon: const Icon(Icons.open_in_new),
-                            label: const Text('Abrir PDF'),
-                          ),
-                      ],
+                    Text(
+                      'La URL de COP/DOT se gestiona directamente desde la tabla de Gestion.',
+                      style: const TextStyle(
+                        color: AppColors.textSecondary,
+                        fontSize: 12,
+                      ),
                     ),
+                    if (_resolvedPdfUrl() != null) ...[
+                      const SizedBox(height: 10),
+                      OutlinedButton.icon(
+                        onPressed: () => _openPdf(_resolvedPdfUrl()!),
+                        icon: const Icon(Icons.open_in_new),
+                        label: const Text('Abrir PDF'),
+                      ),
+                    ],
                   ],
                 ),
               ),
-              const SizedBox(height: 14),
-              TextFormField(controller: _oficioCtrl, decoration: const InputDecoration(labelText: 'Oficio', prefixIcon: Icon(Icons.mail_outlined))),
               const SizedBox(height: 14),
               TextFormField(
                 controller: _situacionSocialCtrl,
@@ -629,36 +522,41 @@ class _PredioFormScreenState extends ConsumerState<PredioFormScreen> {
                 maxLines: 4,
                 textInputAction: TextInputAction.newline,
               ),
-              const SizedBox(height: 24),
-              _buildSectionTitle('Georeferencia', Icons.gps_fixed),
-              const SizedBox(height: 12),
-              Row(children: [
-                Expanded(child: TextFormField(
-                  controller: _latCtrl,
-                  keyboardType: const TextInputType.numberWithOptions(decimal: true, signed: true),
-                  decoration: const InputDecoration(labelText: 'Latitud'),
-                  validator: (v) {
-                    if (v != null && v.isNotEmpty) {
-                      final d = double.tryParse(v);
-                      if (d == null || d < -90 || d > 90) return 'Invalida';
-                    }
-                    return null;
-                  },
-                )),
-                const SizedBox(width: 12),
-                Expanded(child: TextFormField(
-                  controller: _lngCtrl,
-                  keyboardType: const TextInputType.numberWithOptions(decimal: true, signed: true),
-                  decoration: const InputDecoration(labelText: 'Longitud'),
-                  validator: (v) {
-                    if (v != null && v.isNotEmpty) {
-                      final d = double.tryParse(v);
-                      if (d == null || d < -180 || d > 180) return 'Invalida';
-                    }
-                    return null;
-                  },
-                )),
-              ]),
+              const SizedBox(height: 14),
+              DropdownButtonFormField<String>(
+                value: _tipoLiberacionOpciones.contains(_tipoLiberacionCtrl.text.trim().toUpperCase())
+                    ? _tipoLiberacionCtrl.text.trim().toUpperCase()
+                    : null,
+                decoration: const InputDecoration(
+                  labelText: 'Tipo de liberacion',
+                  prefixIcon: Icon(Icons.assignment_turned_in_outlined),
+                ),
+                items: _tipoLiberacionOpciones
+                    .map((tipo) => DropdownMenuItem(value: tipo, child: Text(tipo)))
+                    .toList(),
+                onChanged: (value) => setState(() {
+                  _tipoLiberacionCtrl.text = value ?? '';
+                }),
+              ),
+              const SizedBox(height: 14),
+              TextFormField(
+                readOnly: true,
+                onTap: _pickCopFecha,
+                decoration: InputDecoration(
+                  labelText: 'Fecha',
+                  prefixIcon: const Icon(Icons.calendar_today_outlined),
+                  hintText: _copFecha != null
+                      ? DateFormat('dd/MM/yyyy').format(_copFecha!)
+                      : 'Selecciona una fecha',
+                  suffixIcon: _copFecha == null
+                      ? null
+                      : IconButton(
+                          tooltip: 'Limpiar fecha',
+                          icon: const Icon(Icons.clear),
+                          onPressed: () => setState(() => _copFecha = null),
+                        ),
+                ),
+              ),
               const SizedBox(height: 24),
               _buildSectionTitle('Estatus del Predio', Icons.flag_outlined),
               const SizedBox(height: 8),
@@ -691,24 +589,7 @@ class _PredioFormScreenState extends ConsumerState<PredioFormScreen> {
                 value: _negociacion,
                 onChanged: (v) => setState(() {
                   _negociacion = v ?? false;
-                  if (_negociacion) {
-                    _cop = false;
-                    _estatusPredio = 'No liberado';
-                  }
-                }),
-                dense: true,
-              ),
-              CheckboxListTile(
-                title: const Text('COP firmado'),
-                value: _cop,
-                onChanged: (v) => setState(() {
-                  _cop = v ?? false;
-                  if (_cop) {
-                    _negociacion = false;
-                    _estatusPredio = 'Liberado';
-                  } else {
-                    _estatusPredio = 'No liberado';
-                  }
+                  _estatusPredio = _negociacion ? 'No liberado' : _estatusPredio;
                 }),
                 dense: true,
               ),

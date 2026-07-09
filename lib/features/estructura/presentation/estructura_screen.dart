@@ -220,7 +220,7 @@ class _EstructuraScreenState extends ConsumerState<EstructuraScreen> with Single
   @override
   Widget build(BuildContext context) {
     return AppScaffold(
-      currentIndex: 5,
+      currentIndex: 6,
       title: 'Estructura',
       child: Column(
         children: [

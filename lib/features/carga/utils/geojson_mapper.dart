@@ -47,8 +47,12 @@ class GeoJsonMapper {
     ],
     'tipo_propiedad': [
       'tipo_propiedad', 'TIPO_PROPIEDAD',
-      'tipopropiedad',  'tipo', 'TIPO',
-      'regimen',        'REGIMEN',
+      'tipopropiedad',
+      'TIPO DE PROPIEDAD', 'tipo de propiedad',
+      'tipo_de_propiedad', 'TIPO_DE_PROPIEDAD',
+      'tipo', 'TIPO',
+      'regimen', 'REGIMEN',
+      'tenencia', 'TENENCIA',
     ],
     'ejido': [
       'ejido', 'EJIDO',
@@ -106,15 +110,25 @@ class GeoJsonMapper {
     'municipio': [
       'municipio', 'MUNICIPIO',
       'mun', 'MUN',
+      'mpio', 'MPIO',
+      'muni', 'MUNI',
       'municipality', 'MUNICIPALITY',
       'localidad', 'LOCALIDAD',
       'ciudad', 'CIUDAD',
+      'nom_municipio', 'NOM_MUNICIPIO',
+      'nombre_municipio', 'NOMBRE_MUNICIPIO',
+      'nombre del municipio', 'NOMBRE DEL MUNICIPIO',
     ],
     'estado': [
       'estado', 'ESTADO',
       'entidad', 'ENTIDAD',
       'state', 'STATE',
       'nombre_entidad', 'NOMBRE_ENTIDAD',
+      'entidad_federativa', 'ENTIDAD_FEDERATIVA',
+      'edo', 'EDO',
+      'nom_estado', 'NOM_ESTADO',
+      'nombre_estado', 'NOMBRE_ESTADO',
+      'nombre del estado', 'NOMBRE DEL ESTADO',
     ],
     // Status de liberación (COP)
     'cop': [
@@ -125,10 +139,12 @@ class GeoJsonMapper {
       'firmado', 'FIRMADO',
       'cop_firmado', 'COP_FIRMADO',
       'estatus_liberacion', 'ESTATUS_LIBERACION',
+      'anuencia', 'ANUENCIA',
     ],
     // Campos booleanos de gestión
     'identificacion': [
       'identificacion', 'IDENTIFICACION',
+      'identificación', 'IDENTIFICACIÓN',
       'identificado', 'IDENTIFICADO',
       'id_status', 'ID_STATUS',
       'identificacion_', 'IDENTIFICACION_',
@@ -141,6 +157,7 @@ class GeoJsonMapper {
     ],
     'negociacion': [
       'negociacion', 'NEGOCIACION',
+      'negociación', 'NEGOCIACIÓN',
       'negociado', 'NEGOCIADO',
       'negociacion_', 'NEGOCIACION_',
       'neg_status', 'NEG_STATUS',
@@ -156,14 +173,16 @@ class GeoJsonMapper {
     ],
     'km_inicio': [
       'km_inicio', 'KM_INICIO',
+      'km iniicio', 'KM INIICIO',
       'cadenamiento_inicial', 'cad_ini', 'km_i',
       'km_ini', 'KM_INI', 'km_inicio', 'KM_INICIO',
       'cadenamiento_i', 'CADENAMIENTO_I', 'km0', 'KM0',
     ],
     'km_fin': [
       'km_fin', 'KM_FIN',
+      'KM FIN', 'km fin',
       'cadenamiento_final', 'cad_fin', 'km_f',
-      'km_fin', 'KM_FIN', 'cadenamiento_f', 'CADENAMIENTO_F',
+      'cadenamiento_f', 'CADENAMIENTO_F',
       'km1', 'KM1', 'cadenamiento_1',
     ],
     'km_lineales': [
@@ -173,6 +192,7 @@ class GeoJsonMapper {
     ],
     'km_efectivos': [
       'km_efectivos', 'KM_EFECTIVOS',
+      'KM EFECTIVOS', 'km efectivos',
       'km_efectivo', 'KM_EFECTIVO',
       'km_e', 'KM_E', 'kme',
     ],
@@ -374,12 +394,15 @@ class GeoJsonMapper {
 
   static String _normalizeTipoPropiedad(String value) {
     final upper = value.toUpperCase();
-    if (upper.contains('SOC')) return 'SOCIAL';
-    if (upper.contains('PRI')) return 'PRIVADA';
-    if (upper.contains('DOMINIO') || upper.contains('PLENO')) return 'DOMINIO PLENO';
+    final compact = upper.replaceAll(RegExp(r'[^A-Z0-9]'), '');
+    if (compact.contains('SOC')) return 'SOCIAL';
+    if (compact.contains('DOMINIOPLENO') || (compact.contains('DOMINIO') && compact.contains('PLENO'))) return 'DOMINIO PLENO';
     if (upper.contains('EJI')) return 'EJIDAL';
     if (upper.contains('MIX')) return 'MIXTO';
-    return upper;
+    if (upper.contains('FEDERAL')) return 'FEDERAL';
+    if (upper.contains('GUBERNAMENTAL') || upper.contains('GUBERNAM') || upper.contains('GOBIERNO')) return 'GUBERNAMENTAL';
+    if (compact.contains('PRIVAD') || compact == 'PRI') return 'PRIVADA';
+    return upper.isEmpty ? 'PRIVADA' : upper;
   }
 
   /// Intenta detectar el proyecto a partir de las properties normalizadas.

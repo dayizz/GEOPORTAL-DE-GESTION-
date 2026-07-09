@@ -15,9 +15,9 @@ import '../../features/reportes/presentation/balance_screen.dart';
 import '../../features/reportes/presentation/generar_reporte_screen.dart';
 import '../../features/carga/presentation/carga_archivo_screen.dart';
 import '../../features/tabla/presentation/tabla_screen.dart';
-import '../../features/tabla/presentation/gestion_predio_detail_screen.dart';
 import '../../features/perfil/presentation/perfil_screen.dart';
 import '../../features/estructura/presentation/estructura_screen.dart';
+import 'router_redirect_logic.dart';
 
 final routerProvider = Provider<GoRouter>((ref) {
   // Observar cambios de auth para refrescar el redirect
@@ -29,11 +29,11 @@ final routerProvider = Provider<GoRouter>((ref) {
     redirect: (context, state) {
       final user = Supabase.instance.client.auth.currentUser;
       final isLoggedIn = user != null || localSession;
-      final isLoginRoute = state.matchedLocation == '/login';
-
-      if (!isLoggedIn && !isLoginRoute) return '/login';
-      if (isLoggedIn && isLoginRoute) return '/mapa';
-      return null;
+      return resolveAuthRedirect(
+        isLoggedIn: isLoggedIn,
+        matchedLocation: state.matchedLocation,
+        allowLocalOnlyAuthBypass: localOnlyAuthMode,
+      );
     },
     routes: [
       GoRoute(
@@ -122,14 +122,6 @@ final routerProvider = Provider<GoRouter>((ref) {
         pageBuilder: (_, __) => const NoTransitionPage(
           child: TablaScreen(),
         ),
-        routes: [
-          GoRoute(
-            path: 'predio/:id',
-            builder: (_, state) => GestionPredioDetailScreen(
-              id: state.pathParameters['id']!,
-            ),
-          ),
-        ],
       ),
       GoRoute(
         path: '/proyectos',

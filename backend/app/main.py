@@ -96,6 +96,142 @@ def _as_bool(value: Any) -> bool:
     return False
 
 
+def _pick_text(payload: dict[str, Any], keys: tuple[str, ...] | list[str]) -> str | None:
+    invalid = {"", "null", "none", "undefined", "nulo"}
+    for key in keys:
+        value = payload.get(key)
+        if value is None:
+            continue
+        text = str(value).strip()
+        if text and text.lower() not in invalid:
+            return text
+
+    normalized_aliases = {_normalize_key(key) for key in keys}
+    for key, value in payload.items():
+        if value is None:
+            continue
+        if _normalize_key(key) not in normalized_aliases:
+            continue
+        text = str(value).strip()
+        if text and text.lower() not in invalid:
+            return text
+
+    return None
+
+
+def _normalize_key(key: Any) -> str:
+    text = str(key).strip().lower()
+    replacements = str.maketrans(
+        {
+            "á": "a",
+            "à": "a",
+            "ä": "a",
+            "â": "a",
+            "é": "e",
+            "è": "e",
+            "ë": "e",
+            "ê": "e",
+            "í": "i",
+            "ì": "i",
+            "ï": "i",
+            "î": "i",
+            "ó": "o",
+            "ò": "o",
+            "ö": "o",
+            "ô": "o",
+            "ú": "u",
+            "ù": "u",
+            "ü": "u",
+            "û": "u",
+            "ñ": "n",
+        }
+    )
+    text = text.translate(replacements)
+    return re.sub(r"[^a-z0-9]", "", text)
+
+
+
+def _pick_float(payload: dict[str, Any], keys: tuple[str, ...] | list[str]) -> float | None:
+    invalid = {"", "null", "none", "undefined", "nulo"}
+
+    for key in keys:
+        value = payload.get(key)
+        if value is None:
+            continue
+        if isinstance(value, (int, float)):
+            return float(value)
+        text = str(value).strip()
+        if not text or text.lower() in invalid:
+            continue
+
+        km_match = re.fullmatch(r"(-?\d+)\s*\+\s*(\d+)", text)
+        if km_match:
+            base = float(km_match.group(1))
+            meters = float(km_match.group(2))
+            return base + (meters / 1000.0)
+
+        normalized = text.replace(" ", "")
+        if "," in normalized and "." not in normalized:
+            normalized = normalized.replace(",", ".")
+        else:
+            normalized = normalized.replace(",", "")
+        normalized = re.sub(r"[^0-9.\-]", "", normalized)
+        try:
+            return float(normalized)
+        except ValueError:
+            continue
+
+    normalized_aliases = {_normalize_key(key) for key in keys}
+    for key, value in payload.items():
+        if value is None:
+            continue
+        if _normalize_key(key) not in normalized_aliases:
+            continue
+        if isinstance(value, (int, float)):
+            return float(value)
+        text = str(value).strip()
+        if not text or text.lower() in invalid:
+            continue
+
+        km_match = re.fullmatch(r"(-?\d+)\s*\+\s*(\d+)", text)
+        if km_match:
+            base = float(km_match.group(1))
+            meters = float(km_match.group(2))
+            return base + (meters / 1000.0)
+
+        normalized = text.replace(" ", "")
+        if "," in normalized and "." not in normalized:
+            normalized = normalized.replace(",", ".")
+        else:
+            normalized = normalized.replace(",", "")
+        normalized = re.sub(r"[^0-9.\-]", "", normalized)
+        try:
+            return float(normalized)
+        except ValueError:
+            continue
+    return None
+
+
+def _normalize_tipo_propiedad(value: Any) -> str:
+    upper = str(value or "").strip().upper()
+    compact = re.sub(r"[^A-Z0-9]", "", upper)
+    if "SOC" in compact:
+        return "SOCIAL"
+    if "DOMINIOPLENO" in compact or ("DOMINIO" in compact and "PLENO" in compact):
+        return "DOMINIO PLENO"
+    if "EJI" in compact:
+        return "EJIDAL"
+    if "MIX" in compact:
+        return "MIXTO"
+    if "FEDERAL" in compact:
+        return "FEDERAL"
+    if "GUBERNAMENTAL" in compact or "GUBERNAM" in compact or "GOBIERNO" in compact:
+        return "GUBERNAMENTAL"
+    if "PRIVAD" in compact or compact == "PRI":
+        return "PRIVADA"
+    return upper or "PRIVADA"
+
+
 def _infer_project_from_text(value: str | None) -> str | None:
     text = str(value or "").strip().upper()
     if not text:
@@ -127,6 +263,27 @@ def _infer_project_from_clave(value: str | None) -> str | None:
         return "TQM"
 
     return None
+
+
+def _infer_estado_municipio_from_clave(value: str | None) -> tuple[str | None, str | None]:
+    clave = str(value or "").strip().upper()
+    if not clave:
+        return None, None
+
+    tokens = [token for token in re.split(r"[^A-Z0-9]+", clave) if token]
+    code = tokens[1] if len(tokens) >= 2 else ""
+    municipios_tsln = {
+        "SLV": "Salinas Victoria",
+        "VIL": "Villaldama",
+        "BUS": "Bustamante",
+        "LAM": "Lampazos de Naranjo",
+        "ANA": "Anahuac",
+        "SAB": "Sabinas Hidalgo",
+    }
+
+    estado = "Nuevo Leon" if clave.startswith(("SNL", "TSNL")) else None
+    municipio = municipios_tsln.get(code)
+    return estado, municipio
 
 
 def _infer_project(predio: dict[str, Any]) -> str | None:
@@ -171,7 +328,157 @@ def _normalize_predio(payload: dict[str, Any], existing: dict[str, Any] | None =
         predio.get("clave_catastral") or predio.get("id_sedatu") or ""
     ).strip()
     predio["tramo"] = predio.get("tramo") or "T1"
-    predio["tipo_propiedad"] = predio.get("tipo_propiedad") or "PRIVADA"
+    tipo_propiedad = _pick_text(
+        predio,
+        (
+            "tipo_propiedad",
+            "TIPO_PROPIEDAD",
+            "tipopropiedad",
+            "tipo propiedad",
+            "tipo_de_propiedad",
+            "tipo",
+            "regimen",
+            "REGIMEN",
+            "tenencia",
+            "TIPO_TENENCIA",
+            "clase_propiedad",
+            "CLASE_PROPIEDAD",
+            "clasificacion_propiedad",
+            "CLASIFICACION_PROPIEDAD",
+        ),
+    )
+    if tipo_propiedad is not None:
+        predio["tipo_propiedad"] = _normalize_tipo_propiedad(tipo_propiedad)
+    else:
+        predio["tipo_propiedad"] = predio.get("tipo_propiedad") or "PRIVADA"
+
+    estado = _pick_text(
+        predio,
+        (
+            "estado",
+            "ESTADO",
+            "entidad",
+            "ENTIDAD",
+            "entidad_federativa",
+            "ENTIDAD_FEDERATIVA",
+            "nombre_estado",
+            "NOMBRE_ESTADO",
+            "nombre del estado",
+            "NOMBRE DEL ESTADO",
+            "nom_estado",
+            "NOM_ESTADO",
+            "edo",
+            "EDO",
+            "state",
+            "STATE",
+        ),
+    )
+    if estado is not None:
+        predio["estado"] = estado
+
+    municipio = _pick_text(
+        predio,
+        (
+            "municipio",
+            "MUNICIPIO",
+            "municipality",
+            "MUNICIPALITY",
+            "nombre_municipio",
+            "NOMBRE_MUNICIPIO",
+            "nombre del municipio",
+            "NOMBRE DEL MUNICIPIO",
+            "nom_municipio",
+            "NOM_MUNICIPIO",
+            "mpio",
+            "MPIO",
+            "muni",
+            "MUNI",
+            "mun",
+            "MUN",
+            "localidad",
+            "LOCALIDAD",
+            "ciudad",
+            "CIUDAD",
+        ),
+    )
+    if municipio is not None:
+        predio["municipio"] = municipio
+
+    inferred_estado, inferred_municipio = _infer_estado_municipio_from_clave(
+        str(predio.get("clave_catastral") or "")
+    )
+    if predio.get("estado") in (None, "") and inferred_estado is not None:
+        predio["estado"] = inferred_estado
+    if predio.get("municipio") in (None, "") and inferred_municipio is not None:
+        predio["municipio"] = inferred_municipio
+
+    km_inicio = _pick_float(
+        predio,
+        (
+            "km_inicio",
+            "KM_INICIO",
+            "km inicio",
+            "KM INICIO",
+            "km_ini",
+            "KM_INI",
+            "km_i",
+            "KM_I",
+            "cadenamiento_inicial",
+            "CADENAMIENTO_INICIAL",
+            "cad_ini",
+            "CAD_INI",
+            "km_inicial",
+            "KM_INICIAL",
+        ),
+    )
+    if km_inicio is not None:
+        predio["km_inicio"] = km_inicio
+
+    km_fin = _pick_float(
+        predio,
+        (
+            "km_fin",
+            "KM_FIN",
+            "km fin",
+            "KM FIN",
+            "km_f",
+            "KM_F",
+            "cadenamiento_final",
+            "CADENAMIENTO_FINAL",
+            "cad_fin",
+            "CAD_FIN",
+            "cadenamiento_f",
+            "CADENAMIENTO_F",
+            "cadenamiento_1",
+            "km_final",
+            "KM_FINAL",
+        ),
+    )
+    if km_fin is not None:
+        predio["km_fin"] = km_fin
+
+    km_efectivos = _pick_float(
+        predio,
+        (
+            "km_efectivos",
+            "KM_EFECTIVOS",
+            "km efectivos",
+            "KM EFECTIVOS",
+            "km_efectivo",
+            "KM_EFECTIVO",
+            "km_e",
+            "KM_E",
+            "longitud_efectiva",
+            "LONGITUD_EFECTIVA",
+            "longitud efectiva",
+            "LONGITUD EFECTIVA",
+            "kme",
+            "KME",
+        ),
+    )
+    if km_efectivos is not None:
+        predio["km_efectivos"] = km_efectivos
+
     pdf_url = str(predio.get("pdf_url") or predio.get("cop_firmado") or "").strip()
     predio["pdf_url"] = pdf_url or None
     cop_fecha = predio.get("cop_fecha")

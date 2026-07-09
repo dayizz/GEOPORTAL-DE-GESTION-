@@ -28,6 +28,7 @@ class AppScaffold extends StatelessWidget {
     (icon: Icons.person_outlined, label: 'Perfil', route: '/perfil'),
     (icon: Icons.account_tree_outlined, label: 'Estructura', route: '/estructura'),
   ];
+  static const double _desktopRailWidth = 88;
 
   @override
   Widget build(BuildContext context) {
@@ -36,42 +37,51 @@ class AppScaffold extends StatelessWidget {
     if (isWide) {
       return Scaffold(
         appBar: AppBar(title: Text(title), actions: actions),
-        body: Row(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            NavigationRail(
-              selectedIndex: currentIndex,
-              onDestinationSelected: (i) => context.go(_navItems[i].route),
-              labelType: NavigationRailLabelType.all,
-              leading: Padding(
-                padding: const EdgeInsets.symmetric(vertical: 8),
-                child: Column(
-                  children: [
-                    Container(
-                      padding: const EdgeInsets.all(8),
-                      decoration: BoxDecoration(
-                        color: AppColors.primary,
-                        borderRadius: BorderRadius.circular(10),
-                      ),
-                      child: const Icon(Icons.map, color: Colors.white, size: 22),
+        body: SafeArea(
+          top: false,
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              SizedBox(
+                width: _desktopRailWidth,
+                child: NavigationRail(
+                  selectedIndex: currentIndex,
+                  onDestinationSelected: (i) => context.go(_navItems[i].route),
+                  labelType: NavigationRailLabelType.all,
+                  leading: Padding(
+                    padding: const EdgeInsets.symmetric(vertical: 8),
+                    child: Column(
+                      children: [
+                        Container(
+                          padding: const EdgeInsets.all(8),
+                          decoration: BoxDecoration(
+                            color: AppColors.primary,
+                            borderRadius: BorderRadius.circular(10),
+                          ),
+                          child: const Icon(Icons.map, color: Colors.white, size: 22),
+                        ),
+                      ],
                     ),
-                  ],
+                  ),
+                  destinations: _navItems
+                      .map((item) => NavigationRailDestination(
+                            icon: Icon(item.icon),
+                            selectedIcon: Icon(
+                              item.icon,
+                              color: AppColors.primary,
+                            ),
+                            label: Text(item.label, style: const TextStyle(fontSize: 11)),
+                          ))
+                      .toList(),
                 ),
               ),
-              destinations: _navItems
-                  .map((item) => NavigationRailDestination(
-                        icon: Icon(item.icon),
-                        selectedIcon: Icon(
-                          item.icon,
-                          color: AppColors.primary,
-                        ),
-                        label: Text(item.label, style: const TextStyle(fontSize: 11)),
-                      ))
-                  .toList(),
-            ),
-            const VerticalDivider(width: 1),
-            Expanded(child: child),
-          ],
+              const VerticalDivider(width: 1),
+              Expanded(
+                // Evita que widgets del contenido pinten encima del menú lateral.
+                child: ClipRect(child: child),
+              ),
+            ],
+          ),
         ),
         floatingActionButton: floatingActionButton,
       );

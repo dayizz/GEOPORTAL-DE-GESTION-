@@ -203,6 +203,12 @@ final importedFeaturesProvider = StateProvider<List<Map<String, dynamic>>>(
 	(ref) => const [],
 );
 
+/// Features GeoJSON de PKS con geometría de puntos.
+/// No se inyectan a Gestión; solo se renderizan en el mapa.
+final pksPointFeaturesProvider = StateProvider<List<Map<String, dynamic>>>(
+	(ref) => const [],
+);
+
 /// ID del predio que debe ser enfocado en el mapa (desde Gestión o Propietarios).
 /// El mapa limpia este valor después de hacer el fly-to.
 final focusPredioIdProvider = StateProvider<String?>((ref) => null);

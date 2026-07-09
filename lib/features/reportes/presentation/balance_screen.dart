@@ -26,14 +26,14 @@ class _BalanceScreenState extends ConsumerState<BalanceScreen> {
   void initState() {
     super.initState();
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      ref.refresh(prediosMapaProvider);
+      ref.invalidate(prediosMapaProvider);
     });
   }
 
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
-    ref.refresh(prediosMapaProvider);
+    ref.invalidate(prediosMapaProvider);
   }
 
   String _predioProyecto(Predio predator) {
@@ -103,7 +103,6 @@ class _BalanceScreenState extends ConsumerState<BalanceScreen> {
   @override
   Widget build(BuildContext context) {
     final prediosAsync = ref.watch(prediosMapaProvider);
-    final fmt = NumberFormat('#,##0.00', 'es_MX');
     final fmtInt = NumberFormat('#,##0', 'es_MX');
 
     return AppScaffold(
@@ -133,8 +132,8 @@ class _BalanceScreenState extends ConsumerState<BalanceScreen> {
           
           // Extraer segmentos únicos del proyecto
           final segmentos = proyectoPredios
-              .where((p) => p.tramo != null && p.tramo!.isNotEmpty)
-              .map((p) => p.tramo!)
+              .where((p) => p.tramo.isNotEmpty)
+              .map((p) => p.tramo)
               .toSet()
               .toList();
           segmentos.sort();
@@ -154,41 +153,28 @@ class _BalanceScreenState extends ConsumerState<BalanceScreen> {
               : proyectoPredios;
 
           final total = prediosFiltrados.length;
-          final porTipo = _groupCountBy(prediosFiltrados, (predator) => predator.tipoPropiedad);
           final porTramo = _groupCountBy(prediosFiltrados, (predator) => predator.tramo);
-          final m2Total = prediosFiltrados.fold<double>(0, (sum, predator) => sum + (predator.superficie ?? 0));
           
           final prediosLiberados = prediosFiltrados.where((predator) => predator.cop).length;
+          final prediosNoLiberados = (total - prediosLiberados).clamp(0, total);
           
           final kmEfectivosLiberados = prediosFiltrados
               .where((predator) => predator.cop)
               .fold<double>(0, (sum, predator) => sum + (predator.kmEfectivos ?? 0));
           
-          final ddvNecesario = m2Total;
-          final ddvLiberado = prediosFiltrados
-              .where((predator) => predator.cop)
-              .fold<double>(0, (sum, predator) => sum + (predator.superficie ?? 0));
-          final ddvEnNegociacion = prediosFiltrados
-              .where((predator) => !predator.cop && (predator.identificacion || predator.levantamiento || predator.negociacion))
-              .fold<double>(0, (sum, predator) => sum + (predator.superficie ?? 0));
-          final ddvNoLiberado = prediosFiltrados
-              .where((predator) => !predator.identificacion && !predator.levantamiento && !predator.negociacion && !predator.cop)
-              .fold<double>(0, (sum, predator) => sum + (predator.superficie ?? 0));
-          
-          final porTipoLiberacion = _groupCountBy(
-            prediosFiltrados.where((p) => p.cop).toList(),
-            (predator) {
-              if (predator.copFirmado != null && predator.copFirmado!.toUpperCase().contains('DOT')) return 'DOT';
-              if (predator.copFirmado != null && predator.copFirmado!.toUpperCase().contains('AOP')) return 'AOP';
-              if (predator.cop && (predator.copFirmado == null || predator.copFirmado!.isEmpty)) return 'Sin tipo';
-              return 'COP';
-            },
-          );
+          // Agrupar por tipo de liberación usando primero el valor capturado en Gestión.
+          final porTipoLiberacion = <String, int>{};
+          for (final predio in prediosFiltrados) {
+            final tipo = _resolveTipoLiberacion(predio);
+            porTipoLiberacion[tipo] = (porTipoLiberacion[tipo] ?? 0) + 1;
+          }
 
-          // Contar predios SIN liberación (sin COP)
-          final sinLiberacion = prediosFiltrados.where((p) => !p.cop).length;
-          if (sinLiberacion > 0) {
-            porTipoLiberacion['Sin liberación'] = sinLiberacion;
+          // Consolidar "Sin tipo" y "Sin liberación" en una sola categoría.
+          final sinTipo = porTipoLiberacion.remove('Sin tipo') ?? 0;
+          final sinLiberacion = porTipoLiberacion.remove('Sin liberación') ?? 0;
+          final sinTipoSinLiberacion = sinTipo + sinLiberacion;
+          if (sinTipoSinLiberacion > 0) {
+            porTipoLiberacion['Sin tipo / Sin liberación'] = sinTipoSinLiberacion;
           }
 
           final prediosPrivada = prediosFiltrados.where((p) => p.tipoPropiedad.toUpperCase() == 'PRIVADA').toList();
@@ -250,14 +236,12 @@ class _BalanceScreenState extends ConsumerState<BalanceScreen> {
                 ),
 
                 const SizedBox(height: 24),
-                Text('1. Avance de Proyecto', style: Theme.of(context).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.bold)),
+                Text('Avance de Proyecto', style: Theme.of(context).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.bold)),
                 const SizedBox(height: 16),
 
-                SizedBox(
-                  height: 120,
-                  child: ListView(
-                    scrollDirection: Axis.horizontal,
-                    children: [
+                LayoutBuilder(
+                  builder: (context, constraints) {
+                    final cards = [
                       _buildKpiPanel(
                         label: 'Total Predios',
                         value: fmtInt.format(total),
@@ -278,45 +262,95 @@ class _BalanceScreenState extends ConsumerState<BalanceScreen> {
                       ),
                       _buildKpiPanel(
                         label: 'Pendiente Liberar',
-                        value: fmtInt.format((total - prediosLiberados).clamp(0, total)),
+                        value: fmtInt.format(prediosNoLiberados),
                         color: AppColors.warning,
                         icon: Icons.pending_outlined,
+                      ),
+                    ];
+
+                    final isWide = constraints.maxWidth >= 920;
+                    if (isWide) {
+                      return SizedBox(
+                        height: 96,
+                        child: Row(
+                          crossAxisAlignment: CrossAxisAlignment.stretch,
+                          children: [
+                            for (var i = 0; i < cards.length; i++) ...[
+                              Expanded(child: cards[i]),
+                              if (i < cards.length - 1) const SizedBox(width: 12),
+                            ],
+                          ],
+                        ),
+                      );
+                    }
+
+                    return Column(
+                      children: [
+                        Row(
+                          children: [
+                            Expanded(child: cards[0]),
+                            const SizedBox(width: 12),
+                            Expanded(child: cards[1]),
+                          ],
+                        ),
+                        const SizedBox(height: 12),
+                        Row(
+                          children: [
+                            Expanded(child: cards[2]),
+                            const SizedBox(width: 12),
+                            Expanded(child: cards[3]),
+                          ],
+                        ),
+                      ],
+                    );
+                  },
+                ),
+
+                const SizedBox(height: 20),
+                // Barra de Avance DDV - extendida en toda la fila
+                IntrinsicHeight(
+                  child: Row(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text('Avance DDV', style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w600)),
+                            const SizedBox(height: 12),
+                            if (total == 0)
+                              Container(
+                                padding: const EdgeInsets.all(16),
+                                decoration: BoxDecoration(
+                                  color: Colors.white,
+                                  borderRadius: BorderRadius.circular(14),
+                                  border: Border.all(color: AppColors.border),
+                                ),
+                                child: const Row(
+                                  mainAxisAlignment: MainAxisAlignment.center,
+                                  children: [
+                                    Icon(Icons.info_outline, color: AppColors.textSecondary, size: 20),
+                                    SizedBox(width: 8),
+                                    Text(
+                                      'No hay predios cargados para este proyecto',
+                                      style: TextStyle(color: AppColors.textSecondary, fontSize: 14),
+                                    ),
+                                  ],
+                                ),
+                              )
+                            else
+                              _buildAvanceDdvStatusBar(
+                                context: context,
+                                total: total,
+                                liberado: prediosLiberados,
+                                noLiberado: prediosNoLiberados,
+                              ),
+                          ],
+                        ),
                       ),
                     ],
                   ),
                 ),
-
-                const SizedBox(height: 20),
-                Text('Avance DDV', style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w600)),
-                const SizedBox(height: 12),
-                if (total == 0)
-                  Container(
-                    padding: const EdgeInsets.all(16),
-                    decoration: BoxDecoration(
-                      color: Colors.white,
-                      borderRadius: BorderRadius.circular(14),
-                      border: Border.all(color: AppColors.border),
-                    ),
-                    child: const Row(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: [
-                        Icon(Icons.info_outline, color: AppColors.textSecondary, size: 20),
-                        SizedBox(width: 8),
-                        Text(
-                          'No hay predios cargados para este proyecto',
-                          style: TextStyle(color: AppColors.textSecondary, fontSize: 14),
-                        ),
-                      ],
-                    ),
-                  )
-                else
-                  _buildAvanceDdvStackedBar(
-                    context: context,
-                    necesario: ddvNecesario > 0 ? ddvNecesario : 1,
-                    liberado: ddvLiberado,
-                    enNegociacion: ddvEnNegociacion,
-                    noLiberado: ddvNoLiberado,
-                  ),
 
                 const SizedBox(height: 20),
                 if (porTipoLiberacion.isNotEmpty) ...[
@@ -400,22 +434,25 @@ class _BalanceScreenState extends ConsumerState<BalanceScreen> {
 
                 const SizedBox(height: 20),
 
-                _buildTipoPropiedadCard(
-                  titulo: 'Propiedad Privada',
-                  predios: prediosPrivada,
-                  fmtInt: fmtInt,
-                ),
-
-                const SizedBox(height: 16),
-
-                _buildTipoPropiedadCard(
-                  titulo: 'Propiedad social/Dominio pleno',
-                  predios: prediosSocialDominio,
-                  fmtInt: fmtInt,
+                Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    _buildTipoPropiedadCard(
+                      titulo: 'Propiedad Privada',
+                      predios: prediosPrivada,
+                      fmtInt: fmtInt,
+                    ),
+                    const SizedBox(height: 16),
+                    _buildTipoPropiedadCard(
+                      titulo: 'Propiedad social/Dominio pleno',
+                      predios: prediosSocialDominio,
+                      fmtInt: fmtInt,
+                    ),
+                  ],
                 ),
 
                 const SizedBox(height: 32),
-                Text('3. Avance por Segmento/Tramo/Frente', style: Theme.of(context).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.bold)),
+                Text('Avance por Segmento/Tramo/Frente', style: Theme.of(context).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.bold)),
                 const SizedBox(height: 16),
 
                 if (porTramo.isEmpty)
@@ -466,7 +503,7 @@ class _BalanceScreenState extends ConsumerState<BalanceScreen> {
                 ],
 
                 const SizedBox(height: 32),
-                Text('4. Avance Mensual', style: Theme.of(context).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.bold)),
+                Text('Avance Mensual', style: Theme.of(context).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.bold)),
                 const SizedBox(height: 16),
 
                 SizedBox(
@@ -529,13 +566,48 @@ class _BalanceScreenState extends ConsumerState<BalanceScreen> {
 
   static const _mesAbrev = ['Ene', 'Feb', 'Mar', 'Abr', 'May', 'Jun', 'Jul', 'Ago', 'Sep', 'Oct', 'Nov', 'Dic'];
 
+  String _resolveTipoLiberacion(Predio predio) {
+    final gestion = _normalizeLiberacionToken(predio.tipoLiberacion);
+    if (gestion.contains('AOP')) return 'AOP';
+    if (gestion.contains('DOT')) return 'DOT';
+    if (gestion.contains('COP')) return 'COP';
+
+    final firmado = _normalizeLiberacionToken(predio.copFirmado);
+    if (firmado.contains('AOP')) return 'AOP';
+    if (firmado.contains('DOT')) return 'DOT';
+    if (firmado.contains('COP')) return 'COP';
+
+    if (predio.cop) {
+      return (predio.copFirmado ?? '').trim().isNotEmpty ? 'COP' : 'Sin tipo';
+    }
+    return 'Sin liberación';
+  }
+
+  String _normalizeLiberacionToken(String? raw) {
+    if (raw == null) return '';
+    return raw.toUpperCase().replaceAll(RegExp(r'[^A-Z0-9]'), '');
+  }
+
+  String _normalizeTipoLiberacionLabel(String tipo) {
+    final t = _normalizeLiberacionToken(tipo);
+    if (t.contains('AOP')) return 'AOP';
+    if (t.contains('DOT')) return 'DOT';
+    if (t.contains('COP')) return 'COP';
+    if (tipo == 'Sin tipo / Sin liberación') return 'Sin tipo / Sin liberación';
+    if (tipo == 'Sin tipo') return 'Sin tipo';
+    if (tipo == 'Sin liberación') return 'Sin liberación';
+    return tipo;
+  }
+
   Color _tipoLiberacionColor(String tipo) {
-    switch (tipo) {
+    final normalized = _normalizeTipoLiberacionLabel(tipo);
+    switch (normalized) {
       case 'COP': return AppColors.secondary;
       case 'DOT': return AppColors.info;
       case 'AOP': return AppColors.primary;
       case 'Sin tipo': return AppColors.warning;
       case 'Sin liberación': return AppColors.danger;
+      case 'Sin tipo / Sin liberación': return AppColors.warning;
       default: return Colors.grey;
     }
   }
@@ -580,17 +652,15 @@ class _BalanceScreenState extends ConsumerState<BalanceScreen> {
     }).toList();
   }
 
-  Widget _buildAvanceDdvStackedBar({
+  Widget _buildAvanceDdvStatusBar({
     required BuildContext context,
-    required double necesario,
-    required double liberado,
-    required double enNegociacion,
-    required double noLiberado,
+    required int total,
+    required int liberado,
+    required int noLiberado,
   }) {
-    final total = necesario <= 0 ? 1.0 : necesario;
-    final pctLiber = (liberado / total).clamp(0.0, 1.0);
-    final pctNeg = (enNegociacion / total).clamp(0.0, 1.0);
-    final pctNoLib = (noLiberado / total).clamp(0.0, 1.0);
+    final totalSafe = total <= 0 ? 1 : total;
+    final pctLiber = (liberado / totalSafe).clamp(0.0, 1.0);
+    final pctNoLib = (noLiberado / totalSafe).clamp(0.0, 1.0);
     final fmt = NumberFormat('#,##0', 'es_MX');
 
     return Container(
@@ -606,8 +676,8 @@ class _BalanceScreenState extends ConsumerState<BalanceScreen> {
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              const Text('DDV Total', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w700)),
-              Text('${fmt.format(necesario)} m²', style: const TextStyle(fontSize: 12, color: AppColors.textSecondary)),
+              const Text('Estatus DDV', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w700)),
+              Text('${fmt.format(total)} predios', style: const TextStyle(fontSize: 12, color: AppColors.textSecondary)),
             ],
           ),
           const SizedBox(height: 10),
@@ -622,16 +692,13 @@ class _BalanceScreenState extends ConsumerState<BalanceScreen> {
                       flex: (pctLiber * 100).round().clamp(1, 100),
                       child: Container(color: AppColors.secondary),
                     ),
-                  if (pctNeg > 0)
-                    Expanded(
-                      flex: (pctNeg * 100).round().clamp(1, 100),
-                      child: Container(color: AppColors.info),
-                    ),
                   if (pctNoLib > 0)
                     Expanded(
                       flex: (pctNoLib * 100).round().clamp(1, 100),
-                      child: Container(color: AppColors.danger),
+                      child: Container(color: AppColors.warning),
                     ),
+                  if (pctLiber == 0 && pctNoLib == 0)
+                    Expanded(child: Container(color: AppColors.border)),
                 ],
               ),
             ),
@@ -642,8 +709,7 @@ class _BalanceScreenState extends ConsumerState<BalanceScreen> {
             runSpacing: 8,
             children: [
               _ddvLegend('Liberado', AppColors.secondary, fmt.format(liberado), pctLiber),
-              _ddvLegend('En Negociación', AppColors.info, fmt.format(enNegociacion), pctNeg),
-              _ddvLegend('No Liberado', AppColors.danger, fmt.format(noLiberado), pctNoLib),
+              _ddvLegend('No Liberado', AppColors.warning, fmt.format(noLiberado), pctNoLib),
             ],
           ),
         ],
@@ -679,9 +745,7 @@ class _BalanceScreenState extends ConsumerState<BalanceScreen> {
     required Color color,
   }) {
     return Container(
-      width: 180,
-      margin: const EdgeInsets.only(right: 10),
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
       decoration: BoxDecoration(
         gradient: LinearGradient(
           colors: [color.withValues(alpha: 0.16), color.withValues(alpha: 0.05)],
@@ -697,19 +761,21 @@ class _BalanceScreenState extends ConsumerState<BalanceScreen> {
         children: [
           Row(
             children: [
-              Icon(icon, color: color, size: 18),
-              const SizedBox(width: 6),
+              Icon(icon, color: color, size: 16),
+              const SizedBox(width: 5),
               Expanded(
                 child: Text(
                   label,
-                  style: const TextStyle(fontSize: 10, fontWeight: FontWeight.w500, color: Color(0xFF707780)),
+                  style: const TextStyle(fontSize: 9, fontWeight: FontWeight.w500, color: Color(0xFF707780), height: 1.1),
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
                 ),
               ),
             ],
           ),
           Text(
             value,
-            style: TextStyle(fontSize: 28, fontWeight: FontWeight.w900, color: color, height: 1.0),
+            style: TextStyle(fontSize: 23, fontWeight: FontWeight.w900, color: color, height: 1.0),
             maxLines: 1,
             overflow: TextOverflow.ellipsis,
           ),
@@ -822,84 +888,6 @@ class _BalanceScreenState extends ConsumerState<BalanceScreen> {
     );
   }
 
-  Widget _buildDonaIndividual({
-    required String titulo,
-    required int completado,
-    required int total,
-    required Color color,
-    required IconData icon,
-  }) {
-    if (total == 0) {
-      return const SizedBox.shrink();
-    }
-    
-    final pct = total > 0 ? completado / total * 100 : 0.0;
-    final restante = total - completado;
-
-    return Column(
-      children: [
-        Icon(icon, color: color, size: 20),
-        const SizedBox(height: 4),
-        SizedBox(
-          width: 70,
-          height: 70,
-          child: PieChart(
-            PieChartData(
-              sectionsSpace: 1,
-              centerSpaceRadius: 18,
-              sections: [
-                PieChartSectionData(
-                  color: color,
-                  value: completado.toDouble(),
-                  title: '${pct.toStringAsFixed(0)}%',
-                  radius: 16,
-                  titleStyle: const TextStyle(
-                    color: Colors.white,
-                    fontWeight: FontWeight.bold,
-                    fontSize: 9,
-                  ),
-                ),
-                if (restante > 0)
-                  PieChartSectionData(
-                    color: Colors.grey.shade300,
-                    value: restante.toDouble(),
-                    title: '',
-                    radius: 16,
-                  ),
-              ],
-            ),
-          ),
-        ),
-        const SizedBox(height: 4),
-        Text(
-          titulo,
-          style: const TextStyle(fontSize: 10, fontWeight: FontWeight.w600),
-          textAlign: TextAlign.center,
-        ),
-        Text(
-          '$completado / $total',
-          style: const TextStyle(fontSize: 9, color: AppColors.textSecondary),
-        ),
-      ],
-    );
-  }
-
-  Widget _buildMiniKpi(String label, String value, Color color) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
-      decoration: BoxDecoration(
-        color: color.withValues(alpha: 0.1),
-        borderRadius: BorderRadius.circular(8),
-      ),
-      child: Column(
-        children: [
-          Text(value, style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: color)),
-          Text(label, style: const TextStyle(fontSize: 9, color: AppColors.textSecondary)),
-        ],
-      ),
-    );
-  }
-
   Widget _buildDonaSeparada({
     required String titulo,
     required int completado,
@@ -909,19 +897,43 @@ class _BalanceScreenState extends ConsumerState<BalanceScreen> {
   }) {
     if (total == 0) {
       return SizedBox(
-        width: 80,
+        width: 112,
         child: Column(
           children: [
-            Icon(icon, color: color.withValues(alpha: 0.3), size: 20),
-            const SizedBox(height: 4),
+            Icon(icon, color: color.withValues(alpha: 0.3), size: 24),
+            const SizedBox(height: 6),
+            SizedBox(
+              width: 88,
+              height: 88,
+              child: PieChart(
+                PieChartData(
+                  sectionsSpace: 1,
+                  centerSpaceRadius: 22,
+                  sections: [
+                    PieChartSectionData(
+                      color: color.withValues(alpha: 0.18),
+                      value: 1,
+                      title: '0',
+                      radius: 22,
+                      titleStyle: TextStyle(
+                        color: color.withValues(alpha: 0.75),
+                        fontWeight: FontWeight.bold,
+                        fontSize: 11,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+            const SizedBox(height: 6),
             Text(
               titulo,
-              style: const TextStyle(fontSize: 10, fontWeight: FontWeight.w600),
+              style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w600),
               textAlign: TextAlign.center,
             ),
             Text(
-              '0',
-              style: const TextStyle(fontSize: 9, color: AppColors.textSecondary),
+              '0 / 0',
+              style: const TextStyle(fontSize: 10, color: AppColors.textSecondary),
             ),
           ],
         ),
@@ -934,28 +946,28 @@ class _BalanceScreenState extends ConsumerState<BalanceScreen> {
     final showGreySection = restante > 0 || completado == 0;
 
     return SizedBox(
-      width: 80,
+      width: 112,
       child: Column(
         children: [
-          Icon(icon, color: color, size: 20),
-          const SizedBox(height: 4),
+          Icon(icon, color: color, size: 24),
+          const SizedBox(height: 6),
           SizedBox(
-            width: 60,
-            height: 60,
+            width: 88,
+            height: 88,
             child: PieChart(
               PieChartData(
                 sectionsSpace: 1,
-                centerSpaceRadius: 15,
+                centerSpaceRadius: 22,
                 sections: [
                   PieChartSectionData(
                     color: color,
                     value: completado > 0 ? completado.toDouble() : 0.5,
                     title: completado.toString(),
-                    radius: 14,
+                    radius: 22,
                     titleStyle: const TextStyle(
                       color: Colors.white,
                       fontWeight: FontWeight.bold,
-                      fontSize: 9,
+                      fontSize: 11,
                     ),
                   ),
                   if (showGreySection)
@@ -963,17 +975,21 @@ class _BalanceScreenState extends ConsumerState<BalanceScreen> {
                       color: Colors.grey.shade300,
                       value: restante > 0 ? restante.toDouble() : 0.5,
                       title: '',
-                      radius: 14,
+                      radius: 22,
                     ),
                 ],
               ),
             ),
           ),
-          const SizedBox(height: 4),
+          const SizedBox(height: 6),
           Text(
             titulo,
-            style: const TextStyle(fontSize: 10, fontWeight: FontWeight.w600),
+            style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w600),
             textAlign: TextAlign.center,
+          ),
+          Text(
+            '$completado / $total',
+            style: const TextStyle(fontSize: 10, color: AppColors.textSecondary),
           ),
         ],
       ),

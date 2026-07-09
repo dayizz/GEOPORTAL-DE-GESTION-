@@ -65,6 +65,26 @@ class PrediosRepository {
   }) {
     final now = DateTime.now();
     final geometryRaw = raw['geometry'];
+
+    String? pickText(List<String> keys) {
+      for (final key in keys) {
+        final value = raw[key];
+        if (value == null) continue;
+        final text = value.toString().trim();
+        if (text.isNotEmpty && text.toLowerCase() != 'null') return text;
+      }
+      return null;
+    }
+
+    double? pickDouble(List<String> keys) {
+      for (final key in keys) {
+        final value = raw[key];
+        final parsed = _toDouble(value);
+        if (parsed != null) return parsed;
+      }
+      return null;
+    }
+
     return {
       'id': (raw['id']?.toString().trim().isNotEmpty ?? false)
           ? raw['id'].toString().trim()
@@ -73,13 +93,25 @@ class PrediosRepository {
           raw['id_sedatu']?.toString().trim() ??
           '',
       'propietario_nombre': raw['propietario_nombre']?.toString(),
-      'tramo': raw['tramo']?.toString() ?? 'T1',
-      'tipo_propiedad': raw['tipo_propiedad']?.toString() ?? 'PRIVADA',
+      'tramo': raw['tramo']?.toString() ?? '',
+      'tipo_propiedad': pickText([
+        'tipo_propiedad',
+        'TIPO_PROPIEDAD',
+        'tipopropiedad',
+        'tipo propiedad',
+        'tipo_de_propiedad',
+        'tipo',
+        'regimen',
+        'tenencia',
+          ]) ??
+          'PRIVADA',
       'ejido': raw['ejido']?.toString(),
-      'km_inicio': _toDouble(raw['km_inicio']),
-      'km_fin': _toDouble(raw['km_fin']),
-      'km_lineales': _toDouble(raw['km_lineales']),
-      'km_efectivos': _toDouble(raw['km_efectivos']),
+      'estado': pickText(['estado', 'ESTADO', 'entidad', 'ENTIDAD', 'edo', 'EDO', 'state', 'STATE']),
+      'municipio': pickText(['municipio', 'MUNICIPIO', 'mun', 'MUN', 'mpio', 'MPIO', 'municipality', 'MUNICIPALITY']),
+      'km_inicio': pickDouble(['km_inicio', 'KM_INICIO', 'km inicio', 'KM INICIO', 'km_ini', 'KM_INI']),
+      'km_fin': pickDouble(['km_fin', 'KM_FIN', 'km fin', 'KM FIN', 'cadenamiento_final', 'CADENAMIENTO_FINAL']),
+      'km_lineales': pickDouble(['km_lineales', 'KM_LINEALES', 'km lineales', 'KM LINEALES', 'longitud_km', 'LONGITUD_KM']),
+      'km_efectivos': pickDouble(['km_efectivos', 'KM_EFECTIVOS', 'km efectivos', 'KM EFECTIVOS', 'longitud_efectiva', 'LONGITUD_EFECTIVA']),
       'superficie': _toDouble(raw['superficie']) ?? 0,
       'cop': _toBool(raw['cop']),
       'cop_firmado': raw['cop_firmado']?.toString(),
@@ -106,8 +138,6 @@ class PrediosRepository {
       'descripcion': raw['descripcion']?.toString(),
       'direccion': raw['direccion']?.toString(),
       'colonia': raw['colonia']?.toString(),
-      'municipio': raw['municipio']?.toString(),
-      'estado': raw['estado']?.toString(),
       'codigo_postal': raw['codigo_postal']?.toString(),
       'imagen_url': raw['imagen_url']?.toString(),
       if (propietario != null) 'propietarios': propietario,

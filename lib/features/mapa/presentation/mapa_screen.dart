@@ -4,6 +4,7 @@ import 'dart:io';
 import 'dart:math' as math;
 import 'dart:typed_data';
 import 'dart:ui' as ui;
+import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_map/flutter_map.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -24,6 +25,7 @@ import '../../predios/providers/local_predios_provider.dart';
 import '../../predios/providers/proyectos_provider.dart';
 import '../../propietarios/data/propietarios_repository.dart';
 import '../../propietarios/providers/propietarios_provider.dart';
+import '../../carga/utils/geojson_mapper.dart';
 import '../providers/mapa_provider.dart';
 import 'package:screenshot/screenshot.dart';
 import '../utils/screenshot_crop_controller.dart';
@@ -43,6 +45,8 @@ class _MapaScreenState extends ConsumerState<MapaScreen> {
   bool _isCapturingScreen = false;
   bool _showLayersPanel = false;
   bool _showVisualizacionPanel = false;
+  bool _showClaveLabels = false;
+  bool _showPksLabels = true;
   bool _isDrawing = false;
   bool _isManualLinkMode = false;
   bool _isLinkingManual = false;
@@ -79,8 +83,13 @@ class _MapaScreenState extends ConsumerState<MapaScreen> {
   double _currentRotation = 0;
   /// Si el panel de rotación está expandido.
   bool _showRotationPanel = false;
+  bool _isMiddleMouseRotateActive = false;
+  Offset? _lastMiddleMousePosition;
+  bool _isTrackpadRotateActive = false;
+  double _lastTrackpadRotationRad = 0;
   static const _defaultCenter = LatLng(20.72, -100.35);
   static const _defaultZoom = 10.0;
+  double _currentZoom = _defaultZoom;
   // Memoización de polígonos importados (deben ser de instancia, no static locales)
   List<Map<String, dynamic>>? _lastImportedFeatures;
   MapaColorMode? _lastColorMode;
@@ -107,6 +116,7 @@ class _MapaScreenState extends ConsumerState<MapaScreen> {
     final baseLayer = ref.watch(mapaBaseLayerProvider);
     final colorMode = ref.watch(mapaColorModeProvider);
     final importedFeatures = ref.watch(importedFeaturesProvider);
+    final pksFeatures = ref.watch(pksPointFeaturesProvider);
     List<Polygon> importedPolygons;
     if (_lastImportedFeatures == importedFeatures && _lastColorMode == colorMode) {
       importedPolygons = _lastImportedPolygons ?? [];
@@ -200,35 +210,133 @@ class _MapaScreenState extends ConsumerState<MapaScreen> {
                 _lastColorModeVisual = colorMode;
                 _lastVisuals = visuals;
               }
+                final canShowClaveLabels = _showClaveLabels;
+              final claveLabelMarkers = canShowClaveLabels
+                  ? [
+                      ..._buildClaveLabelMarkersForPredios(visuals),
+                      ..._buildClaveLabelMarkersForImportedFeatures(importedFeatures),
+                    ]
+                  : const <Marker>[];
+                final showPksLayer = _showPksLabels;
+                final pksPointMarkers = showPksLayer
+                    ? _buildPksPointMarkers(pksFeatures, _currentZoom)
+                    : const <Marker>[];
+                final pksLabelMarkers = showPksLayer
+                  ? _buildPksLabelMarkers(pksFeatures)
+                  : const <Marker>[];
               final selectedVisual = _selectedPredio == null
                   ? null
                   : visuals.cast<_PredioVisualData?>().firstWhere(
                         (v) => v?.predio.id == _selectedPredio!.id,
                         orElse: () => null,
                       );
-              return FlutterMap(
-                mapController: _mapCtrl,
-                options: MapOptions(
-                  initialCenter: _defaultCenter,
-                  initialZoom: _defaultZoom,
-                  interactionOptions: const InteractionOptions(
-                    flags: InteractiveFlag.all,
-                  ),
-                  onPositionChanged: (position, hasGesture) {
-                    // Detectar rotación del mapa via scroll wheel o touchpad/dos dedos
-                    // Verificar siempre la rotación, no solo cuando hay gesto
-                    if (position.rotation != null) {
-                      final newRotation = position.rotation!;
-                      debugPrint('onPositionChanged: rotation=$newRotation, hasGesture=$hasGesture, current=$_currentRotation');
-                      // Actualizar si el cambio es significativo (> 0.5 grados)
-                      if ((newRotation - _currentRotation).abs() > 0.5) {
-                        setState(() {
-                          _currentRotation = newRotation;
-                        });
-                      }
-                    }
-                  },
-                  onTap: (_, point) {
+              final renderedPolygonSignatures = <String>{};
+              final visiblePredioPolygons = _dedupeRenderedPolygons(
+                visuals
+                    .where((v) => v.polygon != null)
+                    .map((v) => v.polygon!)
+                    .toList(growable: false),
+                renderedSignatures: renderedPolygonSignatures,
+              );
+              final visibleImportedPolygons = _dedupeRenderedPolygons(
+                importedPolygons,
+                renderedSignatures: renderedPolygonSignatures,
+              );
+              final visibleCapturedPolygons = _dedupeRenderedPolygons(
+                _capturedPolygons
+                    .map(
+                      (sp) => Polygon(
+                        points: sp.points,
+                        color: _savedPolygonColor(sp, colorMode).withValues(alpha: 0.46),
+                        borderColor: _savedPolygonColor(sp, colorMode),
+                        borderStrokeWidth: 2,
+                      ),
+                    )
+                    .toList(growable: false),
+                renderedSignatures: renderedPolygonSignatures,
+              );
+              return Listener(
+                behavior: HitTestBehavior.translucent,
+                onPointerDown: (event) {
+                  if ((event.buttons & kMiddleMouseButton) != 0) {
+                    _isMiddleMouseRotateActive = true;
+                    _lastMiddleMousePosition = event.position;
+                  }
+                },
+                onPointerUp: (event) {
+                  if ((event.buttons & kMiddleMouseButton) == 0) {
+                    _isMiddleMouseRotateActive = false;
+                    _lastMiddleMousePosition = null;
+                  }
+                },
+                onPointerCancel: (_) {
+                  _isMiddleMouseRotateActive = false;
+                  _lastMiddleMousePosition = null;
+                  _isTrackpadRotateActive = false;
+                  _lastTrackpadRotationRad = 0;
+                },
+                onPointerMove: (event) {
+                  if (!_isMiddleMouseRotateActive) return;
+                  final lastPosition = _lastMiddleMousePosition;
+                  _lastMiddleMousePosition = event.position;
+                  if (lastPosition == null) return;
+
+                  final deltaX = event.position.dx - lastPosition.dx;
+                  if (deltaX.abs() < 0.5) return;
+                  _rotateMap(deltaX * 0.25);
+                },
+                onPointerSignal: (event) {
+                  if (!_isMiddleMouseRotateActive) return;
+                  if (event is PointerScrollEvent) {
+                    if (event.scrollDelta.dy.abs() < 0.1) return;
+                    _rotateMap(-event.scrollDelta.dy * 0.12);
+                  }
+                },
+                onPointerPanZoomStart: (_) {
+                  _isTrackpadRotateActive = true;
+                  _lastTrackpadRotationRad = 0;
+                },
+                onPointerPanZoomUpdate: (event) {
+                  if (!_isTrackpadRotateActive) return;
+                  final deltaRad = event.rotation - _lastTrackpadRotationRad;
+                  _lastTrackpadRotationRad = event.rotation;
+                  if (deltaRad.abs() < 0.001) return;
+                  _rotateMap(deltaRad * 180 / math.pi);
+                },
+                onPointerPanZoomEnd: (_) {
+                  _isTrackpadRotateActive = false;
+                  _lastTrackpadRotationRad = 0;
+                },
+                child: Screenshot(
+                  controller: _screenshotPackageCtrl,
+                  child: FlutterMap(
+                    mapController: _mapCtrl,
+                    options: MapOptions(
+                      initialCenter: _defaultCenter,
+                      initialZoom: _defaultZoom,
+                      interactionOptions: const InteractionOptions(
+                        flags: InteractiveFlag.all,
+                      ),
+                      onPositionChanged: (position, hasGesture) {
+                        final newRotation = position.rotation;
+                        final newZoom = position.zoom;
+                        final rotationChanged =
+                            newRotation != null && (newRotation - _currentRotation).abs() > 0.5;
+                        final zoomChanged =
+                            newZoom != null && (newZoom - _currentZoom).abs() > 0.05;
+
+                        if (rotationChanged || zoomChanged) {
+                          setState(() {
+                            if (rotationChanged) {
+                              _currentRotation = newRotation!;
+                            }
+                            if (zoomChanged) {
+                              _currentZoom = newZoom!;
+                            }
+                          });
+                        }
+                      },
+                      onTap: (_, point) {
                     // Predios guardados en DB
                     final tappedVisual = _findVisualAtPoint(point, visuals);
                     var shouldAutofillUbicacion = false;
@@ -321,70 +429,66 @@ class _MapaScreenState extends ConsumerState<MapaScreen> {
                     if (shouldAutofillUbicacion) {
                       _autofillEstadoMunicipioDesdePoligono();
                     }
-                  },
-                ),
-                children: [
-                  TileLayer(
-                    urlTemplate: _tileTemplate(baseLayer),
-                    maxZoom: 19,
-                    userAgentPackageName: 'com.geoportal.predios',
-                  ),
-                  PolygonLayer(
-                    polygons: visuals
-                        .where((v) => v.polygon != null)
-                        .map((v) => v.polygon!)
-                        .toList(),
-                  ),
-                  // Capa de polígonos importados desde GeoJSON (naranja / pendientes de captura)
-                  if (importedPolygons.isNotEmpty)
-                    PolygonLayer(
-                      polygons: importedPolygons,
+                      },
                     ),
-                  if (importedMarkers.isNotEmpty)
-                    MarkerLayer(markers: importedMarkers),
-                  if (_capturedPolygons.isNotEmpty)
-                    PolygonLayer(
-                      polygons: _capturedPolygons
-                          .map(
-                            (sp) => Polygon(
-                              points: sp.points,
-                              color: _savedPolygonColor(sp, colorMode).withValues(alpha: 0.46),
-                              borderColor: _savedPolygonColor(sp, colorMode),
-                              borderStrokeWidth: 2,
-                            ),
-                          )
-                          .toList(),
+                    children: [
+                    TileLayer(
+                      urlTemplate: _tileTemplate(baseLayer),
+                      maxZoom: 19,
+                      userAgentPackageName: 'com.geoportal.predios',
                     ),
-                  if (_draftPoints.length >= 3)
                     PolygonLayer(
-                      polygons: [
-                        Polygon(
-                          points: _draftPoints,
-                          color: _draftPolygonColor(colorMode).withValues(alpha: 0.4),
-                          borderColor: _draftPolygonColor(colorMode).withValues(alpha: 0.4),
-                          borderStrokeWidth: 2,
-                        ),
-                      ],
+                      polygons: visiblePredioPolygons,
                     ),
-                  MarkerLayer(
-                    markers: selectedVisual != null && selectedVisual.markerPoint != null
-                        ? [
-                            Marker(
-                              point: selectedVisual.markerPoint!,
-                              width: 36,
-                              height: 36,
-                              child: GestureDetector(
-                                onTap: () => setState(() {
-                                  _selectedPredio = selectedVisual.predio;
-                                  _importedFeatureIndex = null;
-                                }),
-                                child: _buildMarkerDot(selectedVisual.color),
+                    // Capa de polígonos importados desde GeoJSON (naranja / pendientes de captura)
+                    if (visibleImportedPolygons.isNotEmpty)
+                      PolygonLayer(
+                        polygons: visibleImportedPolygons,
+                      ),
+                    if (importedMarkers.isNotEmpty)
+                      MarkerLayer(markers: importedMarkers),
+                    if (pksPointMarkers.isNotEmpty)
+                      MarkerLayer(markers: pksPointMarkers),
+                    if (pksLabelMarkers.isNotEmpty)
+                      MarkerLayer(markers: pksLabelMarkers),
+                    if (claveLabelMarkers.isNotEmpty)
+                      MarkerLayer(markers: claveLabelMarkers),
+                    if (visibleCapturedPolygons.isNotEmpty)
+                      PolygonLayer(
+                        polygons: visibleCapturedPolygons,
+                      ),
+                    if (_draftPoints.length >= 3)
+                      PolygonLayer(
+                        polygons: [
+                          Polygon(
+                            points: _draftPoints,
+                            color: _draftPolygonColor(colorMode).withValues(alpha: 0.4),
+                            borderColor: _draftPolygonColor(colorMode).withValues(alpha: 0.4),
+                            borderStrokeWidth: 2,
+                          ),
+                        ],
+                      ),
+                    MarkerLayer(
+                      markers: selectedVisual != null && selectedVisual.markerPoint != null
+                          ? [
+                              Marker(
+                                point: selectedVisual.markerPoint!,
+                                width: 36,
+                                height: 36,
+                                child: GestureDetector(
+                                  onTap: () => setState(() {
+                                    _selectedPredio = selectedVisual.predio;
+                                    _importedFeatureIndex = null;
+                                  }),
+                                  child: _buildMarkerDot(selectedVisual.color),
+                                ),
                               ),
-                            ),
-                          ]
-                        : const [],
+                            ]
+                          : const [],
+                    ),
+                    ],
                   ),
-                ],
+                ),
               );
             },
             loading: () => const Center(child: CircularProgressIndicator()),
@@ -506,13 +610,18 @@ class _MapaScreenState extends ConsumerState<MapaScreen> {
           Positioned(
             top: 16,
             left: 16,
-            child: _buildCapturaToggleButton(),
-          ),
-          // Botón de captura de pantalla
-          Positioned(
-            top: 60,
-            left: 16,
-            child: _buildCapturaPantallaButton(),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                _buildCapturaToggleButton(),
+                const SizedBox(width: 8),
+                _buildCapturaPantallaButton(),
+                const SizedBox(width: 8),
+                _buildPksLabelsToggleButton(),
+                const SizedBox(width: 8),
+                _buildClaveLabelsToggleButton(),
+              ],
+            ),
           ),
           // Rosa de los vientos con estrella de 8 puntas - parte inferior derecha del mapa
           Positioned(
@@ -528,10 +637,24 @@ class _MapaScreenState extends ConsumerState<MapaScreen> {
             ),
           if (_selectedPredio != null)
             Positioned(
-              bottom: 24,
-              left: 16,
+              top: 96,
+              bottom: 20,
               right: 16,
-              child: _buildPredioCard(_selectedPredio!),
+              child: Builder(
+                builder: (context) {
+                  final screenWidth = MediaQuery.of(context).size.width;
+                  final cardWidth = screenWidth < 700 ? screenWidth - 32 : 280.0;
+                  return SizedBox(
+                    width: cardWidth,
+                    child: Align(
+                      alignment: Alignment.centerRight,
+                      child: SingleChildScrollView(
+                        child: _buildPredioCard(_selectedPredio!),
+                      ),
+                    ),
+                  );
+                },
+              ),
             ),
           // Banner "procesando importación" — bloquea interacción hasta que BD confirme
           if (ref.watch(importacionEstadoProvider) == ImportacionEstado.procesando)
@@ -687,6 +810,66 @@ class _MapaScreenState extends ConsumerState<MapaScreen> {
     }
     return polygons;
   }
+
+  List<Polygon> _dedupeRenderedPolygons(
+    List<Polygon> polygons, {
+    required Set<String> renderedSignatures,
+  }) {
+    final deduped = <Polygon>[];
+    for (final polygon in polygons) {
+      final signature = _polygonSignature(polygon);
+      if (signature.isEmpty) continue;
+      if (renderedSignatures.contains(signature)) continue;
+      renderedSignatures.add(signature);
+      deduped.add(polygon);
+    }
+    return deduped;
+  }
+
+  String _polygonSignature(Polygon polygon) {
+    final outer = _ringSignature(polygon.points);
+    if (outer.isEmpty) return '';
+    final holes = (polygon.holePointsList ?? const <List<LatLng>>[])
+        .map(_ringSignature)
+        .where((s) => s.isNotEmpty)
+        .toList(growable: false)
+      ..sort();
+    return '$outer|${holes.join('|')}';
+  }
+
+  String _ringSignature(List<LatLng> ring) {
+    if (ring.length < 3) return '';
+    final cleaned = List<LatLng>.from(ring);
+    if (cleaned.length > 1 && cleaned.first == cleaned.last) {
+      cleaned.removeLast();
+    }
+    if (cleaned.length < 3) return '';
+
+    final points = cleaned
+        .map((p) => '${p.latitude.toStringAsFixed(6)},${p.longitude.toStringAsFixed(6)}')
+        .toList(growable: false);
+    final forward = _minRotation(points);
+    final reversed = _minRotation(points.reversed.toList(growable: false));
+    return forward.compareTo(reversed) <= 0 ? forward : reversed;
+  }
+
+  String _minRotation(List<String> points) {
+    if (points.isEmpty) return '';
+    var best = <String>[];
+    var bestKey = '';
+    for (var i = 0; i < points.length; i++) {
+      final rotated = [
+        ...points.sublist(i),
+        ...points.sublist(0, i),
+      ];
+      final key = rotated.join(';');
+      if (best.isEmpty || key.compareTo(bestKey) < 0) {
+        best = rotated;
+        bestKey = key;
+      }
+    }
+    return bestKey;
+  }
   List<Marker> _buildImportedMarkers({
     required List<Map<String, dynamic>> features,
     required int? selectedFeatureIndex,
@@ -722,6 +905,366 @@ class _MapaScreenState extends ConsumerState<MapaScreen> {
         ),
       ),
     ];
+  }
+  List<Marker> _buildClaveLabelMarkersForPredios(List<_PredioVisualData> visuals) {
+    return visuals
+        .where(
+          (visual) => visual.markerPoint != null && visual.predio.claveCatastral.trim().isNotEmpty,
+        )
+        .map(
+          (visual) => _buildClaveLabelMarker(
+            point: visual.markerPoint!,
+            label: visual.predio.claveCatastral.trim(),
+          ),
+        )
+        .toList(growable: false);
+  }
+
+  List<Marker> _buildClaveLabelMarkersForImportedFeatures(
+    List<Map<String, dynamic>> features,
+  ) {
+    final markers = <Marker>[];
+    for (final feature in features) {
+      final geometry = _geometryAsMap(feature['geometry']);
+      final polygons = _extractPolygons(geometry);
+      final center = _centroidOfPolygons(polygons);
+      if (center == null) continue;
+
+      final label = _extractImportedFeatureClave(feature);
+      if (label.isEmpty) continue;
+
+      markers.add(
+        _buildClaveLabelMarker(
+          point: center,
+          label: label,
+        ),
+      );
+    }
+    return markers;
+  }
+
+  double _pksZoomScale(double zoom) {
+    final raw = (zoom - 10.0) / 6.0;
+    return raw.clamp(0.55, 1.0);
+  }
+
+  List<Marker> _buildPksPointMarkers(
+    List<Map<String, dynamic>> features,
+    double zoom,
+  ) {
+    final scale = _pksZoomScale(zoom);
+    final size = 14.0 * scale;
+    final markers = <Marker>[];
+    for (final feature in features) {
+      final geometry = _geometryAsMap(feature['geometry']);
+      final points = _extractPointsFromGeometry(geometry);
+      for (final point in points) {
+        markers.add(
+          Marker(
+            point: point,
+            width: size,
+            height: size,
+            child: IgnorePointer(
+              child: Container(
+                width: size,
+                height: size,
+                decoration: BoxDecoration(
+                  color: const Color(0xFF00695C),
+                  shape: BoxShape.circle,
+                  border: Border.all(color: Colors.white, width: 1.5 * scale),
+                ),
+              ),
+            ),
+          ),
+        );
+      }
+    }
+    return markers;
+  }
+
+  List<Marker> _buildPksLabelMarkers(List<Map<String, dynamic>> features) {
+    final scale = _pksZoomScale(_currentZoom);
+    final fontSize = 10.0 * scale;
+    final width = 200.0 * scale;
+    final height = 22.0 * scale;
+    final markers = <Marker>[];
+    for (final feature in features) {
+      final geometry = _geometryAsMap(feature['geometry']);
+      final points = _extractPointsFromGeometry(geometry);
+      if (points.isEmpty) continue;
+      final label = _extractPksPointLabel(feature);
+      if (label.isEmpty) continue;
+
+      for (final point in points) {
+        markers.add(
+          Marker(
+            point: point,
+            width: width,
+            height: height,
+            alignment: Alignment.topCenter,
+            child: IgnorePointer(
+              child: Center(
+                child: Text(
+                  label,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  textAlign: TextAlign.center,
+                  style: TextStyle(
+                    fontSize: fontSize,
+                    fontWeight: FontWeight.w700,
+                    color: Colors.black,
+                    shadows: [
+                      Shadow(color: Colors.white, blurRadius: 4 * scale, offset: Offset(1, 1)),
+                      Shadow(color: Colors.white, blurRadius: 4 * scale, offset: Offset(-1, 1)),
+                      Shadow(color: Colors.white, blurRadius: 4 * scale, offset: Offset(1, -1)),
+                      Shadow(color: Colors.white, blurRadius: 4 * scale, offset: Offset(-1, -1)),
+                    ],
+                  ),
+                ),
+              ),
+            ),
+          ),
+        );
+      }
+    }
+    return markers;
+  }
+
+  String _extractPksPointLabel(Map<String, dynamic> feature) {
+    final rawProps = feature['properties'];
+    if (rawProps is! Map) return '';
+    final props = Map<String, dynamic>.from(rawProps);
+    final normalized = GeoJsonMapper.normalizeProperties(props);
+
+    final candidates = [
+      props['pks_label'],
+      props['PKS_LABEL'],
+      props['pks'],
+      props['PKS'],
+      props['pks_num'],
+      props['PKS_NUM'],
+      props['pks_numero'],
+      props['PKS_NUMERO'],
+      props['numero_pk'],
+      props['NUMERO_PK'],
+      props['numero_pks'],
+      props['NUMERO_PKS'],
+      props['propiedad'],
+      props['PROPIEDAD'],
+      props['etiqueta'],
+      props['ETIQUETA'],
+      props['label'],
+      props['LABEL'],
+      props['nombre'],
+      props['NOMBRE'],
+      props['name'],
+      props['NAME'],
+      normalized['propietario_nombre'],
+      props['descripcion'],
+      props['DESCRIPCION'],
+      props['id'],
+      props['ID'],
+      props['pk'],
+      props['PK'],
+      props['clave'],
+      props['CLAVE'],
+      normalized['clave_catastral'],
+    ];
+
+    for (final candidate in candidates) {
+      final text = candidate?.toString().trim();
+      if (text != null && text.isNotEmpty && text.toLowerCase() != 'null') {
+        return text;
+      }
+    }
+
+    return '';
+  }
+
+  List<LatLng> _extractPointsFromGeometry(Map<String, dynamic>? geometry) {
+    if (geometry == null) return const [];
+    final type = geometry['type']?.toString();
+    final coords = geometry['coordinates'];
+    if (type == null || coords is! List || coords.isEmpty) return const [];
+
+    if (type == 'Point') {
+      final point = _coordToLatLng(coords);
+      return point == null ? const [] : [point];
+    }
+
+    if (type == 'MultiPoint') {
+      final points = coords
+          .whereType<List>()
+          .map(_coordToLatLng)
+          .whereType<LatLng>()
+          .toList(growable: false);
+      return points;
+    }
+
+    return const [];
+  }
+
+  LatLng? _coordToLatLng(List<dynamic> coord) {
+    if (coord.length < 2) return null;
+    final x = _parseCoord(coord[0]);
+    final y = _parseCoord(coord[1]);
+    if (x == null || y == null) return null;
+
+    if (_isValidLatLng(lat: y, lng: x)) return LatLng(y, x);
+    if (_isValidLatLng(lat: x, lng: y)) return LatLng(x, y);
+    return null;
+  }
+
+  Marker _buildClaveLabelMarker({
+    required LatLng point,
+    required String label,
+  }) {
+    return Marker(
+      point: point,
+      width: 210,
+      height: 24,
+      child: IgnorePointer(
+        child: Center(
+          child: Text(
+            label,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            textAlign: TextAlign.center,
+            style: const TextStyle(
+              fontSize: 10,
+              fontWeight: FontWeight.w700,
+              color: Colors.black,
+              shadows: [
+                Shadow(color: Colors.white, blurRadius: 4, offset: Offset(1, 1)),
+                Shadow(color: Colors.white, blurRadius: 4, offset: Offset(-1, 1)),
+                Shadow(color: Colors.white, blurRadius: 4, offset: Offset(1, -1)),
+                Shadow(color: Colors.white, blurRadius: 4, offset: Offset(-1, -1)),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  String _extractImportedFeatureClave(Map<String, dynamic> feature) {
+    final rawProps = feature['properties'];
+    final props = rawProps is Map
+        ? Map<String, dynamic>.from(rawProps)
+        : <String, dynamic>{};
+    final normalized = GeoJsonMapper.normalizeProperties(props);
+    final candidates = [
+      normalized['clave_catastral'],
+      props['clave_catastral'],
+      props['CLAVE_CATASTRAL'],
+      props['clave'],
+      props['CLAVE'],
+      props['id_sedatu'],
+      props['ID_SEDATU'],
+      props['folio'],
+      props['FOLIO'],
+    ];
+
+    for (final candidate in candidates) {
+      if (candidate == null) continue;
+      final text = candidate.toString().trim();
+      if (text.isNotEmpty && text.toLowerCase() != 'null') {
+        return text;
+      }
+    }
+
+    return '';
+  }
+
+  Widget _buildClaveLabelsToggleButton() {
+    final active = _showClaveLabels;
+    final borderColor = active ? AppColors.primary : const Color(0xFFD9D9D9);
+    final iconColor = active ? AppColors.primary : const Color(0xFF2A5B52);
+    final fillColor = active
+      ? AppColors.primary.withValues(alpha: 0.10)
+      : Colors.white;
+    final tooltip = active
+      ? 'Ocultar etiquetas de clave'
+      : 'Mostrar etiquetas de clave';
+
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        onTap: () => setState(() => _showClaveLabels = !_showClaveLabels),
+        borderRadius: BorderRadius.circular(10),
+        child: Ink(
+          width: 40,
+          height: 40,
+          decoration: BoxDecoration(
+            color: fillColor,
+            borderRadius: BorderRadius.circular(10),
+            border: Border.all(color: borderColor),
+            boxShadow: const [
+              BoxShadow(
+                color: Color(0x1F000000),
+                blurRadius: 12,
+                offset: Offset(0, 6),
+              ),
+            ],
+          ),
+          child: Tooltip(
+            message: tooltip,
+            child: Icon(
+              Icons.label_outline,
+              size: 20,
+              color: iconColor,
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildPksLabelsToggleButton() {
+    final active = _showPksLabels;
+    final borderColor = active ? AppColors.primary : const Color(0xFFD9D9D9);
+    final textColor = active ? AppColors.primary : const Color(0xFF2A5B52);
+    final fillColor = active ? AppColors.primary.withValues(alpha: 0.10) : Colors.white;
+    final tooltip = active
+        ? 'Ocultar etiquetas PKS'
+        : 'Mostrar etiquetas PKS';
+
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        onTap: () => setState(() => _showPksLabels = !_showPksLabels),
+        borderRadius: BorderRadius.circular(10),
+        child: Ink(
+          width: 46,
+          height: 40,
+          decoration: BoxDecoration(
+            color: fillColor,
+            borderRadius: BorderRadius.circular(10),
+            border: Border.all(color: borderColor),
+            boxShadow: const [
+              BoxShadow(
+                color: Color(0x1F000000),
+                blurRadius: 12,
+                offset: Offset(0, 6),
+              ),
+            ],
+          ),
+          child: Tooltip(
+            message: tooltip,
+            child: Center(
+              child: Text(
+                'PKS',
+                style: TextStyle(
+                  fontSize: 11,
+                  fontWeight: FontWeight.w800,
+                  color: textColor,
+                ),
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
   }
   LatLng? _centroidOfPolygons(List<List<List<LatLng>>> polygons) {
     if (polygons.isEmpty) return null;
@@ -1302,6 +1845,14 @@ class _MapaScreenState extends ConsumerState<MapaScreen> {
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
+            const Align(
+              alignment: Alignment.centerLeft,
+              child: Text(
+                'Touchpad: mantener y desplazar\nMouse: boton medio + arrastrar o rueda',
+                style: TextStyle(fontSize: 11, color: Color(0xFF666666)),
+              ),
+            ),
+            const SizedBox(height: 10),
             // Campo de texto para ingresar grados
             Row(
               mainAxisSize: MainAxisSize.min,
@@ -1378,7 +1929,8 @@ class _MapaScreenState extends ConsumerState<MapaScreen> {
   }
   /// Rota el mapa el ángulo especificado.
   void _rotateMap(double angle, {bool reset = false}) {
-    final newRotation = reset ? 0.0 : (_currentRotation + angle) % 360;
+    final rawRotation = reset ? 0.0 : (_currentRotation + angle);
+    final newRotation = ((rawRotation % 360) + 360) % 360;
     setState(() {
       _currentRotation = newRotation;
     });
@@ -1390,8 +1942,9 @@ class _MapaScreenState extends ConsumerState<MapaScreen> {
   }
   /// Rota el mapa a los grados especificados (entrada directa).
   void _rotateToDegrees(double degrees) {
+    final normalized = ((degrees % 360) + 360) % 360;
     setState(() {
-      _currentRotation = degrees % 360;
+      _currentRotation = normalized;
     });
     try {
       _mapCtrl.rotate(_currentRotation);
@@ -1482,10 +2035,48 @@ class _MapaScreenState extends ConsumerState<MapaScreen> {
   Widget _buildPredioCard(Predio predio) {
     final mode = ref.watch(mapaColorModeProvider);
     final color = _predioColor(predio, mode);
+    final estatus = _predioEstatus(predio);
+    final kmInicioText = predio.kmInicio != null ? _formatKm(predio.kmInicio!) : '';
+    final kmFinText = predio.kmFin != null ? _formatKm(predio.kmFin!) : '';
+    final kmEfectivoText = predio.kmEfectivos != null ? _formatKm(predio.kmEfectivos!) : '';
+
+    Widget infoRow(String label, String value) {
+      return Padding(
+        padding: const EdgeInsets.only(bottom: 4),
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            SizedBox(
+              width: 74,
+              child: Text(
+                label,
+                style: const TextStyle(
+                  fontSize: 11,
+                  color: AppColors.textSecondary,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+            ),
+            const SizedBox(width: 4),
+            Expanded(
+              child: Text(
+                value,
+                style: const TextStyle(
+                  fontSize: 12,
+                  color: AppColors.textPrimary,
+                  fontWeight: FontWeight.w500,
+                ),
+              ),
+            ),
+          ],
+        ),
+      );
+    }
+
     return Card(
       elevation: 8,
       child: Padding(
-        padding: const EdgeInsets.all(16),
+        padding: const EdgeInsets.all(10),
         child: Column(
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.start,
@@ -1504,6 +2095,23 @@ class _MapaScreenState extends ConsumerState<MapaScreen> {
                     style: TextStyle(color: color, fontWeight: FontWeight.w600, fontSize: 12),
                   ),
                 ),
+                const SizedBox(width: 8),
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                  decoration: BoxDecoration(
+                    color: _estatusColor(estatus).withValues(alpha: 0.14),
+                    borderRadius: BorderRadius.circular(20),
+                    border: Border.all(color: _estatusColor(estatus)),
+                  ),
+                  child: Text(
+                    estatus,
+                    style: TextStyle(
+                      color: _estatusColor(estatus),
+                      fontWeight: FontWeight.w600,
+                      fontSize: 12,
+                    ),
+                  ),
+                ),
                 const Spacer(),
                 IconButton(
                   icon: const Icon(Icons.close, size: 18),
@@ -1513,30 +2121,46 @@ class _MapaScreenState extends ConsumerState<MapaScreen> {
                 ),
               ],
             ),
-            const SizedBox(height: 8),
-            Text(predio.nombrePropietario, style: Theme.of(context).textTheme.titleMedium),
+            const SizedBox(height: 4),
+            const Text(
+              'CLAVE CATASTRAL',
+              style: TextStyle(
+                fontSize: 11,
+                color: AppColors.textSecondary,
+                fontWeight: FontWeight.w700,
+              ),
+            ),
             const SizedBox(height: 2),
             Text(
               predio.claveCatastral,
-              style: Theme.of(context).textTheme.bodySmall?.copyWith(color: AppColors.textSecondary),
+              style: const TextStyle(
+                fontSize: 15,
+                color: AppColors.textPrimary,
+                fontWeight: FontWeight.w700,
+              ),
             ),
             if (predio.ejido != null && predio.ejido!.isNotEmpty && predio.ejido != '-') ...[
               const SizedBox(height: 4),
               Text(predio.ejido!, style: Theme.of(context).textTheme.bodySmall),
             ],
-            const SizedBox(height: 8),
+            const SizedBox(height: 6),
+            infoRow('Propietario', predio.nombrePropietario),
+            infoRow('Estado', predio.estado ?? ''),
+            infoRow('Municipio', predio.municipio ?? ''),
+            infoRow('KM inicio', kmInicioText),
+            infoRow('KM fin', kmFinText),
+            infoRow('KM efectivo', kmEfectivoText),
+            const SizedBox(height: 2),
             Wrap(
               spacing: 8,
-              runSpacing: 6,
+              runSpacing: 4,
               children: [
                 _statusChip('Identificacion', predio.identificacion),
                 _statusChip('Levantamiento', predio.levantamiento),
                 _statusChip('Negociacion', predio.negociacion),
-                _statusChip('COP', predio.cop),
-                _statusChip('Poligono', predio.poligonoInsertado),
               ],
             ),
-            const SizedBox(height: 12),
+            const SizedBox(height: 6),
             SizedBox(
               width: double.infinity,
               child: ElevatedButton.icon(
@@ -2089,12 +2713,13 @@ class _MapaScreenState extends ConsumerState<MapaScreen> {
       color: Colors.transparent,
       child: InkWell(
         onTap: () => setState(() => _showCapturaModal = !_showCapturaModal),
-        borderRadius: BorderRadius.circular(14),
+        borderRadius: BorderRadius.circular(10),
         child: Ink(
-          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+          width: 40,
+          height: 40,
           decoration: BoxDecoration(
             color: Colors.white,
-            borderRadius: BorderRadius.circular(14),
+            borderRadius: BorderRadius.circular(10),
             border: Border.all(color: const Color(0xFFD9D9D9)),
             boxShadow: const [
               BoxShadow(
@@ -2104,26 +2729,12 @@ class _MapaScreenState extends ConsumerState<MapaScreen> {
               ),
             ],
           ),
-          child: Row(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              const Icon(Icons.add_location_alt_outlined, size: 18, color: Color(0xFF2A5B52)),
-              const SizedBox(width: 8),
-              const Text(
-                'Captura de predio',
-                style: TextStyle(
-                  fontSize: 14,
-                  fontWeight: FontWeight.w600,
-                  color: Colors.black,
-                ),
-              ),
-              const SizedBox(width: 8),
-              Icon(
-                _showCapturaModal ? Icons.keyboard_arrow_up : Icons.keyboard_arrow_down,
-                size: 18,
-                color: const Color(0xFF747474),
-              ),
-            ],
+          child: const Center(
+            child: Icon(
+              Icons.add_location_alt_outlined,
+              size: 20,
+              color: Color(0xFF2A5B52),
+            ),
           ),
         ),
       ),
@@ -2138,12 +2749,13 @@ class _MapaScreenState extends ConsumerState<MapaScreen> {
           color: Colors.transparent,
           child: InkWell(
             onTap: () => _capturarPantalla(),
-            borderRadius: BorderRadius.circular(14),
+            borderRadius: BorderRadius.circular(10),
             child: Ink(
-              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+              width: 40,
+              height: 40,
               decoration: BoxDecoration(
                 color: Colors.white,
-                borderRadius: BorderRadius.circular(14),
+                borderRadius: BorderRadius.circular(10),
                 border: Border.all(color: const Color(0xFFD9D9D9)),
                 boxShadow: const [
                   BoxShadow(
@@ -2153,17 +2765,12 @@ class _MapaScreenState extends ConsumerState<MapaScreen> {
                   ),
                 ],
               ),
-              child: Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  const Icon(Icons.camera_alt_outlined, size: 18, color: Color(0xFF2A5B52)),
-                  const SizedBox(width: 8),
-                  Icon(
-                    _showCapturaPantalla ? Icons.keyboard_arrow_up : Icons.keyboard_arrow_down,
-                    size: 18,
-                    color: const Color(0xFF747474),
-                  ),
-                ],
+              child: const Center(
+                child: Icon(
+                  Icons.camera_alt_outlined,
+                  size: 20,
+                  color: Color(0xFF2A5B52),
+                ),
               ),
             ),
           ),
@@ -2231,93 +2838,26 @@ class _MapaScreenState extends ConsumerState<MapaScreen> {
   }
   /// Realiza la captura de pantalla del mapa con selección de región
   Future<void> _capturarPantalla() async {
-    // Usar selección en vivo para que el usuario pueda ver el mapa mientras selecciona
-    // Obtener todos los datos necesarios para renderizar los polígonos
-    final mediaQueryData = MediaQuery.of(context);
-    final baseLayer = ref.read(mapaBaseLayerProvider);
-    final colorMode = ref.watch(mapaColorModeProvider);
-    final importedFeatures = ref.watch(importedFeaturesProvider);
-    
-    // Usar polígonos cacheados o construirlos
-    List<Polygon> importedPolygons;
-    if (_lastImportedFeatures == importedFeatures && _lastColorMode == colorMode) {
-      importedPolygons = _lastImportedPolygons ?? [];
-    } else {
-      importedPolygons = _buildImportedPolygons(importedFeatures, colorMode);
-      _lastImportedFeatures = importedFeatures;
-      _lastColorMode = colorMode;
-      _lastImportedPolygons = importedPolygons;
-    }
-    
-    // Obtener prediosAsync para construir visuales
-    final prediosAsync = ref.watch(prediosMapaProvider);
-    final predios = prediosAsync.asData?.value ?? <Predio>[];
-    final visuals = _buildVisualData(predios, colorMode);
-    
-    // Crear el widget del mapa completo con todos los polígonos
-    final mapaWidget = Material(
-      child: SizedBox(
-        width: mediaQueryData.size.width,
-        height: mediaQueryData.size.height,
-        child: FlutterMap(
-          mapController: _mapCtrl,
-          options: MapOptions(
-            initialCenter: _defaultCenter,
-            initialZoom: _defaultZoom,
-          ),
-          children: [
-            TileLayer(
-              urlTemplate: _tileTemplate(baseLayer),
-              maxZoom: 19,
-              userAgentPackageName: 'com.geoportal.predios',
-            ),
-            // Capa de polígonos de Gestión
-            PolygonLayer(
-              polygons: visuals
-                  .where((v) => v.polygon != null)
-                  .map((v) => v.polygon!)
-                  .toList(),
-            ),
-            // Capa de polígonos importados desde GeoJSON
-            if (importedPolygons.isNotEmpty)
-              PolygonLayer(
-                polygons: importedPolygons,
-              ),
-            // Capa de polígonos capturados
-            if (_capturedPolygons.isNotEmpty)
-              PolygonLayer(
-                polygons: _capturedPolygons
-                    .map(
-                      (sp) => Polygon(
-                        points: sp.points,
-                        color: _savedPolygonColor(sp, colorMode).withValues(alpha: 0.46),
-                        borderColor: _savedPolygonColor(sp, colorMode),
-                        borderStrokeWidth: 2,
-                      ),
-                    )
-                    .toList(),
-              ),
-          ],
-        ),
-      ),
-    );
-    
-    _screenshotCtrl.startLiveSelectionCapture(
-      context: context,
-      child: mapaWidget,
-      captureFunction: () async {
-        // Aumentar el delay para asegurar que los polígonos se rendericen
-        final image = await _screenshotPackageCtrl.captureFromWidget(
-          MediaQuery(
-            data: mediaQueryData,
-            child: mapaWidget,
-          ),
-          delay: const Duration(milliseconds: 300),
-          pixelRatio: 2.0,
-        );
-        return image;
-      },
-      onCaptured: (Uint8List croppedBytes) async {
+    if (_isCapturingScreen) return;
+
+    setState(() {
+      _isCapturingScreen = true;
+    });
+
+    try {
+      await _screenshotCtrl.startSelectionCapture(
+        context: context,
+        captureFunction: () async {
+          final image = await _screenshotPackageCtrl.capture(
+            delay: const Duration(milliseconds: 150),
+            pixelRatio: 2.0,
+          );
+          if (image == null) {
+            throw Exception('No fue posible capturar el mapa en pantalla.');
+          }
+          return image;
+        },
+        onCaptured: (Uint8List croppedBytes) async {
         final timestamp = DateTime.now().millisecondsSinceEpoch;
         final fileName = 'mapa_lddv_$timestamp.png';
         
@@ -2355,11 +2895,18 @@ class _MapaScreenState extends ConsumerState<MapaScreen> {
             }
           }
         }
-      },
-      onCancel: () {
-        debugPrint('Captura cancelada por el usuario');
-      },
-    );
+        },
+        onCancel: () {
+          debugPrint('Captura cancelada por el usuario');
+        },
+      );
+    } finally {
+      if (mounted) {
+        setState(() {
+          _isCapturingScreen = false;
+        });
+      }
+    }
   }
   /// Comparte la captura de pantalla
   Future<void> _compartirCaptura(String filePath) async {

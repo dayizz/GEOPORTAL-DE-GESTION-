@@ -79,6 +79,70 @@ class Predio {
   });
 
   factory Predio.fromMap(Map<String, dynamic> map) {
+    String? pickText(List<String> keys) {
+      for (final key in keys) {
+        final value = map[key];
+        if (value == null) continue;
+        final text = value.toString().trim();
+        if (text.isNotEmpty && text.toLowerCase() != 'null') return text;
+      }
+      return null;
+    }
+
+    double? pickDouble(List<String> keys) {
+      for (final key in keys) {
+        final value = map[key];
+        if (value is num) return value.toDouble();
+        if (value is String) {
+          final parsed = double.tryParse(value.replaceAll(',', '').trim());
+          if (parsed != null) return parsed;
+        }
+      }
+      return null;
+    }
+
+    String normalizeTipoPropiedad(String? value) {
+      final upper = (value ?? '').toUpperCase().trim();
+      final compact = upper.replaceAll(RegExp(r'[^A-Z0-9]'), '');
+      if (compact.contains('SOC')) return 'SOCIAL';
+      if (compact.contains('DOMINIOPLENO') || (compact.contains('DOMINIO') && compact.contains('PLENO'))) return 'DOMINIO PLENO';
+      if (compact.contains('EJI')) return 'EJIDAL';
+      if (compact.contains('MIX')) return 'MIXTO';
+      if (compact.contains('FEDERAL')) return 'FEDERAL';
+      if (compact.contains('GUBERNAMENTAL') || compact.contains('GUBERNAM') || compact.contains('GOBIERNO')) return 'GUBERNAMENTAL';
+      if (compact.contains('PRIVAD') || compact == 'PRI') return 'PRIVADA';
+      return upper.isEmpty ? 'PRIVADA' : upper;
+    }
+
+    Map<String, String?> inferEstadoMunicipioDesdeClave(String? clave) {
+      if (clave == null || clave.trim().isEmpty) {
+        return {'estado': null, 'municipio': null};
+      }
+
+      final upper = clave.trim().toUpperCase();
+      final tokens = upper
+          .split(RegExp(r'[^A-Z0-9]+'))
+          .where((token) => token.isNotEmpty)
+          .toList(growable: false);
+      final code = tokens.length >= 2 ? tokens[1] : '';
+
+      const municipiosTsnl = {
+        'SLV': 'Salinas Victoria',
+        'VIL': 'Villaldama',
+        'BUS': 'Bustamante',
+        'LAM': 'Lampazos de Naranjo',
+        'ANA': 'Anahuac',
+        'SAB': 'Sabinas Hidalgo',
+      };
+
+      return {
+        'estado': upper.startsWith('SNL') || upper.startsWith('TSNL')
+            ? 'Nuevo Leon'
+            : null,
+        'municipio': municipiosTsnl[code],
+      };
+    }
+
     // Normalizar geometría: puede venir como string JSON o como Map
     Map<String, dynamic>? geometry;
     final geometryRaw = map['geometry'];
@@ -94,19 +158,57 @@ class Predio {
       }
     }
     
+    final ubicacionInferida = inferEstadoMunicipioDesdeClave(
+      pickText([
+        'clave_catastral',
+        'CLAVE_CATASTRAL',
+        'clave',
+        'CLAVE',
+        'id_sedatu',
+        'ID_SEDATU',
+      ]) ?? map['clave_catastral']?.toString() ?? map['CLAVE']?.toString(),
+    );
+
     return Predio(
       id: map['id'] as String,
       claveCatastral: map['clave_catastral'] as String? ?? map['id_sedatu'] as String? ?? '',
       propietarioNombre: map['propietario_nombre'] as String?,
-      tramo: map['tramo'] as String? ?? 'T1',
-      tipoPropiedad: map['tipo_propiedad'] as String? ?? 'PRIVADA',
+      tramo: (map['tramo'] as String?) ?? '',
+      tipoPropiedad: normalizeTipoPropiedad(
+        pickText([
+          'tipo_propiedad',
+          'TIPO_PROPIEDAD',
+          'tipopropiedad',
+          'tipo propiedad',
+          'tipo_de_propiedad',
+          'tipo',
+          'regimen',
+          'tenencia',
+        ]) ?? map['tipo_propiedad']?.toString(),
+      ),
       ejido: map['ejido'] as String?,
-      estado: map['estado'] as String?,
-      municipio: map['municipio'] as String?,
-      kmInicio: (map['km_inicio'] as num?)?.toDouble(),
-      kmFin: (map['km_fin'] as num?)?.toDouble(),
-      kmLineales: (map['km_lineales'] as num?)?.toDouble(),
-      kmEfectivos: (map['km_efectivos'] as num?)?.toDouble(),
+      estado: pickText([
+        'estado', 'ESTADO',
+        'entidad', 'ENTIDAD',
+        'entidad_federativa', 'ENTIDAD_FEDERATIVA',
+        'edo', 'EDO',
+        'state', 'STATE',
+        'nom_estado', 'NOM_ESTADO',
+        'nombre_estado', 'NOMBRE_ESTADO',
+      ]) ?? map['estado'] as String? ?? ubicacionInferida['estado'],
+      municipio: pickText([
+        'municipio', 'MUNICIPIO',
+        'mun', 'MUN',
+        'mpio', 'MPIO',
+        'muni', 'MUNI',
+        'municipality', 'MUNICIPALITY',
+        'nom_municipio', 'NOM_MUNICIPIO',
+        'nombre_municipio', 'NOMBRE_MUNICIPIO',
+      ]) ?? map['municipio'] as String? ?? ubicacionInferida['municipio'],
+      kmInicio: pickDouble(['km_inicio', 'KM_INICIO', 'km inicio', 'KM INICIO', 'km_ini', 'KM_INI']) ?? (map['km_inicio'] as num?)?.toDouble(),
+      kmFin: pickDouble(['km_fin', 'KM_FIN', 'km fin', 'KM FIN', 'cadenamiento_final', 'CADENAMIENTO_FINAL']) ?? (map['km_fin'] as num?)?.toDouble(),
+      kmLineales: pickDouble(['km_lineales', 'KM_LINEALES', 'km lineales', 'KM LINEALES', 'longitud_km', 'LONGITUD_KM']) ?? (map['km_lineales'] as num?)?.toDouble(),
+      kmEfectivos: pickDouble(['km_efectivos', 'KM_EFECTIVOS', 'km efectivos', 'KM EFECTIVOS', 'longitud_efectiva', 'LONGITUD_EFECTIVA']) ?? (map['km_efectivos'] as num?)?.toDouble(),
       superficie: (map['superficie'] as num?)?.toDouble(),
       cop: map['cop'] as bool? ?? false,
       copFirmado: map['cop_firmado'] as String?,

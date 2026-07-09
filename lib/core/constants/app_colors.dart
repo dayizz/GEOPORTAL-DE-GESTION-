@@ -61,6 +61,8 @@ class AppColors {
   static const Color tipoDominioPleno = Color(0xFF26A69A);  // teal
   static const Color tipoEjidal = Color(0xFF5C6BC0);       // indigo
   static const Color tipoMixto = Color(0xFFEC407A);        // pink
+  static const Color tipoFederal = Color(0xFF1976D2);      // blue
+  static const Color tipoGubernamental = Color(0xFF455A64); // blue grey
 
   static Color tipoPropiedadColor(String tipo) {
     switch (tipo.toUpperCase()) {
@@ -76,6 +78,10 @@ class AppColors {
         return tipoEjidal;
       case 'MIXTO':
         return tipoMixto;
+      case 'FEDERAL':
+        return tipoFederal;
+      case 'GUBERNAMENTAL':
+        return tipoGubernamental;
       default:
         return tipoSinTipo;
     }

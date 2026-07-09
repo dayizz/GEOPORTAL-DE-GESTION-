@@ -1,5 +1,4 @@
 import 'dart:typed_data';
-import 'dart:ui' as ui;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:image/image.dart' as img;
@@ -107,7 +106,36 @@ class _CropOverlayState extends State<CropOverlay> {
   Offset? startPoint;
   Offset? currentPoint;
   bool isProcessing = false;
+  bool _useTwoPointMode = true;
+  bool _awaitingSecondPoint = false;
   final FocusNode _focusNode = FocusNode();
+
+  bool get _hasValidSelection {
+    if (startPoint == null || currentPoint == null) return false;
+    final delta = (startPoint! - currentPoint!).distance;
+    return delta > 2;
+  }
+
+  void _handleTwoPointTap(Offset position) {
+    setState(() {
+      if (!_awaitingSecondPoint || startPoint == null) {
+        startPoint = position;
+        currentPoint = position;
+        _awaitingSecondPoint = true;
+      } else {
+        currentPoint = position;
+        _awaitingSecondPoint = false;
+      }
+    });
+  }
+
+  void _resetSelection() {
+    setState(() {
+      startPoint = null;
+      currentPoint = null;
+      _awaitingSecondPoint = false;
+    });
+  }
 
   @override
   void initState() {
@@ -228,24 +256,27 @@ class _CropOverlayState extends State<CropOverlay> {
             Positioned.fill(
               child: GestureDetector(
                 behavior: HitTestBehavior.opaque,
+                onTapDown: (details) {
+                  if (isProcessing || !_useTwoPointMode) return;
+                  _handleTwoPointTap(details.localPosition);
+                },
                 onPanStart: (details) {
+                  if (_useTwoPointMode) return;
                   setState(() {
                     startPoint = details.localPosition;
                     currentPoint = details.localPosition;
                   });
                 },
                 onPanUpdate: (details) {
+                  if (_useTwoPointMode) return;
                   if (startPoint == null) return;
                   setState(() {
                     currentPoint = details.localPosition;
                   });
                 },
-                child: MouseRegion(
-                  cursor: SystemMouseCursors.precise,
-                  child: CustomPaint(
-                    size: Size.infinite,
-                    painter: RegionPainter(selectionRect: selectionRect),
-                  ),
+                child: CustomPaint(
+                  painter: RegionPainter(selectionRect: selectionRect),
+                  child: const SizedBox.expand(),
                 ),
               ),
             ),
@@ -263,13 +294,77 @@ class _CropOverlayState extends State<CropOverlay> {
                   color: Colors.black87,
                   borderRadius: BorderRadius.circular(8)
                 ),
-                child: const Text(
-                  "Arrastra para seleccionar el área. Presiona Enter o Aceptar para guardar, Escape para cancelar.",
-                  style: TextStyle(color: Colors.white, fontSize: 13),
-                  textAlign: TextAlign.center,
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Text(
+                      _useTwoPointMode
+                          ? "Modo alterno: clic 1 (inicio) y clic 2 (fin). Enter/Aceptar para guardar, Escape para cancelar."
+                          : "Arrastra para seleccionar el área. Enter/Aceptar para guardar, Escape para cancelar.",
+                      style: const TextStyle(color: Colors.white, fontSize: 13),
+                      textAlign: TextAlign.center,
+                    ),
+                    const SizedBox(height: 8),
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        TextButton(
+                          onPressed: () => setState(() {
+                            _useTwoPointMode = true;
+                            _awaitingSecondPoint = false;
+                          }),
+                          child: Text(
+                            '2 puntos',
+                            style: TextStyle(
+                              color: _useTwoPointMode ? Colors.lightBlueAccent : Colors.white,
+                              fontWeight: FontWeight.w700,
+                            ),
+                          ),
+                        ),
+                        const SizedBox(width: 8),
+                        TextButton(
+                          onPressed: () => setState(() {
+                            _useTwoPointMode = false;
+                            _awaitingSecondPoint = false;
+                          }),
+                          child: Text(
+                            'Arrastre',
+                            style: TextStyle(
+                              color: !_useTwoPointMode ? Colors.lightBlueAccent : Colors.white,
+                              fontWeight: FontWeight.w700,
+                            ),
+                          ),
+                        ),
+                        const SizedBox(width: 8),
+                        TextButton(
+                          onPressed: _resetSelection,
+                          child: const Text(
+                            'Reiniciar',
+                            style: TextStyle(color: Colors.white),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ],
                 ),
               ),
             ),
+            if (startPoint != null)
+              Positioned(
+                left: startPoint!.dx - 7,
+                top: startPoint!.dy - 7,
+                child: IgnorePointer(
+                  child: Container(
+                    width: 14,
+                    height: 14,
+                    decoration: BoxDecoration(
+                      color: Colors.lightBlueAccent,
+                      shape: BoxShape.circle,
+                      border: Border.all(color: Colors.white, width: 2),
+                    ),
+                  ),
+                ),
+              ),
             Positioned(
               bottom: 40,
               left: 20,
@@ -278,29 +373,41 @@ class _CropOverlayState extends State<CropOverlay> {
                 mainAxisAlignment: MainAxisAlignment.center,
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  ElevatedButton(
-                    onPressed: isProcessing ? null : _cancelCapture,
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: Colors.red.shade600,
-                      foregroundColor: Colors.white,
-                      padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
-                    ),
-                    child: const Text(
-                      "Cancelar",
-                      style: TextStyle(fontSize: 16),
+                  SizedBox(
+                    width: 140,
+                    child: ElevatedButton(
+                      onPressed: isProcessing ? null : _cancelCapture,
+                      style: ElevatedButton.styleFrom(
+                        fixedSize: const Size(140, 44),
+                        minimumSize: const Size(140, 44),
+                        maximumSize: const Size(140, 44),
+                        backgroundColor: Colors.red.shade600,
+                        foregroundColor: Colors.white,
+                        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+                      ),
+                      child: const Text(
+                        "Cancelar",
+                        style: TextStyle(fontSize: 16),
+                      ),
                     ),
                   ),
                   const SizedBox(width: 20),
-                  ElevatedButton(
-                    onPressed: isProcessing ? null : _processCrop,
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: Colors.lightBlue,
-                      foregroundColor: Colors.white,
-                      padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
-                    ),
-                    child: const Text(
-                      "Aceptar",
-                      style: TextStyle(fontSize: 16),
+                  SizedBox(
+                    width: 140,
+                    child: ElevatedButton(
+                      onPressed: isProcessing || !_hasValidSelection ? null : _processCrop,
+                      style: ElevatedButton.styleFrom(
+                        fixedSize: const Size(140, 44),
+                        minimumSize: const Size(140, 44),
+                        maximumSize: const Size(140, 44),
+                        backgroundColor: Colors.lightBlue,
+                        foregroundColor: Colors.white,
+                        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+                      ),
+                      child: const Text(
+                        "Aceptar",
+                        style: TextStyle(fontSize: 16),
+                      ),
                     ),
                   ),
                 ],
@@ -400,6 +507,7 @@ class _LiveCropOverlayState extends State<LiveCropOverlay> {
   Offset? startPoint;
   Offset? currentPoint;
   bool isProcessing = false;
+  bool _isSelecting = false;
   final FocusNode _focusNode = FocusNode();
   GlobalKey _childKey = GlobalKey();
 
@@ -521,9 +629,11 @@ class _LiveCropOverlayState extends State<LiveCropOverlay> {
           children: [
             // El widget hijo (mapa) - debe ser interactivo
             Positioned.fill(
-              child: KeyedSubtree(
-                key: _childKey,
-                child: widget.child,
+              child: IgnorePointer(
+                child: KeyedSubtree(
+                  key: _childKey,
+                  child: widget.child,
+                ),
               ),
             ),
             // Capa semitransparente sobre el contenido
@@ -543,25 +653,44 @@ class _LiveCropOverlayState extends State<LiveCropOverlay> {
               ),
             // Capa de gestos para dibujar la selección
             Positioned.fill(
-              child: GestureDetector(
-                behavior: HitTestBehavior.translucent,
-                onPanStart: (details) {
-                  setState(() {
-                    startPoint = details.localPosition;
-                    currentPoint = details.localPosition;
-                  });
-                },
-                onPanUpdate: (details) {
-                  if (startPoint == null) return;
-                  setState(() {
-                    currentPoint = details.localPosition;
-                  });
-                },
-                onPanEnd: (details) {
-                  // No hacer nada automáticamente, esperar a que el usuario confirme
-                },
-                child: MouseRegion(
-                  cursor: SystemMouseCursors.precise,
+              child: MouseRegion(
+                cursor: SystemMouseCursors.precise,
+                child: GestureDetector(
+                  behavior: HitTestBehavior.opaque,
+                  onTapDown: (details) {
+                    if (isProcessing) return;
+                    // Fallback para equipos donde el drag no se reconoce bien:
+                    // primer clic define inicio, segundo clic define fin.
+                    setState(() {
+                      if (startPoint == null || currentPoint != startPoint) {
+                        startPoint = details.localPosition;
+                        currentPoint = details.localPosition;
+                      } else {
+                        currentPoint = details.localPosition;
+                      }
+                    });
+                  },
+                  onPanStart: (details) {
+                    if (isProcessing) return;
+                    _isSelecting = true;
+                    setState(() {
+                      startPoint = details.localPosition;
+                      currentPoint = details.localPosition;
+                    });
+                  },
+                  onPanUpdate: (details) {
+                    if (!_isSelecting || startPoint == null) return;
+                    setState(() {
+                      currentPoint = details.localPosition;
+                    });
+                  },
+                  onPanEnd: (_) {
+                    _isSelecting = false;
+                  },
+                  onPanCancel: () {
+                    _isSelecting = false;
+                  },
+                  child: const SizedBox.expand(),
                 ),
               ),
             ),
@@ -596,29 +725,41 @@ class _LiveCropOverlayState extends State<LiveCropOverlay> {
                 mainAxisAlignment: MainAxisAlignment.center,
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  ElevatedButton(
-                    onPressed: isProcessing || startPoint == null ? null : _cancelCapture,
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: Colors.red.shade600,
-                      foregroundColor: Colors.white,
-                      padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
-                    ),
-                    child: const Text(
-                      "Cancelar",
-                      style: TextStyle(fontSize: 16),
+                  SizedBox(
+                    width: 140,
+                    child: ElevatedButton(
+                      onPressed: isProcessing || startPoint == null ? null : _cancelCapture,
+                      style: ElevatedButton.styleFrom(
+                        fixedSize: const Size(140, 44),
+                        minimumSize: const Size(140, 44),
+                        maximumSize: const Size(140, 44),
+                        backgroundColor: Colors.red.shade600,
+                        foregroundColor: Colors.white,
+                        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+                      ),
+                      child: const Text(
+                        "Cancelar",
+                        style: TextStyle(fontSize: 16),
+                      ),
                     ),
                   ),
                   const SizedBox(width: 20),
-                  ElevatedButton(
-                    onPressed: isProcessing || startPoint == null ? null : _processCrop,
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: Colors.lightBlue,
-                      foregroundColor: Colors.white,
-                      padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
-                    ),
-                    child: const Text(
-                      "Capturar",
-                      style: TextStyle(fontSize: 16),
+                  SizedBox(
+                    width: 140,
+                    child: ElevatedButton(
+                      onPressed: isProcessing || startPoint == null ? null : _processCrop,
+                      style: ElevatedButton.styleFrom(
+                        fixedSize: const Size(140, 44),
+                        minimumSize: const Size(140, 44),
+                        maximumSize: const Size(140, 44),
+                        backgroundColor: Colors.lightBlue,
+                        foregroundColor: Colors.white,
+                        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+                      ),
+                      child: const Text(
+                        "Capturar",
+                        style: TextStyle(fontSize: 16),
+                      ),
                     ),
                   ),
                 ],

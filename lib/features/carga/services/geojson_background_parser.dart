@@ -120,6 +120,8 @@ Map<String, dynamic> _parseGeoJsonPayload(Map<String, dynamic> request) {
   const kmInicioKeys = <String>[
     'km_inicio',
     'KM_INICIO',
+    'km iniicio',
+    'KM INIICIO',
     'cadenamiento_inicial',
     'km_i',
     'km0',
@@ -127,6 +129,8 @@ Map<String, dynamic> _parseGeoJsonPayload(Map<String, dynamic> request) {
   const kmFinKeys = <String>[
     'km_fin',
     'KM_FIN',
+    'KM FIN',
+    'km fin',
     'cadenamiento_final',
     'km_f',
     'km1',
@@ -134,6 +138,8 @@ Map<String, dynamic> _parseGeoJsonPayload(Map<String, dynamic> request) {
   const kmEfectivosKeys = <String>[
     'km_efectivos',
     'KM_EFECTIVOS',
+    'KM EFECTIVOS',
+    'km efectivos',
     'km_efectivo',
   ];
   // Procesamiento optimizado con map
@@ -155,7 +161,7 @@ Map<String, dynamic> _parseGeoJsonPayload(Map<String, dynamic> request) {
     }
 
     // Búsqueda optimizada de superficie
-    double superficieQgis = 0;
+    double? superficieQgis;
     for (final key in superficieKeys) {
       final val = _toDouble(props[key]);
       if (val != null) {
@@ -165,7 +171,7 @@ Map<String, dynamic> _parseGeoJsonPayload(Map<String, dynamic> request) {
     }
 
     // Búsqueda optimizada de km_inicio
-    double kmInicio = 0;
+    double? kmInicio;
     for (final key in kmInicioKeys) {
       final val = _toDouble(props[key]);
       if (val != null) {
@@ -175,7 +181,7 @@ Map<String, dynamic> _parseGeoJsonPayload(Map<String, dynamic> request) {
     }
 
     // Búsqueda optimizada de km_fin
-    double kmFin = 0;
+    double? kmFin;
     for (final key in kmFinKeys) {
       final val = _toDouble(props[key]);
       if (val != null) {
@@ -185,7 +191,7 @@ Map<String, dynamic> _parseGeoJsonPayload(Map<String, dynamic> request) {
     }
 
     // Búsqueda optimizada de km_efectivos
-    double kmEfectivos = 0;
+    double? kmEfectivos;
     for (final key in kmEfectivosKeys) {
       final val = _toDouble(props[key]);
       if (val != null) {
@@ -201,11 +207,11 @@ Map<String, dynamic> _parseGeoJsonPayload(Map<String, dynamic> request) {
       'id_sedatu': props['id_sedatu']?.toString().trim().isNotEmpty == true
           ? props['id_sedatu']
           : '',
-      'superficie': superficieQgis,
-      'km_inicio': kmInicio,
-      'km_fin': kmFin,
-      'km_efectivos': kmEfectivos,
-      'area_m2': superficieQgis,
+      if (superficieQgis != null) 'superficie': superficieQgis,
+      if (kmInicio != null) 'km_inicio': kmInicio,
+      if (kmFin != null) 'km_fin': kmFin,
+      if (kmEfectivos != null) 'km_efectivos': kmEfectivos,
+      if (superficieQgis != null) 'area_m2': superficieQgis,
     };
 
     return {
@@ -259,6 +265,8 @@ Map<String, dynamic> _parseGeoJsonPayload(Map<String, dynamic> request) {
   const aliasKmInicio = [
     'km_inicio',
     'KM_INICIO',
+    'km iniicio',
+    'KM INIICIO',
     'cadenamiento_inicial',
     'cad_ini',
     'km_i',
@@ -383,7 +391,29 @@ double? _toDouble(dynamic value) {
   if (value == null) return null;
   if (value is num) return value.toDouble();
   if (value is String) {
-    final normalized = value.replaceAll(',', '').trim();
+    final trimmed = value.trim();
+    if (trimmed.isEmpty) return null;
+
+    // Soporta cadenamiento tipo 12+345 => 12.345
+    final kmMatch = RegExp(r'(-?\d+)\s*\+\s*(\d+)').firstMatch(trimmed);
+    if (kmMatch != null) {
+      final base = double.tryParse(kmMatch.group(1)!);
+      final meters = double.tryParse(kmMatch.group(2)!);
+      if (base != null && meters != null) {
+        return base + (meters / 1000.0);
+      }
+    }
+
+    // Mantener coma decimal cuando aplica (ej. 12,5)
+    var normalized = trimmed.replaceAll(' ', '');
+    if (normalized.contains(',') && !normalized.contains('.')) {
+      normalized = normalized.replaceAll(',', '.');
+    } else {
+      normalized = normalized.replaceAll(',', '');
+    }
+
+    // Limpiar prefijos/sufijos no numéricos comunes
+    normalized = normalized.replaceAll(RegExp(r'[^0-9.\-]'), '');
     return double.tryParse(normalized);
   }
   return null;

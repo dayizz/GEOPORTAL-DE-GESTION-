@@ -169,6 +169,181 @@ class SincronizacionService {
     return null;
   }
 
+  String? _pickFlexible(Map<String, dynamic> props, List<String> keys) {
+    final exact = _pick(props, keys);
+    if (exact != null) return exact;
+
+    final normalizedAliases = keys.map(_normalizeKey).toSet();
+    for (final entry in props.entries) {
+      final normalizedEntryKey = _normalizeKey(entry.key);
+      if (!normalizedAliases.contains(normalizedEntryKey)) continue;
+      final v = entry.value?.toString().trim();
+      if (v != null && v.isNotEmpty && !_invalidValues.contains(v.toLowerCase())) {
+        return v;
+      }
+    }
+
+    return null;
+  }
+
+  double? _pickDoubleFlexible(Map<String, dynamic> props, List<String> keys) {
+    final raw = _pickFlexible(props, keys);
+    return _toDouble(raw);
+  }
+
+  Map<String, String?> _resolveEstadoMunicipio(Map<String, dynamic> props) {
+    String? estado = _pickFlexible(props, [
+      'estado', 'ESTADO', 'entidad', 'ENTIDAD',
+      'state', 'STATE', 'nombre_entidad', 'NOMBRE_ENTIDAD',
+      'entidad_federativa', 'ENTIDAD_FEDERATIVA',
+      'nombre_estado', 'NOMBRE_ESTADO',
+      'nombre del estado', 'NOMBRE DEL ESTADO',
+      'nom_estado', 'NOM_ESTADO',
+      'edo', 'EDO',
+    ]);
+    String? municipio = _pickFlexible(props, [
+      'municipio', 'MUNICIPIO', 'mun', 'MUN',
+      'localidad', 'LOCALIDAD', 'ciudad', 'CIUDAD',
+      'municipality', 'MUNICIPALITY',
+      'nombre_municipio', 'NOMBRE_MUNICIPIO',
+      'nombre del municipio', 'NOMBRE DEL MUNICIPIO',
+      'nom_municipio', 'NOM_MUNICIPIO',
+      'mpio', 'MPIO', 'muni', 'MUNI',
+    ]);
+
+    if (estado != null && municipio != null) {
+      return {'estado': estado, 'municipio': municipio};
+    }
+
+    final combinado = _pickFlexible(props, [
+      'estado_municipio',
+      'estado municipio',
+      'estado/municipio',
+      'municipio/estado',
+      'estado_mpio',
+      'edo_mun',
+      'mun_edo',
+      'edo/mun',
+      'entidad_municipio',
+      'estado y municipio',
+      'edo-mun',
+      'estado-municipio',
+    ]);
+
+    if (combinado != null) {
+      final parts = combinado
+          .split(RegExp(r'\s*(?:/|,|\||;|-|–|—)\s*'))
+          .map((p) => p.trim())
+          .where((p) => p.isNotEmpty)
+          .toList();
+
+      if (parts.length >= 2) {
+        final firstLooksEstado = _looksLikeEstadoName(parts[0]);
+        final secondLooksEstado = _looksLikeEstadoName(parts[1]);
+
+        if (estado == null && municipio == null) {
+          if (firstLooksEstado && !secondLooksEstado) {
+            estado = parts[0];
+            municipio = parts[1];
+          } else if (!firstLooksEstado && secondLooksEstado) {
+            estado = parts[1];
+            municipio = parts[0];
+          } else {
+            estado = parts[0];
+            municipio = parts[1];
+          }
+        } else {
+          if (estado == null) {
+            estado = firstLooksEstado ? parts[0] : (secondLooksEstado ? parts[1] : parts[0]);
+          }
+          if (municipio == null) {
+            municipio = firstLooksEstado ? parts[1] : (secondLooksEstado ? parts[0] : parts[1]);
+          }
+        }
+      }
+    }
+
+    final inferidoDesdeClave = _inferEstadoMunicipioDesdeClave(_extractId(props));
+    estado ??= inferidoDesdeClave['estado'];
+    municipio ??= inferidoDesdeClave['municipio'];
+
+    return {'estado': estado, 'municipio': municipio};
+  }
+
+  Map<String, String?> _inferEstadoMunicipioDesdeClave(String? clave) {
+    if (clave == null) return {'estado': null, 'municipio': null};
+
+    final upper = clave.trim().toUpperCase();
+    if (upper.isEmpty) return {'estado': null, 'municipio': null};
+
+    final tokens = upper
+        .split(RegExp(r'[^A-Z0-9]+'))
+        .where((token) => token.isNotEmpty)
+        .toList(growable: false);
+
+    if (tokens.isEmpty) return {'estado': null, 'municipio': null};
+
+    final code = tokens.length >= 2 ? tokens[1] : '';
+    const municipiosTsnl = {
+      'SLV': 'Salinas Victoria',
+      'VIL': 'Villaldama',
+      'BUS': 'Bustamante',
+      'LAM': 'Lampazos de Naranjo',
+      'ANA': 'Anahuac',
+      'SAB': 'Sabinas Hidalgo',
+    };
+
+    final isTsnl = upper.startsWith('SNL') || upper.startsWith('TSNL');
+    final municipio = municipiosTsnl[code];
+
+    return {
+      'estado': isTsnl ? 'Nuevo Leon' : null,
+      'municipio': municipio,
+    };
+  }
+
+  bool _looksLikeEstadoName(String value) {
+    final compact = _normalizeKey(value);
+    const estados = {
+      'aguascalientes',
+      'bajacalifornia',
+      'bajacaliforniasur',
+      'campeche',
+      'chiapas',
+      'chihuahua',
+      'ciudaddemexico',
+      'coahuila',
+      'coahuiladezaragoza',
+      'colima',
+      'durango',
+      'estadodemexico',
+      'guanajuato',
+      'guerrero',
+      'hidalgo',
+      'jalisco',
+      'michoacan',
+      'michoacandeocampo',
+      'morelos',
+      'nayarit',
+      'nuevoleon',
+      'oaxaca',
+      'puebla',
+      'queretaro',
+      'quintanaroo',
+      'sanluispotosi',
+      'sinaloa',
+      'sonora',
+      'tabasco',
+      'tamaulipas',
+      'tlaxcala',
+      'veracruz',
+      'veracruzdeignaciodelallave',
+      'yucatan',
+      'zacatecas',
+    };
+    return estados.contains(compact);
+  }
+
   String? _resolveProyecto(Map<String, dynamic> props) {
     final detectado = GeoJsonMapper.detectarProyecto(props);
     if (detectado != null) return detectado;
@@ -176,16 +351,49 @@ class SincronizacionService {
     final fromClave = GeoJsonMapper.inferProyectoDesdeClave(_extractId(props));
     if (fromClave != null) return fromClave;
 
-    return _pick(props, [
+    return _pickFlexible(props, [
       'proyecto',
       'PROYECTO',
       'nombre_proyecto',
       'NOMBRE_PROYECTO',
       'tramo_proyecto',
       'TRAMO_PROYECTO',
+      'codigo_proyecto',
+      'CODIGO_PROYECTO',
       'obra',
       'OBRA',
     ]);
+  }
+
+  String? _resolveTipoPropiedad(Map<String, dynamic> props) {
+    final directo = _pickFlexible(props, [
+      'tipo_propiedad', 'TIPO_PROPIEDAD',
+      'tipopropiedad',
+      'TIPO DE PROPIEDAD', 'tipo de propiedad',
+      'tipo propiedad', 'TIPO PROPIEDAD',
+      'tipo_de_propiedad', 'TIPO_DE_PROPIEDAD',
+      'regimen', 'REGIMEN',
+      'tenencia', 'TENENCIA',
+      'tipo_tenencia', 'TIPO_TENENCIA',
+      'clase_propiedad', 'CLASE_PROPIEDAD',
+      'clasificacion_propiedad', 'CLASIFICACION_PROPIEDAD',
+      'tipo', 'TIPO',
+    ]);
+    if (directo != null) return _normalizeTipoPropiedad(directo);
+
+    for (final entry in props.entries) {
+      final key = _normalizeKey(entry.key);
+      final keyLooksLikeTipo = key.contains('tipoprop') ||
+          key.contains('propiedad') ||
+          key.contains('regimen') ||
+          key.contains('tenencia');
+      if (!keyLooksLikeTipo) continue;
+      final v = entry.value?.toString().trim();
+      if (v == null || v.isEmpty || _invalidValues.contains(v.toLowerCase())) continue;
+      return _normalizeTipoPropiedad(v);
+    }
+
+    return _normalizeTipoPropiedad(null);
   }
 
   String? _pickPropietarioFlexible(Map<String, dynamic> props) {
@@ -283,45 +491,64 @@ class SincronizacionService {
     Map<String, dynamic>? geometry, {
     Map<String, dynamic>? propsOriginal,
   }) {
+    final estadoMunicipio = _resolveEstadoMunicipio(props);
+
     // Extraer superficie con más aliases
-    final superficie = _toDouble(
-      props['superficie'] ?? props['SUPERFICIE'] ??
-      props['area'] ?? props['AREA'] ?? props['shape_area'] ??
-      props['SHAPE_AREA'] ?? props['area_ha'] ?? props['area_m2'] ??
-      props['superficie_m2'] ?? props['m2'] ?? props['Area'] ??
-      (propsOriginal != null ? propsOriginal['m2'] : null),
-    ) ;
+    final superficie = _pickDoubleFlexible(props, [
+      'superficie', 'SUPERFICIE',
+      'area', 'AREA', 'Area',
+      'shape_area', 'SHAPE_AREA',
+      'area_ha', 'AREA_HA',
+      'area_m2', 'AREA_M2',
+      'superficie_m2', 'SUPERFICIE_M2',
+      'm2', 'M2',
+    ]);
 
     // Extraer km_inicio con más aliases
-    final kmInicio = _toDouble(
-      props['km_inicio'] ?? props['KM_INICIO'] ??
-      props['cadenamiento_inicial'] ?? props['cad_ini'] ?? props['km_i'] ??
-      props['km_ini'] ?? props['km0'] ?? props['cadenamiento_i'] ??
-      (propsOriginal != null ? propsOriginal['km_inicio'] : null) ??
-      (propsOriginal != null ? propsOriginal['KM_INICIO'] : null),
-    ) ;
+    final kmInicio = _pickDoubleFlexible(props, [
+      'km_inicio', 'KM_INICIO',
+      'km inicio', 'KM INICIO',
+      'km iniicio', 'KM INIICIO',
+      'cadenamiento_inicial', 'CADENAMIENTO_INICIAL',
+      'cad_ini', 'CAD_INI',
+      'km_i', 'KM_I',
+      'km_ini', 'KM_INI',
+      'km0', 'KM0',
+      'cadenamiento_i', 'CADENAMIENTO_I',
+      'km_inicial', 'KM_INICIAL',
+    ]);
 
     // Extraer km_fin con más aliases
-    final kmFin = _toDouble(
-      props['km_fin'] ?? props['KM_FIN'] ??
-      props['cadenamiento_final'] ?? props['cad_fin'] ?? props['km_f'] ??
-      props['km1'] ?? props['cadenamiento_f'] ?? props['cadenamiento_1'] ??
-      (propsOriginal != null ? propsOriginal['km_fin'] : null) ??
-      (propsOriginal != null ? propsOriginal['KM_FIN'] : null),
-    ) ;
+    final kmFin = _pickDoubleFlexible(props, [
+      'km_fin', 'KM_FIN',
+      'km fin', 'KM FIN',
+      'cadenamiento_final', 'CADENAMIENTO_FINAL',
+      'cad_fin', 'CAD_FIN',
+      'km_f', 'KM_F',
+      'km1', 'KM1',
+      'cadenamiento_f', 'CADENAMIENTO_F',
+      'cadenamiento_1',
+      'km_final', 'KM_FINAL',
+    ]);
 
-    final kmLineales = _toDouble(
-      props['km_lineales'] ?? props['KM_LINEALES'] ??
-      props['longitud_km'] ?? props['longitud'] ?? props['km'],
-    ) ;
+    final kmLineales = _pickDoubleFlexible(props, [
+      'km_lineales', 'KM_LINEALES',
+      'km lineales', 'KM LINEALES',
+      'longitud_km', 'LONGITUD_KM',
+      'longitud', 'LONGITUD',
+      'km', 'KM',
+    ]);
 
     // Extraer km_efectivos con más aliases
-    final kmEfectivos = _toDouble(
-      props['km_efectivos'] ?? props['KM_EFECTIVOS'] ??
-      props['km_efectivo'] ?? props['km_e'] ??
-      (propsOriginal != null ? propsOriginal['km_efectivos'] : null) ??
-      (propsOriginal != null ? propsOriginal['KM_EFECTIVOS'] : null),
-    ) ;
+    final kmEfectivos = _pickDoubleFlexible(props, [
+      'km_efectivos', 'KM_EFECTIVOS',
+      'km efectivos', 'KM EFECTIVOS',
+      'km_efectivo', 'KM_EFECTIVO',
+      'km_e', 'KM_E',
+      'longitud_efectiva', 'LONGITUD_EFECTIVA',
+      'longitud efectiva', 'LONGITUD EFECTIVA',
+      'kme', 'KME',
+    ]);
 
     final valorCatastral = _toDouble(
       props['valor_catastral'] ?? props['VALOR_CATASTRAL'] ??
@@ -337,11 +564,8 @@ class SincronizacionService {
         'tramo', 'TRAMO', 'tramo_vial', 'seccion',
         'frente', 'FRENTE', 'segmento', 'SEGMENTO',
         't_f_s', 'T_F_S', 'tipofs', 'TIPO_FS',
-      ]) ?? 'T1',
-      'tipo_propiedad': _normalizeTipoPropiedad(_pick(props, [
-        'tipo_propiedad', 'tipopropiedad', 'TIPO_PROPIEDAD',
-        'tipo', 'TIPO', 'regimen', 'REGIMEN',
-      ])),
+      ]) ?? '',
+      'tipo_propiedad': _resolveTipoPropiedad(props),
       'ejido': _pick(props, [
         'ejido', 'nom_ejido', 'nombre_ejido', 'NOM_EJIDO', 'EJIDO',
         'comunidad', 'localidad',
@@ -355,16 +579,16 @@ class SincronizacionService {
       'descripcion': _pick(props, [
         'descripcion', 'DESCRIPCION', 'description', 'DESCRIPTION',
       ]),
+      'situacion_social': _pickFlexible(props, [
+        'situacion_social', 'SITUACION_SOCIAL',
+        'observaciones', 'OBSERVACIONES',
+        'observacion', 'OBSERVACION',
+        'obs', 'OBS',
+      ]),
       'direccion': _pick(props, ['direccion', 'DIRECCION', 'domicilio', 'DOMICILIO', 'calle', 'CALLE']),
       'colonia': _pick(props, ['colonia', 'COLONIA', 'barrio', 'BARRIO']),
-      'municipio': _pick(props, [
-        'municipio', 'MUNICIPIO', 'mun', 'MUN',
-        'localidad', 'LOCALIDAD', 'ciudad', 'CIUDAD',
-      ]),
-      'estado': _pick(props, [
-        'estado', 'ESTADO', 'entidad', 'ENTIDAD',
-        'state', 'STATE', 'nombre_entidad', 'NOMBRE_ENTIDAD',
-      ]),
+      'municipio': estadoMunicipio['municipio'],
+      'estado': estadoMunicipio['estado'],
       'codigo_postal': _pick(props, ['codigo_postal', 'CODIGO_POSTAL', 'cp', 'CP']),
       'imagen_url': _pick(props, ['imagen_url', 'IMAGEN_URL', 'foto_url', 'FOTO_URL', 'image_url', 'IMAGE_URL']),
 
@@ -403,12 +627,15 @@ class SincronizacionService {
       'negociacion': _toBool(props['negociacion']),
 
       // ── Tipo de Liberación ───────────────────────────────────────────────
-      'tipo_liberacion': _pick(props, [
+      'tipo_liberacion': _pickFlexible(props, [
         'tipo_liberacion', 'TIPO_LIBERACION',
+        'tipo liberacion', 'TIPO LIBERACION',
         'tipo_de_liberacion', 'TIPO_DE_LIBERACION',
+        'tipo de liberacion', 'TIPO DE LIBERACION',
         'liberacion', 'LIBERACION',
+        'tipo_liber', 'TIPO_LIBER',
+        'liberacion_tipo', 'LIBERACION_TIPO',
         'tipo_release', 'TIPO_RELEASE',
-        'tipo', 'TIPO',
       ]),
     };
 
@@ -457,7 +684,7 @@ class SincronizacionService {
       'nombre': nombre,
       'apellidos': apellidos,
       'tipo_persona': tipoPersona,
-      if (razonSocial != null) 'razon_social': razonSocial,
+      if (razonSocial case final rs?) 'razon_social': rs,
       if (_pick(props, ['rfc', 'RFC']) != null)
         'rfc': _pick(props, ['rfc', 'RFC']),
       if (_pick(props, ['curp', 'CURP']) != null)
@@ -474,7 +701,29 @@ class SincronizacionService {
   double? _toDouble(dynamic v) {
     if (v == null) return null;
     if (v is num) return v.toDouble();
-    if (v is String) return double.tryParse(v.replaceAll(',', '').trim());
+    if (v is String) {
+      final trimmed = v.trim();
+      if (trimmed.isEmpty) return null;
+
+      // Soporta cadenamiento tipo 12+345 => 12.345
+      final kmMatch = RegExp(r'(-?\d+)\s*\+\s*(\d+)').firstMatch(trimmed);
+      if (kmMatch != null) {
+        final base = double.tryParse(kmMatch.group(1)!);
+        final meters = double.tryParse(kmMatch.group(2)!);
+        if (base != null && meters != null) {
+          return base + (meters / 1000.0);
+        }
+      }
+
+      var normalized = trimmed.replaceAll(' ', '');
+      if (normalized.contains(',') && !normalized.contains('.')) {
+        normalized = normalized.replaceAll(',', '.');
+      } else {
+        normalized = normalized.replaceAll(',', '');
+      }
+      normalized = normalized.replaceAll(RegExp(r'[^0-9.\-]'), '');
+      return double.tryParse(normalized);
+    }
     return null;
   }
 
@@ -503,9 +752,14 @@ class SincronizacionService {
   String? _normalizeTipoPropiedad(String? value) {
     if (value == null) return 'PRIVADA';
     final upper = value.toUpperCase().trim();
-    if (upper.contains('SOC')) return 'SOCIAL';
-    if (upper.contains('PRI')) return 'PRIVADA';
-    if (upper.contains('DOMINIO') || upper.contains('PLENO')) return 'DOMINIO PLENO';
+    final compact = upper.replaceAll(RegExp(r'[^A-Z0-9]'), '');
+    if (compact.contains('SOC')) return 'SOCIAL';
+    if (compact.contains('DOMINIOPLENO') || (compact.contains('DOMINIO') && compact.contains('PLENO'))) return 'DOMINIO PLENO';
+    if (upper.contains('EJI')) return 'EJIDAL';
+    if (upper.contains('MIX')) return 'MIXTO';
+    if (upper.contains('FEDERAL')) return 'FEDERAL';
+    if (upper.contains('GUBERNAMENTAL') || upper.contains('GUBERNAM') || upper.contains('GOBIERNO')) return 'GUBERNAMENTAL';
+    if (compact.contains('PRIVAD') || compact == 'PRI') return 'PRIVADA';
     return upper.isEmpty ? 'PRIVADA' : upper;
   }
 
@@ -516,17 +770,27 @@ class SincronizacionService {
     Map<String, dynamic> existente,
   ) {
     final updates = <String, dynamic>{};
+    final estadoMunicipio = _resolveEstadoMunicipio(props);
 
-    void trySet(String dbKey, dynamic newValue) {
+    void trySet(String dbKey, dynamic newValue, {bool overwrite = false}) {
       if (newValue == null) return;
+      if (newValue is String && newValue.trim().isEmpty) return;
       final cur = existente[dbKey];
+
+      if (overwrite) {
+        if (cur != newValue) {
+          updates[dbKey] = newValue;
+        }
+        return;
+      }
+
       if (cur == null || (cur is String && cur.trim().isEmpty)) {
         updates[dbKey] = newValue;
       }
     }
 
     trySet('tramo',      _pick(props, ['tramo', 'TRAMO', 'tramo_vial', 'seccion', 'SECCION']));
-    trySet('tipo_propiedad', _normalizeTipoPropiedad(_pick(props, ['tipo_propiedad', 'TIPO_PROPIEDAD', 'tipo', 'TIPO', 'regimen', 'REGIMEN'])));
+    trySet('tipo_propiedad', _resolveTipoPropiedad(props), overwrite: true);
     trySet('ejido',      _pick(props, ['ejido', 'EJIDO', 'nom_ejido', 'NOM_EJIDO', 'comunidad', 'localidad']));
     trySet('proyecto',   _resolveProyecto(props));
     trySet('propietario_nombre', _pick(props, [
@@ -538,30 +802,76 @@ class SincronizacionService {
     trySet('zona',          _pick(props, ['zona', 'ZONA', 'sector', 'SECTOR', 'region', 'REGION']));
     trySet('valor_catastral', _toDouble(props['valor_catastral'] ?? props['VALOR_CATASTRAL'] ?? props['valor'] ?? props['VALOR'] ?? props['avaluo'] ?? props['AVALUO']));
     trySet('descripcion',   _pick(props, ['descripcion', 'DESCRIPCION', 'description', 'DESCRIPTION']));
+    trySet('situacion_social', _pickFlexible(props, [
+      'situacion_social', 'SITUACION_SOCIAL',
+      'observaciones', 'OBSERVACIONES',
+      'observacion', 'OBSERVACION',
+      'obs', 'OBS',
+    ]), overwrite: true);
     trySet('direccion',     _pick(props, ['direccion', 'DIRECCION', 'domicilio', 'DOMICILIO', 'calle', 'CALLE']));
     trySet('colonia',       _pick(props, ['colonia', 'COLONIA', 'barrio', 'BARRIO']));
-    trySet('municipio',     _pick(props, ['municipio', 'MUNICIPIO', 'mun', 'MUN', 'localidad', 'ciudad']));
-    trySet('estado',        _pick(props, ['estado', 'ESTADO', 'entidad', 'ENTIDAD', 'state', 'nombre_entidad']));
+    trySet('municipio',     estadoMunicipio['municipio'], overwrite: true);
+    trySet('estado',        estadoMunicipio['estado'], overwrite: true);
     trySet('codigo_postal', _pick(props, ['codigo_postal', 'CODIGO_POSTAL', 'cp', 'CP']));
-    trySet('km_inicio',     _toDouble(props['km_inicio']     ?? props['KM_INICIO']     ?? props['cadenamiento_inicial'] ?? props['cad_ini'] ?? props['km_i'] ?? props['km_ini'] ?? props['km0'] ?? props['cadenamiento_i']));
-    trySet('km_fin',        _toDouble(props['km_fin']        ?? props['KM_FIN']        ?? props['cadenamiento_final']   ?? props['cad_fin'] ?? props['km_f'] ?? props['km1'] ?? props['cadenamiento_f'] ?? props['cadenamiento_1']));
-    trySet('km_lineales',   _toDouble(props['km_lineales']   ?? props['KM_LINEALES']   ?? props['longitud_km'] ?? props['longitud'] ?? props['km']));
-    trySet('km_efectivos',  _toDouble(props['km_efectivos']  ?? props['KM_EFECTIVOS']  ?? props['km_efectivo'] ?? props['km_e']));
+    trySet('km_inicio',     _pickDoubleFlexible(props, [
+      'km_inicio', 'KM_INICIO', 'km inicio', 'KM INICIO',
+      'km iniicio', 'KM INIICIO',
+      'cadenamiento_inicial', 'CADENAMIENTO_INICIAL', 'cad_ini', 'CAD_INI',
+      'km_i', 'KM_I', 'km_ini', 'KM_INI', 'km0', 'KM0',
+      'cadenamiento_i', 'CADENAMIENTO_I', 'km_inicial', 'KM_INICIAL',
+    ]), overwrite: true);
+    trySet('km_fin',        _pickDoubleFlexible(props, [
+      'km_fin', 'KM_FIN', 'km fin', 'KM FIN',
+      'cadenamiento_final', 'CADENAMIENTO_FINAL', 'cad_fin', 'CAD_FIN',
+      'km_f', 'KM_F', 'km1', 'KM1', 'cadenamiento_f', 'CADENAMIENTO_F',
+      'cadenamiento_1', 'km_final', 'KM_FINAL',
+    ]), overwrite: true);
+    trySet('km_lineales',   _pickDoubleFlexible(props, [
+      'km_lineales', 'KM_LINEALES', 'km lineales', 'KM LINEALES',
+      'longitud_km', 'LONGITUD_KM', 'longitud', 'LONGITUD', 'km', 'KM',
+    ]), overwrite: true);
+    trySet('km_efectivos',  _pickDoubleFlexible(props, [
+      'km_efectivos', 'KM_EFECTIVOS', 'km efectivos', 'KM EFECTIVOS',
+      'km_efectivo', 'KM_EFECTIVO', 'km_e', 'KM_E',
+      'longitud_efectiva', 'LONGITUD_EFECTIVA', 'longitud efectiva', 'LONGITUD EFECTIVA',
+      'kme', 'KME',
+    ]), overwrite: true);
 
     // Campos booleanos de gestión
-    trySet('identificacion', _toBool(props['identificacion']));
-    trySet('levantamiento',   _toBool(props['levantamiento']));
-    trySet('negociacion',    _toBool(props['negociacion']));
-    trySet('cop',            _toBool(props['cop']));
+    trySet('identificacion', _toBool(_pickFlexible(props, [
+      'identificacion', 'IDENTIFICACION',
+      'identificación', 'IDENTIFICACIÓN',
+      'identificado', 'IDENTIFICADO',
+    ])), overwrite: true);
+    trySet('levantamiento', _toBool(_pickFlexible(props, [
+      'levantamiento', 'LEVANTAMIENTO',
+      'levantado', 'LEVANTADO',
+    ])), overwrite: true);
+    trySet('negociacion', _toBool(_pickFlexible(props, [
+      'negociacion', 'NEGOCIACION',
+      'negociación', 'NEGOCIACIÓN',
+      'negociado', 'NEGOCIADO',
+    ])), overwrite: true);
+    trySet('cop', _toBool(_pickFlexible(props, [
+      'cop', 'COP',
+      'estatus', 'ESTATUS',
+      'status', 'STATUS',
+      'liberado', 'LIBERADO',
+      'liberada', 'LIBERADA',
+      'anuencia', 'ANUENCIA',
+    ])), overwrite: true);
 
     // Tipo de liberación
-    trySet('tipo_liberacion', _pick(props, [
+    trySet('tipo_liberacion', _pickFlexible(props, [
       'tipo_liberacion', 'TIPO_LIBERACION',
+      'tipo liberacion', 'TIPO LIBERACION',
       'tipo_de_liberacion', 'TIPO_DE_LIBERACION',
+      'tipo de liberacion', 'TIPO DE LIBERACION',
       'liberacion', 'LIBERACION',
+      'tipo_liber', 'TIPO_LIBER',
+      'liberacion_tipo', 'LIBERACION_TIPO',
       'tipo_release', 'TIPO_RELEASE',
-      'tipo', 'TIPO',
-    ]));
+    ]), overwrite: true);
 
     if (geometry != null && existente['geometry'] == null) {
       updates['geometry']           = geometry;
@@ -717,21 +1027,22 @@ class SincronizacionService {
       Map<String, dynamic>? existente;
 
       if (clave != null && clave.trim().isNotEmpty) {
-        claveNormalizada = clave.trim();
+        final claveLookup = clave.trim();
+        claveNormalizada = claveLookup;
         
-        if (predioByClaveCache.containsKey(claveNormalizada)) {
-          existente = predioByClaveCache[claveNormalizada];
+        if (predioByClaveCache.containsKey(claveLookup)) {
+          existente = predioByClaveCache[claveLookup];
         } else {
           try {
             existente = await _withRetry(
-              () => _prediosRepo.buscarPorClaveCatastral(claveNormalizada!),
+              () => _prediosRepo.buscarPorClaveCatastral(claveLookup),
               operationName: 'buscarPorClaveCatastral',
             );
           } catch (_) {
             // Si falla la búsqueda, continuar como si no existiera
             existente = null;
           }
-          predioByClaveCache[claveNormalizada!] = existente;
+          predioByClaveCache[claveLookup] = existente;
         }
 
         // Si existe, actualizar
@@ -756,7 +1067,7 @@ class SincronizacionService {
               existenteActual = updated.toMap()
                 ..['id'] = updated.id
                 ..['propietarios'] = propietariosRaw;
-              predioByClaveCache[claveNormalizada!] = existenteActual;
+              predioByClaveCache[claveNormalizada] = existenteActual;
             } catch (_) {
               // Si falla el update, continuar con los datos existentes.
             }
@@ -840,11 +1151,14 @@ class SincronizacionService {
         final clave = _extractId(props) ??
             'IMP-${DateTime.now().microsecondsSinceEpoch}-$featureNumber';
 
+        // Extraer y normalizar el tipo de propiedad del archivo GeoJSON
+        final tipoPropiedad = _resolveTipoPropiedad(props);
+
         final minData = <String, dynamic>{
           'clave_catastral': clave,
-          'tramo': 'T1',
-          'tipo_propiedad': 'PRIVADA',
-          if (_resolveProyecto(props) != null) 'proyecto': _resolveProyecto(props),
+          'tramo': '',
+          'tipo_propiedad': tipoPropiedad,
+          if (_resolveProyecto(props) case final proyecto?) 'proyecto': proyecto,
           if (geometry != null) 'geometry': geometry,
           if (geometry != null) 'poligono_insertado': true,
           'cop': false,

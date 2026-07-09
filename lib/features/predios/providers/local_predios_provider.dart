@@ -13,6 +13,18 @@ final localPrediosProvider =
 class LocalPrediosNotifier extends StateNotifier<List<Predio>> {
   LocalPrediosNotifier() : super(const []);
 
+  int removeByClaves(Set<String> clavesNormalizadas) {
+    if (clavesNormalizadas.isEmpty || state.isEmpty) return 0;
+    final before = state.length;
+    state = state
+        .where(
+          (predio) => !clavesNormalizadas
+              .contains(predio.claveCatastral.trim().toUpperCase()),
+        )
+        .toList(growable: false);
+    return before - state.length;
+  }
+
   int removeDuplicatesAfterManualLink({
     required String keepPredioId,
     required Map<String, dynamic> linkedGeometry,
@@ -151,6 +163,8 @@ class LocalPrediosNotifier extends StateNotifier<List<Predio>> {
 
       final propietarioDetectado =
           _extractPropietario(normalized, props);
+      final estado = _stringValue(normalized['estado']) ?? _stringValue(props['estado']);
+      final municipio = _stringValue(normalized['municipio']) ?? _stringValue(props['municipio']);
 
         final clave = _stringValue(normalized['clave_catastral']) ??
           'LOCAL-${DateTime.now().millisecondsSinceEpoch}-${(i + 1).toString().padLeft(4, '0')}';
@@ -162,13 +176,15 @@ class LocalPrediosNotifier extends StateNotifier<List<Predio>> {
         id: 'local-${clave.replaceAll(' ', '_')}',
         claveCatastral: clave,
         propietarioNombre: propietarioDetectado,
-        tramo: _stringValue(normalized['tramo']) ?? 'T1',
-        tipoPropiedad: _stringValue(normalized['tipo_propiedad']) ?? 'PRIVADA',
+        tramo: _stringValue(normalized['tramo']) ?? '',
+        tipoPropiedad: _normalizeTipoPropiedadValue(_stringValue(normalized['tipo_propiedad']) ?? _stringValue(props['tipo_propiedad'])),
         ejido: _stringValue(normalized['ejido']),
-        kmInicio: _toDouble(normalized['km_inicio']) ?? 0,
-        kmFin: _toDouble(normalized['km_fin']) ?? 0,
+        estado: estado,
+        municipio: municipio,
+        kmInicio: _toDouble(normalized['km_inicio']) ?? _toDouble(props['km_inicio']) ?? 0,
+        kmFin: _toDouble(normalized['km_fin']) ?? _toDouble(props['km_fin']) ?? 0,
         kmLineales: _toDouble(normalized['km_lineales']) ?? 0,
-        kmEfectivos: _toDouble(normalized['km_efectivos']) ?? 0,
+        kmEfectivos: _toDouble(normalized['km_efectivos']) ?? _toDouble(props['km_efectivos']) ?? 0,
         superficie: superficie,
         cop: _toBool(normalized['cop']),
         proyecto: _stringValue(normalized['proyecto']) ??
@@ -325,9 +341,13 @@ class LocalPrediosNotifier extends StateNotifier<List<Predio>> {
       id: existing.id,
       claveCatastral: _preferClave(existing.claveCatastral, incoming.claveCatastral),
       propietarioNombre: _preferOwner(existing.propietarioNombre, incoming.propietarioNombre),
-      tramo: _preferText(existing.tramo, incoming.tramo, defaultValue: 'T1'),
-      tipoPropiedad: _preferText(existing.tipoPropiedad, incoming.tipoPropiedad, defaultValue: 'PRIVADA'),
+      tramo: _preferText(existing.tramo, incoming.tramo),
+      tipoPropiedad: incoming.tipoPropiedad?.trim().isNotEmpty == true 
+          ? incoming.tipoPropiedad!.trim() 
+          : (existing.tipoPropiedad?.trim().isNotEmpty == true ? existing.tipoPropiedad!.trim() : 'PRIVADA'),
       ejido: _preferNullableText(existing.ejido, incoming.ejido),
+        estado: _preferNullableText(existing.estado, incoming.estado),
+        municipio: _preferNullableText(existing.municipio, incoming.municipio),
       kmInicio: incoming.kmInicio ?? existing.kmInicio,
       kmFin: incoming.kmFin ?? existing.kmFin,
       kmLineales: incoming.kmLineales ?? existing.kmLineales,
@@ -489,9 +509,22 @@ class LocalPrediosNotifier extends StateNotifier<List<Predio>> {
 
   String _normalizeTipoPropiedad(String value) {
     final upper = _normalizeUpperCode(value);
-    if (upper.contains('SOC')) return 'SOCIAL';
-    if (upper.contains('PRI')) return 'PRIVADA';
-    return upper;
+    final compact = upper.replaceAll(RegExp(r'[^A-Z0-9]'), '');
+    if (compact.contains('SOC')) return 'SOCIAL';
+    if (compact.contains('DOMINIOPLENO') || (compact.contains('DOMINIO') && compact.contains('PLENO'))) return 'DOMINIO PLENO';
+    if (upper.contains('EJI')) return 'EJIDAL';
+    if (upper.contains('MIX')) return 'MIXTO';
+    if (upper.contains('FEDERAL')) return 'FEDERAL';
+    if (upper.contains('GUBERNAMENTAL') || upper.contains('GUBERNAM') || upper.contains('GOBIERNO')) return 'GUBERNAMENTAL';
+    if (compact.contains('PRIVAD') || compact == 'PRI') return 'PRIVADA';
+    // Si está vacío o no reconocido, devolver el valor original en mayúsculas
+    return upper.isEmpty ? 'PRIVADA' : upper;
+  }
+
+  /// Normaliza el valor de tipo_propiedad desde archivos GeoJSON/XLSX
+  String _normalizeTipoPropiedadValue(String? value) {
+    if (value == null || value.isEmpty) return 'PRIVADA';
+    return _normalizeTipoPropiedad(value);
   }
 
   String? _normalizeProyecto(String? value) {

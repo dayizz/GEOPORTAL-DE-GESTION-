@@ -1,12 +1,13 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/foundation.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:intl/intl.dart';
-import 'package:file_picker/file_picker.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'package:excel/excel.dart' hide Border;
 import 'package:share_plus/share_plus.dart';
+import 'dart:async';
 import 'dart:io';
 import 'package:path_provider/path_provider.dart';
 import 'dart:html' as html;
@@ -34,7 +35,6 @@ class _TablaScreenState extends ConsumerState<TablaScreen> {
   final _searchCtrl = TextEditingController();
   final _verticalScroll = ScrollController();
   final Map<String, Predio> _prediosOptimistas = {};
-  final Set<String> _uploadingPdfIds = <String>{};
   List<Predio> _ultimosPredios = const [];
 
   String _proyectoActual = 'TQI';
@@ -47,12 +47,13 @@ class _TablaScreenState extends ConsumerState<TablaScreen> {
   final _nf = NumberFormat('#,##0.00');
   final _nf4 = NumberFormat('0.0000');
   bool _normalizacionInicialAplicada = false;
+  bool _dismissLiberadosAlert = false;
+  bool _autocompletandoLiberados = false;
 
   // Paginación
   static const int _rowsPerPage = 50;
   int _currentPage = 0;
 
-  int get _startRow => _currentPage * _rowsPerPage;
   void _goToPage(int page, int totalRows) {
     final maxPage = (totalRows / _rowsPerPage).ceil() - 1;
     setState(() {
@@ -128,8 +129,7 @@ class _TablaScreenState extends ConsumerState<TablaScreen> {
       return _lastFiltered!;
     }
     final filtered = all.where((p) {
-      //暂时注释掉项目过滤器以调试问题
-      // if (_predioProyecto(p) != _proyectoActual) return false;
+      if (_predioProyecto(p) != _proyectoActual) return false;
       if (_filtroTramo != null && p.tramo != _filtroTramo) return false;
       if (_filtroTipo != null && p.tipoPropiedad != _filtroTipo) return false;
       if (_filtroEstatus != null) {
@@ -242,18 +242,51 @@ class _TablaScreenState extends ConsumerState<TablaScreen> {
             .map((predio) => _prediosOptimistas[predio.id] ?? predio)
             .toList(growable: false);
         final filtered = _applyFilters(allPredios);
-        final totalPages = (filtered.length / _rowsPerPage).ceil();
-        final pageRows = filtered.skip(_startRow).take(_rowsPerPage).toList();
+        final totalPages = filtered.isEmpty ? 1 : (filtered.length / _rowsPerPage).ceil();
+        final maxPage = totalPages - 1;
+        final safePage = _currentPage > maxPage ? maxPage : _currentPage;
+        if (safePage != _currentPage) {
+          WidgetsBinding.instance.addPostFrameCallback((_) {
+            if (!mounted) return;
+            setState(() => _currentPage = safePage);
+          });
+        }
+        final startRow = safePage * _rowsPerPage;
+        final pageRows = filtered.skip(startRow).take(_rowsPerPage).toList();
+        final rowsToRender = (pageRows.isEmpty && filtered.isNotEmpty)
+            ? filtered.take(_rowsPerPage).toList(growable: false)
+            : pageRows;
+        if (pageRows.isEmpty && filtered.isNotEmpty && _currentPage != 0) {
+          WidgetsBinding.instance.addPostFrameCallback((_) {
+            if (!mounted) return;
+            setState(() => _currentPage = 0);
+          });
+        }
 
         // Auto-seleccionar el proyecto solicitado por la pantalla de carga (post-importación)
         final proyectoSolicitado = ref.watch(gestionProyectoProvider);
-        if (proyectoSolicitado != null && _proyectos.contains(proyectoSolicitado) &&
-            proyectoSolicitado != _proyectoActual) {
+        if (proyectoSolicitado != null && _proyectos.contains(proyectoSolicitado)) {
           WidgetsBinding.instance.addPostFrameCallback((_) {
             if (!mounted) return;
-            setState(() => _proyectoActual = proyectoSolicitado);
+            setState(() {
+              _proyectoActual = proyectoSolicitado;
+              _busqueda = '';
+              _searchCtrl.clear();
+              _filtroTramo = null;
+              _filtroTipo = null;
+              _filtroCop = null;
+              _filtroEstatus = null;
+              _currentPage = 0;
+            });
             ref.read(gestionProyectoProvider.notifier).state = null;
           });
+        }
+
+        final liberadosIncompletos = filtered
+            .where((p) => p.cop && (!p.identificacion || !p.levantamiento || !p.negociacion))
+            .toList(growable: false);
+        if (liberadosIncompletos.isEmpty) {
+          _dismissLiberadosAlert = false;
         }
 
         content = Column(
@@ -278,7 +311,7 @@ class _TablaScreenState extends ConsumerState<TablaScreen> {
                           ? () => _goToPage(_currentPage - 1, filtered.length)
                           : null,
                     ),
-                    Text('Página \\${_currentPage + 1} de $totalPages'),
+                    Text('Página ${_currentPage + 1} de $totalPages'),
                     IconButton(
                       icon: const Icon(Icons.chevron_right),
                       onPressed: _currentPage < totalPages - 1
@@ -295,7 +328,19 @@ class _TablaScreenState extends ConsumerState<TablaScreen> {
                 ),
               ),
             Expanded(
-              child: _buildTable(pageRows),
+              child: Stack(
+                children: [
+                  Positioned.fill(
+                    child: _buildTable(rowsToRender),
+                  ),
+                  if (liberadosIncompletos.isNotEmpty && !_dismissLiberadosAlert)
+                    Positioned(
+                      right: 12,
+                      bottom: 72,
+                      child: _buildLiberadosAlert(liberadosIncompletos),
+                    ),
+                ],
+              ),
             ),
           ],
         );
@@ -333,12 +378,14 @@ class _TablaScreenState extends ConsumerState<TablaScreen> {
     try {
       final excel = Excel.createExcel();
       final sheet = excel['Gestion $_proyectoActual'];
+      final fecha = DateFormat('ddMMyyyy').format(DateTime.now());
+      final fileName = 'Gestion_${_proyectoActual}_$fecha.xlsx';
       
       // Headers
       final headers = [
         'CLAVE', 'PROYECTO', 'T/F/S', 'TIPO', 'ESTADO', 'MUNICIPIO', 
         'EJIDO', 'PROPIETARIO', 'KM INICIO', 'KM FIN', 'KM EFECTIVOS',
-        'SUPERFICIE M2', 'COP', 'FECHA COP', 'ESTATUS', 'OFICIO',
+        'SUPERFICIE M2', 'COP', 'FECHA COP', 'ESTATUS',
         'IDENTIFICACION', 'LEVANTAMIENTO', 'NEGOCIACION', 'OBSERVACIONES'
       ];
       
@@ -365,7 +412,6 @@ class _TablaScreenState extends ConsumerState<TablaScreen> {
           p.cop ? 'SI' : 'NO',
           p.copFecha != null ? '${p.copFecha!.day}/${p.copFecha!.month}/${p.copFecha!.year}' : '',
           p.cop ? 'Liberado' : 'No liberado',
-          p.oficio ?? '',
           p.identificacion ? 'SI' : 'NO',
           p.levantamiento ? 'SI' : 'NO',
           p.negociacion ? 'SI' : 'NO',
@@ -387,14 +433,14 @@ class _TablaScreenState extends ConsumerState<TablaScreen> {
         // En web, crear un blob y descargar directamente usando dart:html
         final blob = html.Blob([bytes], 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
         final url = html.Url.createObjectUrlFromBlob(blob);
-        final anchor = html.AnchorElement(href: url)
-          ..setAttribute('download', 'gestion_${_proyectoActual}_${DateTime.now().millisecondsSinceEpoch}.xlsx')
+        html.AnchorElement(href: url)
+          ..setAttribute('download', fileName)
           ..click();
         html.Url.revokeObjectUrl(url);
       } else {
         // Para mobile/desktop, usar el método original
         final dir = await getTemporaryDirectory();
-        final file = File('${dir.path}/gestion_${_proyectoActual}_${DateTime.now().millisecondsSinceEpoch}.xlsx');
+        final file = File('${dir.path}/$fileName');
         await file.writeAsBytes(bytes);
         
         await Share.shareXFiles(
@@ -419,7 +465,7 @@ class _TablaScreenState extends ConsumerState<TablaScreen> {
 
   Widget _buildTopBar(int visible, List<Predio> allPredios) {
     return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+      padding: const EdgeInsets.fromLTRB(12, 8, 12, 8),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -631,7 +677,8 @@ class _TablaScreenState extends ConsumerState<TablaScreen> {
       180, // CLAVE
        50, // T/F/S
        90, // TIPO
-      130, // ESTADO / MUNICIPIO
+       95, // ESTADO
+      125, // MUNICIPIO
       120, // EJIDO
       150, // PROPIETARIOS
        72, // KM INICIO
@@ -642,7 +689,6 @@ class _TablaScreenState extends ConsumerState<TablaScreen> {
        46, // COP
        92, // FECHA
        90, // ESTATUS
-      130, // OFICIO
        54, // IDENT.
        54, // LEVANT.
        54, // NEGOC.
@@ -650,16 +696,16 @@ class _TablaScreenState extends ConsumerState<TablaScreen> {
     ];
 
     const headers = <String>[
-      '', 'MAPA', 'CLAVE', 'T/F/S', 'TIPO', 'ESTADO /\nMUNICIPIO', 'EJIDO', 'PROPIETARIOS',
+      '', 'MAPA', 'CLAVE', 'T/F/S', 'TIPO', 'ESTADO', 'MUNICIPIO', 'EJIDO', 'PROPIETARIOS',
       'KM INICIO', 'KM FIN', 'KM EF', 'M²', 'TIPO\nLIBERACION',
-      'COP/DOT', 'FECHA', 'ESTATUS', 'OFICIO',
+      'COP/DOT', 'FECHA', 'ESTATUS',
       'IDENT.', 'LEVANT.', 'NEGOC.', 'OBSERVACIONES',
     ];
 
     return LayoutBuilder(
       builder: (ctx, constraints) {
         final rawTotal = rawWidths.reduce((a, b) => a + b) + rawWidths.length * 1.0;
-        final scale = (constraints.maxWidth / rawTotal).clamp(0.7, 1.4);
+        final scale = (constraints.maxWidth / rawTotal).clamp(0.45, 1.4);
         final colWidths = rawWidths.map((w) => w * scale).toList();
         final totalWidth = constraints.maxWidth;
 
@@ -767,6 +813,15 @@ class _TablaScreenState extends ConsumerState<TablaScreen> {
     return null;
   }
 
+  Uri? _normalizedHttpUrl(String url) {
+    final value = _normalizeUrl(url);
+    final uri = Uri.tryParse(value);
+    if (uri == null) return null;
+    if (uri.scheme != 'http' && uri.scheme != 'https') return null;
+    if (uri.host.isEmpty) return null;
+    return uri;
+  }
+
   String _copFechaLabel(Predio predio) {
     final fecha = predio.copFecha;
     if (fecha == null) return '-';
@@ -774,11 +829,15 @@ class _TablaScreenState extends ConsumerState<TablaScreen> {
   }
 
   Future<void> _openPdfUrl(String url) async {
-    final uri = Uri.tryParse(url);
+    final uri = _normalizedHttpUrl(url);
     if (uri == null) {
       throw Exception('La URL del PDF es invalida.');
     }
-    final opened = await launchUrl(uri, webOnlyWindowName: '_blank');
+    final opened = await launchUrl(
+      uri,
+      mode: LaunchMode.externalApplication,
+      webOnlyWindowName: '_blank',
+    );
     if (!opened) {
       throw Exception('No se pudo abrir el PDF.');
     }
@@ -791,78 +850,177 @@ class _TablaScreenState extends ConsumerState<TablaScreen> {
       return;
     }
 
-    final picked = await FilePicker.platform.pickFiles(
-      type: FileType.custom,
-      allowedExtensions: const ['pdf'],
-      withData: true,
+    final url = await _requestPdfUrl(
+      context,
+      initialValue: predio.pdfUrl?.trim() ?? '',
     );
-    if (picked == null || picked.files.isEmpty) return;
+    if (url == null) return;
 
-    final file = picked.files.single;
-    final bytes = file.bytes;
-    if (bytes == null) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('No se pudieron leer los bytes del PDF seleccionado.'),
-            backgroundColor: AppColors.danger,
-          ),
-        );
+    await _savePredio(
+      predio,
+      predio.copyWith(
+        pdfUrl: url,
+        copFirmado: url,
+        copFecha: DateTime.now(),
+        updatedAt: DateTime.now(),
+      ),
+    );
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(
+        content: Text('URL del archivo vinculada correctamente.'),
+        backgroundColor: AppColors.secondary,
+      ),
+    );
+  }
+
+  Future<String?> _requestPdfUrl(
+    BuildContext context, {
+    String initialValue = '',
+  }) async {
+    final ctrl = TextEditingController(text: initialValue);
+    final focusNode = FocusNode();
+    String? error;
+
+    Future<void> pasteFromClipboard(StateSetter setStateDialog) async {
+      if (kIsWeb) {
+        try {
+          final webClip = await html.window.navigator.clipboard?.readText() ?? '';
+          final text = webClip.trim();
+          if (text.isNotEmpty) {
+            _insertTextInController(ctrl, text);
+            setStateDialog(() {
+              error = null;
+            });
+            return;
+          }
+        } catch (_) {}
       }
-      return;
+
+      final data = await Clipboard.getData(Clipboard.kTextPlain);
+      final clip = data?.text?.trim() ?? '';
+      if (clip.isEmpty) return;
+      _insertTextInController(ctrl, clip);
+      setStateDialog(() {
+        error = null;
+      });
     }
 
-    setState(() => _uploadingPdfIds.add(predio.id));
-    try {
-      final extension = (file.extension?.isNotEmpty ?? false)
-          ? file.extension!
-          : 'pdf';
-      final url = await ref.read(prediosRepositoryProvider).uploadPredioPdf(
-            predioId: predio.id,
-            bytes: bytes,
-            extension: extension,
-          );
-      await _savePredio(
-        predio,
-        predio.copyWith(
-          pdfUrl: url,
-          copFirmado: url,
-          copFecha: DateTime.now(),
-          updatedAt: DateTime.now(),
-        ),
-      );
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('PDF vinculado correctamente.'),
-            backgroundColor: AppColors.secondary,
-          ),
+    var requestedFocus = false;
+    final result = await showDialog<String>(
+      context: context,
+      barrierDismissible: false,
+      builder: (dialogContext) {
+        return StatefulBuilder(
+          builder: (context, setStateDialog) {
+            if (!requestedFocus) {
+              requestedFocus = true;
+              WidgetsBinding.instance.addPostFrameCallback((_) {
+                if (focusNode.canRequestFocus) {
+                  focusNode.requestFocus();
+                }
+              });
+            }
+
+            return AlertDialog(
+              title: const Text('Vincular URL de archivo'),
+              content: SizedBox(
+                width: 520,
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    TextFormField(
+                      controller: ctrl,
+                      focusNode: focusNode,
+                      autofocus: true,
+                      keyboardType: TextInputType.url,
+                      textInputAction: TextInputAction.done,
+                      autofillHints: const [AutofillHints.url],
+                      enableInteractiveSelection: true,
+                      decoration: InputDecoration(
+                        labelText: 'URL',
+                        hintText: 'https://.../archivo.pdf',
+                        helperText: 'Pega o escribe el link del archivo',
+                        errorText: error,
+                        border: const OutlineInputBorder(),
+                        suffixIcon: IconButton(
+                          tooltip: 'Pegar',
+                          icon: const Icon(Icons.content_paste),
+                          onPressed: () => pasteFromClipboard(setStateDialog),
+                        ),
+                      ),
+                      onFieldSubmitted: (_) {
+                        final uri = _normalizedHttpUrl(ctrl.text);
+                        if (uri == null) {
+                          setStateDialog(() {
+                            error = 'Ingresa una URL valida (http o https).';
+                          });
+                          return;
+                        }
+                        Navigator.of(dialogContext).pop(uri.toString());
+                      },
+                    ),
+                  ],
+                ),
+              ),
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.of(dialogContext).pop(),
+                  child: const Text('Cancelar'),
+                ),
+                ElevatedButton(
+                  onPressed: () {
+                      final uri = _normalizedHttpUrl(ctrl.text);
+
+                      if (uri == null) {
+                      setStateDialog(() {
+                        error = 'Ingresa una URL valida (http o https).';
+                      });
+                      return;
+                    }
+
+                      Navigator.of(dialogContext).pop(uri.toString());
+                  },
+                  child: const Text('Guardar URL'),
+                ),
+              ],
+            );
+          },
         );
-      }
-    } catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(e.toString()),
-            backgroundColor: AppColors.danger,
-          ),
-        );
-      }
-    } finally {
-      if (mounted) {
-        setState(() => _uploadingPdfIds.remove(predio.id));
-      }
-    }
+      },
+    );
+
+    focusNode.dispose();
+    ctrl.dispose();
+    return result;
+  }
+
+  void _insertTextInController(TextEditingController controller, String clip) {
+    final value = controller.value;
+    final selection = value.selection;
+    final hasSelection =
+        selection.isValid && selection.start >= 0 && selection.end >= 0;
+    final start = hasSelection ? selection.start : value.text.length;
+    final end = hasSelection ? selection.end : value.text.length;
+
+    final newText = value.text.replaceRange(start, end, clip);
+    controller.value = TextEditingValue(
+      text: newText,
+      selection: TextSelection.collapsed(offset: start + clip.length),
+    );
+  }
+
+  String _normalizeUrl(String raw) {
+    final value = raw.trim();
+    if (value.isEmpty) return value;
+    final hasScheme = RegExp(r'^[a-zA-Z][a-zA-Z0-9+.-]*://').hasMatch(value);
+    if (hasScheme) return value;
+    return 'https://$value';
   }
 
   Widget _buildDataRow(Predio p, List<double> widths, int idx) {
     final isEven = idx % 2 == 0;
     final tipoColor = AppColors.tipoPropiedadColor(p.tipoPropiedad);
-    final estadoMunicipio = [
-      if (p.estado != null && p.estado!.isNotEmpty) p.estado!,
-      if (p.municipio != null && p.municipio!.isNotEmpty) p.municipio!,
-    ].join(' / ');
-
     return Container(
       height: 38,
       decoration: BoxDecoration(
@@ -883,30 +1041,30 @@ class _TablaScreenState extends ConsumerState<TablaScreen> {
           _tramoBadgeCell(p.tramo, widths[3]),
           // TIPO
           _tipoBadgeCell(p.tipoPropiedad, tipoColor, widths[4]),
-          // ESTADO / MUNICIPIO
-          _dataCell(estadoMunicipio.isEmpty ? '-' : estadoMunicipio, widths[5]),
+          // ESTADO
+          _dataCell((p.estado == null || p.estado!.isEmpty) ? '-' : p.estado!, widths[5]),
+          // MUNICIPIO
+          _dataCell((p.municipio == null || p.municipio!.isEmpty) ? '-' : p.municipio!, widths[6]),
           // EJIDO
-          _dataCell(p.ejido ?? '-', widths[6]),
+          _dataCell(p.ejido ?? '-', widths[7]),
           // PROPIETARIOS
-          _dataCell(p.propietarioNombre ?? '-', widths[7]),
+          _dataCell(p.propietarioNombre ?? '-', widths[8]),
           // KM INICIO
-          _numCell(p.kmInicio, widths[8], decimals: 4),
+          _numCell(p.kmInicio, widths[9], decimals: 4),
           // KM FIN
-          _numCell(p.kmFin, widths[9], decimals: 4),
+          _numCell(p.kmFin, widths[10], decimals: 4),
           // KM EF
-          _numCell(p.kmEfectivos, widths[10], decimals: 4),
+          _numCell(p.kmEfectivos, widths[11], decimals: 4),
           // M²
-          _numCell(p.superficie, widths[11], decimals: 2),
+          _numCell(p.superficie, widths[12], decimals: 2),
           // TIPO LIBERACION
-          _dataCell(p.tipoLiberacion ?? '-', widths[12]),
+          _dataCell(p.tipoLiberacion ?? '-', widths[13]),
           // COP/DOT PDF (icono de estado)
-          _copPdfIndicatorCell(p, widths[13]),
+          _copPdfIndicatorCell(p, widths[14]),
           // FECHA COP/DOT
-          _dataCell(_copFechaLabel(p), widths[14]),
+          _dataCell(_copFechaLabel(p), widths[15]),
           // ESTATUS
-          _estatusCell(p, widths[15]),
-          // OFICIO
-          _dataCell(p.oficio ?? '-', widths[16]),
+          _estatusCell(p, widths[16]),
           // IDENTIFICACION (tappable)
           _tappableBoolCell(
             p.identificacion, widths[17],
@@ -947,6 +1105,120 @@ class _TablaScreenState extends ConsumerState<TablaScreen> {
     );
   }
 
+  Widget _buildLiberadosAlert(List<Predio> pendientes) {
+    return Material(
+      elevation: 8,
+      borderRadius: BorderRadius.circular(12),
+      color: Colors.white,
+      child: SizedBox(
+        width: 420,
+        child: Padding(
+          padding: const EdgeInsets.all(12),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const Text(
+                'Marcar predios liberados con Identificación, Levantamiento y Negociación',
+                style: TextStyle(fontWeight: FontWeight.w700, fontSize: 13),
+              ),
+              const SizedBox(height: 8),
+              Text(
+                'Hay ${pendientes.length} predio(s) liberado(s) sin los tres campos completos.',
+                style: const TextStyle(fontSize: 12, color: AppColors.textSecondary),
+              ),
+              const SizedBox(height: 10),
+              Row(
+                mainAxisAlignment: MainAxisAlignment.end,
+                children: [
+                  TextButton(
+                    onPressed: _autocompletandoLiberados
+                        ? null
+                        : () => setState(() => _dismissLiberadosAlert = true),
+                    child: const Text('Cancelar'),
+                  ),
+                  const SizedBox(width: 8),
+                  SizedBox(
+                    width: 116,
+                    child: ElevatedButton(
+                      style: ElevatedButton.styleFrom(
+                        fixedSize: const Size(116, 40),
+                        minimumSize: const Size(116, 40),
+                        maximumSize: const Size(116, 40),
+                        tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+                      ),
+                      onPressed: _autocompletandoLiberados
+                          ? null
+                          : () => _autocompletarLiberadosPendientes(pendientes),
+                      child: _autocompletandoLiberados
+                          ? const SizedBox(
+                              width: 16,
+                              height: 16,
+                              child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
+                            )
+                          : const Text('Aceptar'),
+                    ),
+                  ),
+                ],
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Future<void> _autocompletarLiberadosPendientes(List<Predio> pendientes) async {
+    setState(() => _autocompletandoLiberados = true);
+
+    var actualizados = 0;
+    var errores = 0;
+    final repo = ref.read(prediosRepositoryProvider);
+
+    for (final predio in pendientes) {
+      final updated = predio.copyWith(
+        identificacion: true,
+        levantamiento: true,
+        negociacion: true,
+        updatedAt: DateTime.now(),
+      );
+
+      try {
+        if (updated.id.startsWith('local-')) {
+          ref.read(localPrediosProvider.notifier).updatePredio(updated);
+        } else {
+          final saved = await repo.updatePredio(updated.id, updated.toMap());
+          _prediosOptimistas[updated.id] = saved;
+        }
+        actualizados++;
+      } catch (_) {
+        errores++;
+      }
+    }
+
+    if (!mounted) return;
+
+    setState(() {
+      _dismissLiberadosAlert = true;
+      _autocompletandoLiberados = false;
+    });
+
+    ref.invalidate(prediosListProvider);
+    ref.invalidate(prediosMapaProvider);
+
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(
+          errores == 0
+              ? 'Autocompletado aplicado en $actualizados predio(s).'
+              : 'Autocompletado: $actualizados actualizado(s), $errores con error.',
+        ),
+        backgroundColor: errores == 0 ? AppColors.secondary : AppColors.danger,
+      ),
+    );
+  }
+
   Widget _estatusCell(Predio predio, double width) {
     final estatus = predio.cop ? 'Liberado' : 'No liberado';
     final color = predio.cop ? AppColors.secondary : AppColors.danger;
@@ -975,7 +1247,7 @@ class _TablaScreenState extends ConsumerState<TablaScreen> {
 
   Widget _actionCell(Predio p, double width) {
     return InkWell(
-      onTap: () => context.push('/tabla/predio/${p.id}'),
+      onTap: () => context.push('/predios/${p.id}/editar'),
       child: Container(
         width: width,
         height: double.infinity,
@@ -1087,18 +1359,15 @@ class _TablaScreenState extends ConsumerState<TablaScreen> {
 
   Widget _copPdfIndicatorCell(Predio predio, double width) {
     final hasPdf = _pdfUrlFor(predio) != null;
-    final uploading = _uploadingPdfIds.contains(predio.id);
     final iconColor = hasPdf ? AppColors.secondary : Colors.grey.shade400;
-    final tooltip = uploading
-        ? 'Subiendo PDF...'
-        : hasPdf
-            ? 'Abrir PDF vinculado'
-            : 'Subir PDF';
+    final tooltip = hasPdf
+        ? 'Abrir archivo vinculado'
+        : 'Vincular URL de archivo';
 
     return Tooltip(
       message: tooltip,
       child: InkWell(
-        onTap: uploading ? null : () => _handleCopPdfTap(predio),
+        onTap: () => _handleCopPdfTap(predio),
         child: Container(
           width: width,
           height: double.infinity,
@@ -1106,30 +1375,25 @@ class _TablaScreenState extends ConsumerState<TablaScreen> {
           decoration: const BoxDecoration(
             border: Border(right: BorderSide(color: AppColors.border, width: 0.5)),
           ),
-          child: uploading
-              ? const SizedBox(
-                  width: 16,
-                  height: 16,
-                  child: CircularProgressIndicator(strokeWidth: 2),
-                )
-              : Icon(
-                  Icons.description,
-                  size: 18,
-                  color: iconColor,
-                ),
+          child: Icon(
+            Icons.link,
+            size: 18,
+            color: iconColor,
+          ),
         ),
       ),
     );
   }
 
   Widget _tramoBadgeCell(String tramo, double width) {
+    final tramoLabel = tramo.trim().isEmpty ? '-' : tramo.trim();
     const colors = {
       'T1': Color(0xFF3498DB),
       'T2': Color(0xFF9B59B6),
       'T3': Color(0xFFE67E22),
       'T4': Color(0xFF1ABC9C),
     };
-    final c = colors[tramo] ?? Colors.grey;
+    final c = colors[tramoLabel] ?? Colors.grey;
     return Container(
       width: width,
       height: double.infinity,
@@ -1144,7 +1408,7 @@ class _TablaScreenState extends ConsumerState<TablaScreen> {
           borderRadius: BorderRadius.circular(4),
         ),
         child: Text(
-          tramo,
+          tramoLabel,
           style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: c),
         ),
       ),
@@ -1232,7 +1496,7 @@ class _TablaScreenState extends ConsumerState<TablaScreen> {
               const SizedBox(height: 8),
               Wrap(
                 spacing: 8,
-                children: ['SOCIAL', 'DOMINIO PLENO', 'PRIVADA', 'EJIDAL', 'MIXTO'].map((t) => FilterChip(
+                children: ['SOCIAL', 'DOMINIO PLENO', 'PRIVADA', 'EJIDAL', 'MIXTO', 'FEDERAL', 'GUBERNAMENTAL'].map((t) => FilterChip(
                   label: Text(t),
                   selected: tipo == t,
                   onSelected: (v) => setS(() => tipo = v ? t : null),

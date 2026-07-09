@@ -4,6 +4,7 @@ import 'package:go_router/go_router.dart';
 import '../providers/auth_provider.dart';
 import '../../../core/constants/app_colors.dart';
 import '../../../core/constants/app_strings.dart';
+import '../../mapa/providers/mapa_state_cleanup.dart';
 
 class LoginScreen extends ConsumerStatefulWidget {
   const LoginScreen({super.key});
@@ -19,6 +20,17 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
   bool _obscure = true;
   bool _loading = false;
   bool _isRegister = false;
+
+  @override
+  void initState() {
+    super.initState();
+    // Entrar a login debe limpiar cualquier polígono importado residual.
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) {
+        clearImportedMapState(ref.read);
+      }
+    });
+  }
 
   @override
   void dispose() {
@@ -43,6 +55,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
         if (email == localAdminEmail && password == localAdminPassword) {
           ref.read(localAuthSessionProvider.notifier).state = true;
           ref.read(proyectoActivoProvider.notifier).state = null;
+          clearImportedMapState(ref.read);
           if (mounted) context.go('/');
           return;
         }
@@ -51,6 +64,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
           if (proyecto != null) {
             ref.read(localAuthSessionProvider.notifier).state = true;
             ref.read(proyectoActivoProvider.notifier).state = proyecto;
+            clearImportedMapState(ref.read);
             if (mounted) context.go('/mapa');
             return;
           }
@@ -73,6 +87,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
         await auth.signInWithEmail(_emailCtrl.text.trim(), _passCtrl.text);
         final proyecto = extractProyectoFromPassword(_passCtrl.text);
         ref.read(proyectoActivoProvider.notifier).state = proyecto;
+        clearImportedMapState(ref.read);
         if (mounted) context.go('/');
       }
     } catch (e) {

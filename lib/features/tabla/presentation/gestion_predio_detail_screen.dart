@@ -159,7 +159,7 @@ class GestionPredioDetailScreen extends ConsumerWidget {
                         ],
                       ),
                       const SizedBox(height: 12),
-                      // Tramo y COP
+                      // Cadenamiento
                       Row(
                         children: [
                           Expanded(
@@ -169,16 +169,6 @@ class GestionPredioDetailScreen extends ConsumerWidget {
                               '${predio.kmInicio?.toStringAsFixed(3) ?? "-"} – ${predio.kmFin?.toStringAsFixed(3) ?? "-"}',
                               'Cadenamiento',
                               AppColors.secondary,
-                            ),
-                          ),
-                          const SizedBox(width: 12),
-                          Expanded(
-                            child: _buildMetricCard(
-                              context,
-                              predio.cop ? Icons.check_circle : Icons.radio_button_unchecked,
-                              predio.cop ? 'FIRMADO' : 'PENDIENTE',
-                              'C.O.P.',
-                              predio.cop ? AppColors.secondary : AppColors.warning,
                             ),
                           ),
                         ],

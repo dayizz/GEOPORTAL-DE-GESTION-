@@ -651,10 +651,13 @@ class XlsxImportService {
 
   String _normalizeTipoPropiedadValue(String value) {
     final upper = _normalizeUpperCode(value);
-    if (upper.contains('SOC')) return 'SOCIAL';
-    if (upper.contains('PRI')) return 'PRIVADA';
-    if (upper.contains('DOMINIO') || upper.contains('PLENO')) return 'DOMINIO PLENO';
-    return upper;
+    final compact = upper.replaceAll(RegExp(r'[^A-Z0-9]'), '');
+    if (compact.contains('SOC')) return 'SOCIAL';
+    if (compact.contains('DOMINIOPLENO') || (compact.contains('DOMINIO') && compact.contains('PLENO'))) return 'DOMINIO PLENO';
+    if (upper.contains('FEDERAL')) return 'FEDERAL';
+    if (upper.contains('GUBERNAMENTAL') || upper.contains('GUBERNAM') || upper.contains('GOBIERNO')) return 'GUBERNAMENTAL';
+    if (compact.contains('PRIVAD') || compact == 'PRI') return 'PRIVADA';
+    return upper.isEmpty ? 'PRIVADA' : upper;
   }
 
   String _normalizePropietarioField(String key, String value) {
