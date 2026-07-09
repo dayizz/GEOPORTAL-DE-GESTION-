@@ -117,6 +117,7 @@ class _MapaScreenState extends ConsumerState<MapaScreen> {
     final colorMode = ref.watch(mapaColorModeProvider);
     final importedFeatures = ref.watch(importedFeaturesProvider);
     final pksFeatures = ref.watch(pksPointFeaturesProvider);
+    final shouldTrackZoomForPks = _showPksLabels && pksFeatures.isNotEmpty;
     List<Polygon> importedPolygons;
     if (_lastImportedFeatures == importedFeatures && _lastColorMode == colorMode) {
       importedPolygons = _lastImportedPolygons ?? [];
@@ -211,6 +212,8 @@ class _MapaScreenState extends ConsumerState<MapaScreen> {
                 _lastVisuals = visuals;
               }
                 final canShowClaveLabels = _showClaveLabels;
+                  final importedAreOnlyEnvolvente = importedFeatures.isNotEmpty &&
+                    importedFeatures.every(_isEnvolventeFeature);
               final claveLabelMarkers = canShowClaveLabels
                   ? [
                       ..._buildClaveLabelMarkersForPredios(visuals),
@@ -238,10 +241,12 @@ class _MapaScreenState extends ConsumerState<MapaScreen> {
                     .toList(growable: false),
                 renderedSignatures: renderedPolygonSignatures,
               );
-              final visibleImportedPolygons = _dedupeRenderedPolygons(
-                importedPolygons,
-                renderedSignatures: renderedPolygonSignatures,
-              );
+              final importedPolygonsToRender = importedAreOnlyEnvolvente
+                  ? importedPolygons
+                  : _dedupeRenderedPolygons(
+                      importedPolygons,
+                      renderedSignatures: renderedPolygonSignatures,
+                    );
               final visibleCapturedPolygons = _dedupeRenderedPolygons(
                 _capturedPolygons
                     .map(
@@ -323,7 +328,9 @@ class _MapaScreenState extends ConsumerState<MapaScreen> {
                         final rotationChanged =
                             newRotation != null && (newRotation - _currentRotation).abs() > 0.5;
                         final zoomChanged =
-                            newZoom != null && (newZoom - _currentZoom).abs() > 0.05;
+                          shouldTrackZoomForPks &&
+                          newZoom != null &&
+                          (newZoom - _currentZoom).abs() > 0.05;
 
                         if (rotationChanged || zoomChanged) {
                           setState(() {
@@ -441,9 +448,9 @@ class _MapaScreenState extends ConsumerState<MapaScreen> {
                       polygons: visiblePredioPolygons,
                     ),
                     // Capa de polígonos importados desde GeoJSON (naranja / pendientes de captura)
-                    if (visibleImportedPolygons.isNotEmpty)
+                    if (importedPolygonsToRender.isNotEmpty)
                       PolygonLayer(
-                        polygons: visibleImportedPolygons,
+                        polygons: importedPolygonsToRender,
                       ),
                     if (importedMarkers.isNotEmpty)
                       MarkerLayer(markers: importedMarkers),
@@ -795,15 +802,18 @@ class _MapaScreenState extends ConsumerState<MapaScreen> {
       final geometry = _geometryAsMap(feature['geometry']);
       final extractedPolygons = _extractPolygons(geometry);
       final color = _importedFeatureColor(feature, mode);
+      final isEnvolvente = _isEnvolventeFeature(feature);
+      final fillColor = isEnvolvente ? color : color.withValues(alpha: 0.4);
+      final strokeColor = isEnvolvente ? color : color.withValues(alpha: 0.4);
       for (final rings in extractedPolygons) {
         if (rings.isEmpty || rings.first.length < 3) continue;
         polygons.add(
           Polygon(
             points: rings.first,
             holePointsList: rings.length > 1 ? rings.sublist(1) : const [],
-            color: color.withValues(alpha: 0.4),
-            borderColor: color.withValues(alpha: 0.4),
-            borderStrokeWidth: 2.5,
+            color: fillColor,
+            borderColor: strokeColor,
+            borderStrokeWidth: isEnvolvente ? 1.2 : 2.5,
           ),
         );
       }
@@ -925,6 +935,9 @@ class _MapaScreenState extends ConsumerState<MapaScreen> {
   ) {
     final markers = <Marker>[];
     for (final feature in features) {
+      // ENVOLVENTE suele traer geometrías densas; omitir etiquetas evita cálculos de centro costosos.
+      if (_isEnvolventeFeature(feature)) continue;
+
       final geometry = _geometryAsMap(feature['geometry']);
       final polygons = _extractPolygons(geometry);
       final center = _centroidOfPolygons(polygons);
@@ -1520,6 +1533,25 @@ class _MapaScreenState extends ConsumerState<MapaScreen> {
     final identity = identityHashCode(features);
     if (_lastImportedFeaturesIdentity == identity) return;
     _lastImportedFeaturesIdentity = identity;
+
+    final bbox = _combinedFeatureBbox(features);
+    if (bbox != null) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (!mounted) return;
+        try {
+          _mapCtrl.fitCamera(
+            CameraFit.bounds(
+              bounds: bbox,
+              padding: const EdgeInsets.all(48),
+            ),
+          );
+        } catch (_) {
+          // Ignorar si el controlador aun no esta listo.
+        }
+      });
+      return;
+    }
+
     final allPoints = <LatLng>[];
     for (final polygon in polygons) {
       allPoints.addAll(polygon.points);
@@ -1545,6 +1577,53 @@ class _MapaScreenState extends ConsumerState<MapaScreen> {
         // Si el controlador aún no está listo, el usuario puede navegar manualmente.
       }
     });
+  }
+
+  LatLngBounds? _combinedFeatureBbox(List<Map<String, dynamic>> features) {
+    LatLngBounds? bounds;
+    for (final feature in features) {
+      final current = _featureBbox(feature);
+      if (current == null) continue;
+
+      if (bounds == null) {
+        bounds = current;
+      } else {
+        bounds.extend(current.northWest);
+        bounds.extend(current.southEast);
+      }
+    }
+    return bounds;
+  }
+
+  LatLngBounds? _featureBbox(Map<String, dynamic> feature) {
+    final props = feature['properties'];
+    final propsMap = props is Map ? Map<String, dynamic>.from(props) : const <String, dynamic>{};
+    dynamic rawBbox = propsMap['__bbox'] ?? feature['__bbox'];
+    if (rawBbox is! Map) return null;
+
+    final bbox = Map<String, dynamic>.from(rawBbox);
+    final minX = _bboxToDouble(bbox['minX']);
+    final minY = _bboxToDouble(bbox['minY']);
+    final maxX = _bboxToDouble(bbox['maxX']);
+    final maxY = _bboxToDouble(bbox['maxY']);
+    if (minX == null || minY == null || maxX == null || maxY == null) return null;
+
+    final sw = _toLatLngFromGeo(minX, minY);
+    final ne = _toLatLngFromGeo(maxX, maxY);
+    if (sw == null || ne == null) return null;
+
+    return LatLngBounds(sw, ne);
+  }
+
+  double? _bboxToDouble(dynamic value) {
+    if (value is num) return value.toDouble();
+    return double.tryParse(value?.toString() ?? '');
+  }
+
+  LatLng? _toLatLngFromGeo(double x, double y) {
+    if (_isValidLatLng(lat: y, lng: x)) return LatLng(y, x);
+    if (_isValidLatLng(lat: x, lng: y)) return LatLng(x, y);
+    return null;
   }
   Map<String, dynamic>? _geometryAsMap(dynamic geometry) {
     if (geometry is Map<String, dynamic>) return geometry;
@@ -3733,6 +3812,10 @@ class _MapaScreenState extends ConsumerState<MapaScreen> {
   Color _importedFeatureColor(Map<String, dynamic> feature, MapaColorMode mode) {
     final props = feature['properties'];
     final propsMap = props is Map ? Map<String, dynamic>.from(props) : <String, dynamic>{};
+    if (_isEnvolventeFeature(feature)) {
+      return const Color(0xFF87CEEB); // azul cielo
+    }
+
     final allProps = _flattenFeatureProps(feature, propsMap);
     if (mode == MapaColorMode.tipoPropiedad) {
       final tipo = _propValue(allProps, [
@@ -3756,6 +3839,45 @@ class _MapaScreenState extends ConsumerState<MapaScreen> {
       if (normalized == 'no liberado') return _estatusColor('No liberado');
     }
     return _estatusColor(null);
+  }
+
+  bool _isEnvolventeFeature(Map<String, dynamic> feature) {
+    final props = feature['properties'];
+    final propsMap = props is Map ? Map<String, dynamic>.from(props) : <String, dynamic>{};
+    final allProps = _flattenFeatureProps(feature, propsMap);
+
+    final tagValue = _propValue(allProps, [
+      '__import_kind',
+      '__envolvente',
+      'categoria',
+      'tipo_capa',
+      'nombre_capa',
+      'layer',
+      'tipo',
+      'descripcion',
+    ]);
+
+    if (tagValue != null) {
+      final normalized = _normalizeFieldKey(tagValue).replaceAll(' ', '');
+      if (normalized.contains('envolvente') || normalized == 'true' || normalized == '1') {
+        return true;
+      }
+    }
+
+    for (final entry in allProps.entries) {
+      final key = _normalizeFieldKey(entry.key).replaceAll(' ', '');
+      if (key.contains('envolvente')) {
+        return true;
+      }
+      final value = entry.value?.toString();
+      if (value == null || value.trim().isEmpty) continue;
+      final normalizedValue = _normalizeFieldKey(value).replaceAll(' ', '');
+      if (normalizedValue.contains('envolvente')) {
+        return true;
+      }
+    }
+
+    return false;
   }
 }
 Color _estatusColor(String? estatus) {

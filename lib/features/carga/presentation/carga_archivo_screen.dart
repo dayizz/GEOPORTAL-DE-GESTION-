@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'dart:math' as math;
 import 'dart:typed_data';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -46,6 +47,10 @@ class _CargaArchivoScreenState extends ConsumerState<CargaArchivoScreen> {
   /// Mapa campo → N° de features que lo contienen (detectado al parsear).
   Map<String, int> _camposDetectados = {};
   int _totalFeatures = 0;
+
+  // Encuesta previa de importacion
+  String? _tipoArchivoImportacion; // geojson | xlsx
+  String? _contenidoGeoJsonImportacion; // predios | envolvente | pks
 
   void _mostrarSnackBar(String mensaje, {bool exito = true}) {
     if (!mounted) return;
@@ -106,11 +111,24 @@ class _CargaArchivoScreenState extends ConsumerState<CargaArchivoScreen> {
 
   // Tamaño máximo de archivo: 2 MB = 2,097,152 bytes
   static const int _maxFileSizeBytes = 2 * 1024 * 1024;
+  static const int _maxEnvolventeRingPoints = 220;
+  static const int _minEnvolventeRingPoints = 64;
+  static const int _maxEnvolventeTotalPoints = 14000;
+  static const int _envolventeUltraThreshold = 30000;
+  static const int _envolventeExtremeThreshold = 60000;
 
   Future<void> _seleccionarArchivo() async {
+    final encuesta = await _mostrarEncuestaPreviaImportacion();
+    if (encuesta == null) return;
+
+    final tipoArchivo = encuesta.tipoArchivo;
+    final allowedExtensions = tipoArchivo == 'xlsx'
+        ? ['xlsx', 'xlsl']
+        : ['geojson', 'json'];
+
     final result = await FilePicker.platform.pickFiles(
       type: FileType.custom,
-      allowedExtensions: ['geojson', 'json', 'xlsx', 'xlsl'],
+      allowedExtensions: allowedExtensions,
       withData: true,
     );
 
@@ -121,12 +139,15 @@ class _CargaArchivoScreenState extends ConsumerState<CargaArchivoScreen> {
     final ext = file.name.split('.').last.toLowerCase();
 
     // Validar que sea un archivo permitido
-    if (!['geojson', 'json', 'xlsx', 'xlsl'].contains(ext)) {
+    if (!allowedExtensions.contains(ext)) {
       if (!mounted) return;
+      final formatos = tipoArchivo == 'xlsx'
+          ? '.xlsx o .xlsl'
+          : '.geojson o .json';
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text(
-            'Archivo no soportado. Usa .geojson, .json, .xlsx o .xlsl',
+            'Archivo no soportado para el tipo seleccionado. Usa $formatos',
             style: const TextStyle(color: Colors.white),
           ),
           backgroundColor: AppColors.danger,
@@ -153,6 +174,8 @@ class _CargaArchivoScreenState extends ConsumerState<CargaArchivoScreen> {
     }
 
     setState(() {
+      _tipoArchivoImportacion = encuesta.tipoArchivo;
+      _contenidoGeoJsonImportacion = encuesta.contenidoGeoJson;
       _archivoSeleccionado = file;
       _geoJsonData = null;
       _preview = [];
@@ -200,7 +223,7 @@ class _CargaArchivoScreenState extends ConsumerState<CargaArchivoScreen> {
         );
       }
 
-      if (ext == 'xlsx' || ext == 'xlsl') {
+      if (tipoArchivo == 'xlsx') {
         await _parsearXlsx(bytes);
       } else {
         await _parsearGeoJSON(bytes);
@@ -255,6 +278,102 @@ class _CargaArchivoScreenState extends ConsumerState<CargaArchivoScreen> {
     }
   }
 
+  Future<_ImportSurveyResult?> _mostrarEncuestaPreviaImportacion() {
+    final initialTipo = _tipoArchivoImportacion ?? 'geojson';
+    final initialContenido = _contenidoGeoJsonImportacion ?? 'predios';
+
+    return showDialog<_ImportSurveyResult>(
+      context: context,
+      barrierDismissible: false,
+      builder: (dialogContext) {
+        var tipo = initialTipo;
+        var contenido = initialContenido;
+
+        return StatefulBuilder(
+          builder: (context, setModalState) {
+            return AlertDialog(
+              title: const Text('Encuesta previa a la importacion'),
+              content: SingleChildScrollView(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Text(
+                      '1. Tipo de archivo',
+                      style: TextStyle(fontWeight: FontWeight.w600),
+                    ),
+                    const SizedBox(height: 8),
+                    DropdownButtonFormField<String>(
+                      value: tipo,
+                      decoration: const InputDecoration(
+                        border: OutlineInputBorder(),
+                        isDense: true,
+                      ),
+                      items: const [
+                        DropdownMenuItem(value: 'geojson', child: Text('GeoJson')),
+                        DropdownMenuItem(value: 'xlsx', child: Text('XLSX')),
+                      ],
+                      onChanged: (value) {
+                        if (value == null) return;
+                        setModalState(() {
+                          tipo = value;
+                          if (tipo != 'geojson') {
+                            contenido = 'predios';
+                          }
+                        });
+                      },
+                    ),
+                    if (tipo == 'geojson') ...[
+                      const SizedBox(height: 16),
+                      const Text(
+                        '2. Contenido de archivo',
+                        style: TextStyle(fontWeight: FontWeight.w600),
+                      ),
+                      const SizedBox(height: 8),
+                      DropdownButtonFormField<String>(
+                        value: contenido,
+                        decoration: const InputDecoration(
+                          border: OutlineInputBorder(),
+                          isDense: true,
+                        ),
+                        items: const [
+                          DropdownMenuItem(value: 'predios', child: Text('Predios')),
+                          DropdownMenuItem(value: 'envolvente', child: Text('Envolvente')),
+                          DropdownMenuItem(value: 'pks', child: Text('PKs')),
+                        ],
+                        onChanged: (value) {
+                          if (value == null) return;
+                          setModalState(() => contenido = value);
+                        },
+                      ),
+                    ],
+                  ],
+                ),
+              ),
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.of(dialogContext).pop(),
+                  child: const Text('Cancelar'),
+                ),
+                ElevatedButton(
+                  onPressed: () {
+                    Navigator.of(dialogContext).pop(
+                      _ImportSurveyResult(
+                        tipoArchivo: tipo,
+                        contenidoGeoJson: tipo == 'geojson' ? contenido : null,
+                      ),
+                    );
+                  },
+                  child: const Text('Continuar'),
+                ),
+              ],
+            );
+          },
+        );
+      },
+    );
+  }
+
   // ── Acciones sobre el GeoJSON ──────────────────────────────
 
   /// Extrae la lista de features del GeoJSON parseado.
@@ -268,7 +387,9 @@ class _CargaArchivoScreenState extends ConsumerState<CargaArchivoScreen> {
   }
 
   /// Sincroniza, vincula y persiste en BD; después renderiza en mapa.
-  Future<void> _guardarYVerEnMapa() async {
+  Future<void> _guardarYVerEnMapa({
+    String? forcedGeoJsonContent,
+  }) async {
     if (_geoJsonData == null) return;
     final features = _extraerFeatures();
     if (features.isEmpty) return;
@@ -283,9 +404,26 @@ class _CargaArchivoScreenState extends ConsumerState<CargaArchivoScreen> {
     );
 
     try {
-      if (_isPksPointImport(fileName: nombre, features: features)) {
+      if (forcedGeoJsonContent == 'envolvente') {
+        await _guardarEnvolventeSoloMapa(nombre: nombre, features: features);
+        return;
+      }
+
+      if (forcedGeoJsonContent == 'pks') {
         await _guardarPksSoloMapa(nombre: nombre, features: features);
         return;
+      }
+
+      if (forcedGeoJsonContent == null) {
+        if (_isEnvolventeImport(fileName: nombre, features: features)) {
+          await _guardarEnvolventeSoloMapa(nombre: nombre, features: features);
+          return;
+        }
+
+        if (_isPksPointImport(fileName: nombre, features: features)) {
+          await _guardarPksSoloMapa(nombre: nombre, features: features);
+          return;
+        }
       }
 
       final syncService = ref.read(sincronizacionServiceProvider);
@@ -457,7 +595,10 @@ class _CargaArchivoScreenState extends ConsumerState<CargaArchivoScreen> {
   void _verEnMapaDesdeTabla(String fileId) {
     final importedFiles = ref.read(cargaProvider);
     final file = importedFiles.firstWhere((f) => f.id == fileId);
-    if (_isPksPointImport(fileName: file.name, features: file.features)) {
+    if (_isEnvolventeImport(fileName: file.name, features: file.features)) {
+      ref.read(importedFeaturesProvider.notifier).state = file.features;
+      ref.read(pksPointFeaturesProvider.notifier).state = const [];
+    } else if (_isPksPointImport(fileName: file.name, features: file.features)) {
       ref.read(pksPointFeaturesProvider.notifier).state = file.features;
       ref.read(importedFeaturesProvider.notifier).state = const [];
     } else {
@@ -1020,6 +1161,343 @@ class _CargaArchivoScreenState extends ConsumerState<CargaArchivoScreen> {
     }
   }
 
+  Future<void> _guardarEnvolventeSoloMapa({
+    required String nombre,
+    required List<Map<String, dynamic>> features,
+  }) async {
+    final normalizedFeatures = _normalizeEnvolventeFeatures(features);
+    try {
+      String? bdId;
+      try {
+        final archivosRepo = ref.read(localArchivosRepositoryProvider);
+        final saved = await archivosRepo.saveArchivo(
+          nombre: nombre,
+          features: normalizedFeatures,
+          sincronizado: false,
+          encontrados: 0,
+          creados: 0,
+          errores: 0,
+        );
+        bdId = saved['id'] as String?;
+      } catch (_) {
+        // Si falla el guardado del archivo, continuar con mapa en memoria.
+      }
+
+      ref.read(cargaProvider.notifier).addFile(
+        nombre,
+        normalizedFeatures,
+        bdId: bdId,
+        guardadoEnBD: bdId != null,
+        sincronizado: false,
+        encontrados: 0,
+        creados: 0,
+        errores: 0,
+      );
+
+      // ENVOLVENTE se renderiza solo en mapa; no pasa por Gestión.
+      ref.read(importedFeaturesProvider.notifier).state = normalizedFeatures;
+      ref.read(pksPointFeaturesProvider.notifier).state = const [];
+      ref.read(importacionAsyncProvider.notifier).completar(
+        total: normalizedFeatures.length,
+        etapa: 'Completado ENVOLVENTE',
+      );
+
+      if (!mounted) return;
+      setState(() => _sincronizando = false);
+      _mostrarSnackBar(
+        'Archivo ENVOLVENTE detectado: ${normalizedFeatures.length} feature(s) cargado(s) solo en mapa.',
+      );
+      context.go('/mapa');
+    } catch (e) {
+      if (!mounted) return;
+      setState(() => _sincronizando = false);
+      ref.read(importacionAsyncProvider.notifier).fallar(
+        procesados: 0,
+        total: normalizedFeatures.length,
+        etapa: 'Error ENVOLVENTE',
+        mensaje: e.toString(),
+      );
+      _mostrarSnackBar('No se pudo cargar el archivo ENVOLVENTE: $e', exito: false);
+    }
+  }
+
+  bool _isEnvolventeImport({
+    required String fileName,
+    required List<Map<String, dynamic>> features,
+  }) {
+    if (features.isEmpty) return false;
+
+    final fromName = _normalizeValue(fileName).contains('ENVOLVENTE');
+    final fromProps = features.any(_featureMentionsEnvolvente);
+    return fromName || fromProps;
+  }
+
+  bool _featureMentionsEnvolvente(Map<String, dynamic> feature) {
+    final rawProps = feature['properties'];
+    if (rawProps is! Map) return false;
+    final props = Map<String, dynamic>.from(rawProps);
+
+    final direct = _pickTextByAliases(props, const [
+      'capa',
+      'tipo_capa',
+      'categoria',
+      'nombre_capa',
+      'layer',
+      'tipo',
+      'descripcion',
+    ]);
+    if (direct != null && _normalizeValue(direct).contains('ENVOLVENTE')) {
+      return true;
+    }
+
+    for (final entry in props.entries) {
+      final keyNorm = _normalizeValue(entry.key);
+      if (keyNorm.contains('ENVOLVENTE')) {
+        return true;
+      }
+
+      final value = entry.value?.toString();
+      if (value == null) continue;
+      if (_normalizeValue(value).contains('ENVOLVENTE')) {
+        return true;
+      }
+    }
+
+    return false;
+  }
+
+  List<Map<String, dynamic>> _normalizeEnvolventeFeatures(
+    List<Map<String, dynamic>> features,
+  ) {
+    final normalized = <Map<String, dynamic>>[];
+    final totalPointLoad = _estimateEnvolventePointLoad(features);
+    final adaptiveRingLimit = _computeAdaptiveEnvolventeRingLimit(totalPointLoad);
+
+    for (final feature in features) {
+      final geometry = _asStringDynamicMap(feature['geometry']);
+      if (geometry == null) continue;
+
+      final optimizedGeometry = _optimizeEnvolventeGeometry(
+        geometry,
+        maxRingPoints: adaptiveRingLimit,
+      );
+      if (optimizedGeometry == null) continue;
+
+      final geometryType = (optimizedGeometry['type']?.toString() ?? '').toUpperCase();
+      if (geometryType != 'POLYGON' && geometryType != 'MULTIPOLYGON') {
+        continue;
+      }
+
+      final bbox = _computeGeoJsonGeometryBbox(optimizedGeometry);
+
+      final rawProps = feature['properties'];
+      final props = rawProps is Map
+          ? Map<String, dynamic>.from(rawProps)
+          : <String, dynamic>{};
+
+      final normalizedProps = <String, dynamic>{
+        ...props,
+        '__import_kind': 'envolvente',
+        '__envolvente': true,
+        'categoria': 'ENVOLVENTE',
+        if (bbox != null) '__bbox': bbox,
+      };
+
+      normalized.add(
+        <String, dynamic>{
+          'type': 'Feature',
+          'geometry': optimizedGeometry,
+          'properties': normalizedProps,
+          '__import_kind': 'envolvente',
+          '__envolvente': true,
+          if (bbox != null) '__bbox': bbox,
+        },
+      );
+    }
+
+    return normalized;
+  }
+
+  int _estimateEnvolventePointLoad(List<Map<String, dynamic>> features) {
+    var total = 0;
+    for (final feature in features) {
+      final geometry = _asStringDynamicMap(feature['geometry']);
+      final coords = geometry?['coordinates'];
+      if (coords is! List) continue;
+      total += _countCoordinatePoints(coords);
+    }
+    return total;
+  }
+
+  int _countCoordinatePoints(dynamic node) {
+    if (node is List) {
+      if (node.length >= 2 && node[0] is num && node[1] is num) {
+        return 1;
+      }
+      var sum = 0;
+      for (final child in node) {
+        sum += _countCoordinatePoints(child);
+      }
+      return sum;
+    }
+    return 0;
+  }
+
+  int _computeAdaptiveEnvolventeRingLimit(int totalPointLoad) {
+    if (totalPointLoad <= _maxEnvolventeTotalPoints) {
+      return _maxEnvolventeRingPoints;
+    }
+
+    var maxCap = _maxEnvolventeRingPoints;
+    var minCap = _minEnvolventeRingPoints;
+
+    if (totalPointLoad >= _envolventeExtremeThreshold) {
+      // Modo extremo para evitar congelamiento en cargas muy densas.
+      maxCap = 80;
+      minCap = 32;
+    } else if (totalPointLoad >= _envolventeUltraThreshold) {
+      // Modo ultra-ligero para mantener fluidez de desplazamiento.
+      maxCap = 120;
+      minCap = 40;
+    }
+
+    final ratio = totalPointLoad / _maxEnvolventeTotalPoints;
+    final reduced = (maxCap / ratio).floor();
+    return reduced.clamp(minCap, maxCap);
+  }
+
+  Map<String, dynamic>? _optimizeEnvolventeGeometry(
+    Map<String, dynamic> geometry, {
+    required int maxRingPoints,
+  }) {
+    final type = geometry['type']?.toString();
+    final coords = geometry['coordinates'];
+    if (type == null || coords is! List) return null;
+
+    if (type == 'Polygon') {
+      final outerRaw = coords.whereType<List>().isNotEmpty ? coords.whereType<List>().first : null;
+      if (outerRaw == null) return null;
+      final outer = _simplifyGeoJsonRing(outerRaw, maxPoints: maxRingPoints);
+      if (outer.length < 4) return null;
+      return {
+        ...geometry,
+        'type': 'Polygon',
+        // Para ENVOLVENTE priorizamos rendimiento: conservar solo anillo exterior.
+        'coordinates': [outer],
+      };
+    }
+
+    if (type == 'MultiPolygon') {
+      final polygons = <List<List<dynamic>>>[];
+      for (final polygon in coords.whereType<List>()) {
+        final ringList = polygon.whereType<List>().toList(growable: false);
+        if (ringList.isEmpty) continue;
+        final outer = _simplifyGeoJsonRing(ringList.first, maxPoints: maxRingPoints);
+        if (outer.length >= 4) {
+          // Para ENVOLVENTE priorizamos rendimiento: conservar solo anillo exterior.
+          polygons.add([outer]);
+        }
+      }
+      if (polygons.isEmpty) return null;
+      return {
+        ...geometry,
+        'type': 'MultiPolygon',
+        'coordinates': polygons,
+      };
+    }
+
+    return geometry;
+  }
+
+  List<dynamic> _simplifyGeoJsonRing(
+    List<dynamic> ring, {
+    required int maxPoints,
+  }) {
+    final points = <List<dynamic>>[];
+    for (final rawPoint in ring.whereType<List>()) {
+      if (rawPoint.length < 2) continue;
+      final x = _toDoubleCoord(rawPoint[0]);
+      final y = _toDoubleCoord(rawPoint[1]);
+      if (x == null || y == null) continue;
+      points.add(List<dynamic>.from(rawPoint));
+    }
+
+    if (points.length < 4) return points;
+
+    final closed = _coordEquals(points.first, points.last);
+    final core = closed ? points.sublist(0, points.length - 1) : points;
+    if (core.length <= maxPoints) {
+      return closed ? [...core, List<dynamic>.from(core.first)] : core;
+    }
+
+    final step = (core.length / maxPoints).ceil();
+    final sampled = <List<dynamic>>[];
+    for (var i = 0; i < core.length; i += step) {
+      sampled.add(core[i]);
+    }
+    if (sampled.isEmpty || !_coordEquals(sampled.first, core.first)) {
+      sampled.insert(0, core.first);
+    }
+    if (!_coordEquals(sampled.last, core.last)) {
+      sampled.add(core.last);
+    }
+
+    if (sampled.length < 3) {
+      return closed ? [...core, List<dynamic>.from(core.first)] : core;
+    }
+
+    return [...sampled, List<dynamic>.from(sampled.first)];
+  }
+
+  bool _coordEquals(List<dynamic> a, List<dynamic> b) {
+    if (a.length < 2 || b.length < 2) return false;
+    final ax = _toDoubleCoord(a[0]);
+    final ay = _toDoubleCoord(a[1]);
+    final bx = _toDoubleCoord(b[0]);
+    final by = _toDoubleCoord(b[1]);
+    if (ax == null || ay == null || bx == null || by == null) return false;
+    return (ax - bx).abs() < 1e-12 && (ay - by).abs() < 1e-12;
+  }
+
+  Map<String, double>? _computeGeoJsonGeometryBbox(Map<String, dynamic> geometry) {
+    final coords = geometry['coordinates'];
+    if (coords is! List) return null;
+
+    double? minX;
+    double? minY;
+    double? maxX;
+    double? maxY;
+
+    void visit(dynamic node) {
+      if (node is List) {
+        if (node.length >= 2 && node[0] is num && node[1] is num) {
+          final x = (node[0] as num).toDouble();
+          final y = (node[1] as num).toDouble();
+          minX = minX == null ? x : math.min(minX!, x);
+          minY = minY == null ? y : math.min(minY!, y);
+          maxX = maxX == null ? x : math.max(maxX!, x);
+          maxY = maxY == null ? y : math.max(maxY!, y);
+        } else {
+          for (final child in node) {
+            visit(child);
+          }
+        }
+      }
+    }
+
+    visit(coords);
+    if (minX == null || minY == null || maxX == null || maxY == null) {
+      return null;
+    }
+
+    return {
+      'minX': minX!,
+      'minY': minY!,
+      'maxX': maxX!,
+      'maxY': maxY!,
+    };
+  }
+
   bool _isPksPointImport({
     required String fileName,
     required List<Map<String, dynamic>> features,
@@ -1507,6 +1985,17 @@ class _CargaArchivoScreenState extends ConsumerState<CargaArchivoScreen> {
                       style: const TextStyle(
                           fontSize: 12, color: AppColors.textLight),
                     ),
+                    if (_archivoSeleccionado != null && _tipoArchivoImportacion != null) ...[
+                      const SizedBox(height: 8),
+                      Text(
+                        _buildSurveySummaryLabel(),
+                        style: const TextStyle(
+                          fontSize: 11,
+                          color: AppColors.textLight,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                    ],
                   ],
                 ),
               ),
@@ -1750,16 +2239,25 @@ class _CargaArchivoScreenState extends ConsumerState<CargaArchivoScreen> {
                         label: Text(
                           _sincronizando
                               ? 'Guardando…'
-                              : (_xlsxParseResult != null
+                              : ((_tipoArchivoImportacion == 'geojson' &&
+                                          (_contenidoGeoJsonImportacion == 'envolvente' ||
+                                              _contenidoGeoJsonImportacion == 'pks'))
+                                      ? 'Guardar y ver en Mapa'
+                                      : (_xlsxParseResult != null
                                   ? 'Inyectar XLSX y abrir Gestión'
-                                  : 'Guardar e ir a Gestión'),
+                                  : 'Guardar e ir a Gestión')),
                           style: const TextStyle(fontSize: 13),
                         ),
                         onPressed: (_loading || _sincronizando)
                             ? null
                             : (_xlsxParseResult != null
                                 ? _inyectarXlsxEnTablas
-                                : _guardarYVerEnMapa),
+                                : () => _guardarYVerEnMapa(
+                                      forcedGeoJsonContent:
+                                          _tipoArchivoImportacion == 'geojson'
+                                              ? _contenidoGeoJsonImportacion
+                                              : null,
+                                    )),
                         style: ElevatedButton.styleFrom(
                           padding: const EdgeInsets.symmetric(vertical: 12),
                         ),
@@ -2159,4 +2657,28 @@ class _CargaArchivoScreenState extends ConsumerState<CargaArchivoScreen> {
       ],
     );
   }
+
+  String _buildSurveySummaryLabel() {
+    final tipo = _tipoArchivoImportacion;
+    if (tipo == 'xlsx') {
+      return 'Tipo seleccionado: XLSX';
+    }
+    final contenido = _contenidoGeoJsonImportacion;
+    final contenidoLabel = switch (contenido) {
+      'envolvente' => 'Envolvente',
+      'pks' => 'PKs',
+      _ => 'Predios',
+    };
+    return 'Tipo seleccionado: GeoJson · Contenido: $contenidoLabel';
+  }
+}
+
+class _ImportSurveyResult {
+  final String tipoArchivo;
+  final String? contenidoGeoJson;
+
+  const _ImportSurveyResult({
+    required this.tipoArchivo,
+    this.contenidoGeoJson,
+  });
 }
