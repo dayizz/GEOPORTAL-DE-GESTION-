@@ -192,6 +192,44 @@ class _TablaScreenState extends ConsumerState<TablaScreen> {
     return predios.where((predio) => _predioProyecto(predio) == proyecto).length;
   }
 
+  List<String> _opcionesTramoProyecto(List<Predio> predios) {
+    final tramos = predios
+        .where((predio) => _predioProyecto(predio) == _proyectoActual)
+        .map((predio) => predio.tramo.trim().toUpperCase())
+        .where((tramo) => tramo.isNotEmpty)
+        .toSet()
+        .toList();
+    tramos.sort(_compararCodigoAlfanumerico);
+    return tramos;
+  }
+
+  List<String> _opcionesTipoProyecto(List<Predio> predios) {
+    final tipos = predios
+        .where((predio) => _predioProyecto(predio) == _proyectoActual)
+        .map((predio) => predio.tipoPropiedad.trim().toUpperCase())
+        .where((tipo) => tipo.isNotEmpty)
+        .toSet()
+        .toList();
+    tipos.sort((a, b) => a.compareTo(b));
+    return tipos;
+  }
+
+  int _compararCodigoAlfanumerico(String a, String b) {
+    final exp = RegExp(r'^([A-Z]+)(\d+)$');
+    final ma = exp.firstMatch(a);
+    final mb = exp.firstMatch(b);
+    if (ma != null && mb != null) {
+      final prefA = ma.group(1)!;
+      final prefB = mb.group(1)!;
+      final prefComp = prefA.compareTo(prefB);
+      if (prefComp != 0) return prefComp;
+      final na = int.tryParse(ma.group(2)!) ?? 0;
+      final nb = int.tryParse(mb.group(2)!) ?? 0;
+      return na.compareTo(nb);
+    }
+    return a.compareTo(b);
+  }
+
   @override
   Widget build(BuildContext context) {
     final prediosAsync = ref.watch(prediosListProvider);
@@ -579,7 +617,7 @@ class _TablaScreenState extends ConsumerState<TablaScreen> {
                 style: TextButton.styleFrom(
                   padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
                 ),
-                onPressed: () => _showFiltros(context),
+                onPressed: () => _showFiltros(context, allPredios),
               ),
             ],
           ),
@@ -1438,134 +1476,209 @@ class _TablaScreenState extends ConsumerState<TablaScreen> {
     );
   }
 
-  void _showFiltros(BuildContext context) {
+  void _showFiltros(BuildContext context, List<Predio> allPredios) {
     String? tramo = _filtroTramo;
     String? tipo = _filtroTipo;
     String? cop = _filtroCop;
     String? estatus = _filtroEstatus;
+    final tramos = _opcionesTramoProyecto(allPredios);
+    final tipos = _opcionesTipoProyecto(allPredios);
+    final tieneDatosProyecto =
+        allPredios.any((predio) => _predioProyecto(predio) == _proyectoActual);
 
     showModalBottomSheet(
       context: context,
       isScrollControlled: true,
+      backgroundColor: AppColors.surface,
       shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
       ),
       builder: (ctx) => StatefulBuilder(
-        builder: (ctx, setS) => Padding(
-          padding: const EdgeInsets.fromLTRB(20, 20, 20, 32),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Row(
-                children: [
-                  const Icon(Icons.filter_alt_outlined, color: AppColors.primary),
-                  const SizedBox(width: 10),
-                  Text('Filtros', style: Theme.of(ctx).textTheme.titleLarge),
-                  const Spacer(),
-                  TextButton(
-                    onPressed: () {
-                      setS(() { tramo = null; tipo = null; cop = null; estatus = null; });
-                    },
-                    child: const Text('Limpiar todo'),
-                  ),
-                  IconButton(
-                    icon: const Icon(Icons.close),
-                    onPressed: () => Navigator.pop(ctx),
-                  ),
-                ],
-              ),
-              const Divider(),
-              Text('T/F/S', style: Theme.of(ctx).textTheme.labelLarge),
-              const SizedBox(height: 8),
-              Wrap(
-                spacing: 8,
-                children: [
-                  'T1', 'T2', 'T3', 'T4', 'T5',
-                  'F1', 'F2', 'F3', 'F4', 'F5',
-                  'S1', 'S2', 'S3', 'S4', 'S5',
-                ].map((t) => FilterChip(
-                  label: Text(t),
-                  selected: tramo == t,
-                  onSelected: (v) => setS(() => tramo = v ? t : null),
-                  selectedColor: AppColors.primary.withValues(alpha: 0.2),
-                )).toList(),
-              ),
-              const SizedBox(height: 16),
-              Text('Tipo de Propiedad', style: Theme.of(ctx).textTheme.labelLarge),
-              const SizedBox(height: 8),
-              Wrap(
-                spacing: 8,
-                children: ['SOCIAL', 'DOMINIO PLENO', 'PRIVADA', 'EJIDAL', 'MIXTO', 'FEDERAL', 'GUBERNAMENTAL'].map((t) => FilterChip(
-                  label: Text(t),
-                  selected: tipo == t,
-                  onSelected: (v) => setS(() => tipo = v ? t : null),
-                  selectedColor: AppColors.tipoPropiedadColor(t).withValues(alpha: 0.2),
-                )).toList(),
-              ),
-              const SizedBox(height: 16),
-              Text('C.O.P.', style: Theme.of(ctx).textTheme.labelLarge),
-              const SizedBox(height: 8),
-              Wrap(
-                spacing: 8,
-                children: [
-                  FilterChip(
-                    label: const Text('Con COP'),
-                    selected: cop == 'SI',
-                    onSelected: (v) => setS(() => cop = v ? 'SI' : null),
-                    selectedColor: AppColors.secondary.withValues(alpha: 0.2),
-                  ),
-                  FilterChip(
-                    label: const Text('Sin COP'),
-                    selected: cop == 'NO',
-                    onSelected: (v) => setS(() => cop = v ? 'NO' : null),
-                    selectedColor: AppColors.danger.withValues(alpha: 0.2),
-                  ),
-                ],
-              ),
-              const SizedBox(height: 16),
-              Text('Estatus', style: Theme.of(ctx).textTheme.labelLarge),
-              const SizedBox(height: 8),
-              Wrap(
-                spacing: 8,
-                children: [
-                  FilterChip(
-                    label: const Text('Liberado'),
-                    selected: estatus == 'Liberado',
-                    onSelected: (v) => setS(() => estatus = v ? 'Liberado' : null),
-                    selectedColor: AppColors.secondary.withValues(alpha: 0.2),
-                  ),
-                  FilterChip(
-                    label: const Text('No liberado'),
-                    selected: estatus == 'No liberado',
-                    onSelected: (v) => setS(() => estatus = v ? 'No liberado' : null),
-                    selectedColor: AppColors.danger.withValues(alpha: 0.2),
-                  ),
-                ],
-              ),
-              const SizedBox(height: 20),
-              SizedBox(
-                width: double.infinity,
-                child: ElevatedButton(
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: AppColors.primary,
-                    foregroundColor: Colors.white,
-                    padding: const EdgeInsets.symmetric(vertical: 14),
-                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                  ),
-                  onPressed: () {
-                    setState(() {
-                      _filtroTramo = tramo;
-                      _filtroTipo = tipo;
-                      _filtroCop = cop;
-                      _filtroEstatus = estatus;
-                    });
-                    Navigator.pop(ctx);
-                  },
-                  child: const Text('Aplicar filtros'),
+        builder: (ctx, setS) => DefaultTextStyle.merge(
+          style: const TextStyle(color: AppColors.textPrimary),
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(20, 20, 20, 32),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  children: [
+                    const Icon(Icons.filter_alt_outlined, color: AppColors.primary),
+                    const SizedBox(width: 10),
+                    Text(
+                      'Filtros',
+                      style: Theme.of(ctx).textTheme.titleLarge?.copyWith(
+                            color: AppColors.textPrimary,
+                            fontWeight: FontWeight.w700,
+                          ),
+                    ),
+                    const Spacer(),
+                    TextButton(
+                      style: TextButton.styleFrom(foregroundColor: AppColors.primary),
+                      onPressed: () {
+                        setS(() {
+                          tramo = null;
+                          tipo = null;
+                          cop = null;
+                          estatus = null;
+                        });
+                      },
+                      child: const Text('Limpiar todo'),
+                    ),
+                    IconButton(
+                      color: AppColors.textPrimary,
+                      icon: const Icon(Icons.close),
+                      onPressed: () => Navigator.pop(ctx),
+                    ),
+                  ],
                 ),
-              ),
-            ],
+                const Divider(color: AppColors.border),
+                if (!tieneDatosProyecto)
+                  Padding(
+                    padding: const EdgeInsets.only(bottom: 12),
+                    child: Text(
+                      'No hay registros para $_proyectoActual. Importa o selecciona otro proyecto para ver opciones.',
+                      style: Theme.of(ctx).textTheme.bodyMedium?.copyWith(
+                            color: AppColors.textSecondary,
+                          ),
+                    ),
+                  ),
+                Text(
+                  'T/F/S',
+                  style: Theme.of(ctx).textTheme.labelLarge?.copyWith(
+                        color: AppColors.textPrimary,
+                        fontWeight: FontWeight.w700,
+                      ),
+                ),
+                const SizedBox(height: 8),
+                Wrap(
+                  spacing: 8,
+                  runSpacing: 6,
+                  children: tramos
+                      .map(
+                        (t) => FilterChip(
+                          label: Text(t),
+                          labelStyle: const TextStyle(color: AppColors.textPrimary),
+                          checkmarkColor: AppColors.primary,
+                          selected: tramo == t,
+                          onSelected: (v) => setS(() => tramo = v ? t : null),
+                          selectedColor: AppColors.primary.withValues(alpha: 0.2),
+                        ),
+                      )
+                      .toList(),
+                ),
+                const SizedBox(height: 16),
+                Text(
+                  'Tipo de Propiedad',
+                  style: Theme.of(ctx).textTheme.labelLarge?.copyWith(
+                        color: AppColors.textPrimary,
+                        fontWeight: FontWeight.w700,
+                      ),
+                ),
+                const SizedBox(height: 8),
+                Wrap(
+                  spacing: 8,
+                  runSpacing: 6,
+                  children: tipos
+                      .map(
+                        (t) => FilterChip(
+                          label: Text(t),
+                          labelStyle: const TextStyle(color: AppColors.textPrimary),
+                          checkmarkColor: AppColors.textPrimary,
+                          selected: tipo == t,
+                          onSelected: (v) => setS(() => tipo = v ? t : null),
+                          selectedColor: AppColors.tipoPropiedadColor(t).withValues(alpha: 0.2),
+                        ),
+                      )
+                      .toList(),
+                ),
+                const SizedBox(height: 16),
+                Text(
+                  'C.O.P.',
+                  style: Theme.of(ctx).textTheme.labelLarge?.copyWith(
+                        color: AppColors.textPrimary,
+                        fontWeight: FontWeight.w700,
+                      ),
+                ),
+                const SizedBox(height: 8),
+                Wrap(
+                  spacing: 8,
+                  runSpacing: 6,
+                  children: [
+                    FilterChip(
+                      label: const Text('Con COP'),
+                      labelStyle: const TextStyle(color: AppColors.textPrimary),
+                      checkmarkColor: AppColors.secondary,
+                      selected: cop == 'SI',
+                      onSelected: (v) => setS(() => cop = v ? 'SI' : null),
+                      selectedColor: AppColors.secondary.withValues(alpha: 0.2),
+                    ),
+                    FilterChip(
+                      label: const Text('Sin COP'),
+                      labelStyle: const TextStyle(color: AppColors.textPrimary),
+                      checkmarkColor: AppColors.danger,
+                      selected: cop == 'NO',
+                      onSelected: (v) => setS(() => cop = v ? 'NO' : null),
+                      selectedColor: AppColors.danger.withValues(alpha: 0.2),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 16),
+                Text(
+                  'Estatus',
+                  style: Theme.of(ctx).textTheme.labelLarge?.copyWith(
+                        color: AppColors.textPrimary,
+                        fontWeight: FontWeight.w700,
+                      ),
+                ),
+                const SizedBox(height: 8),
+                Wrap(
+                  spacing: 8,
+                  runSpacing: 6,
+                  children: [
+                    FilterChip(
+                      label: const Text('Liberado'),
+                      labelStyle: const TextStyle(color: AppColors.textPrimary),
+                      checkmarkColor: AppColors.secondary,
+                      selected: estatus == 'Liberado',
+                      onSelected: (v) => setS(() => estatus = v ? 'Liberado' : null),
+                      selectedColor: AppColors.secondary.withValues(alpha: 0.2),
+                    ),
+                    FilterChip(
+                      label: const Text('No liberado'),
+                      labelStyle: const TextStyle(color: AppColors.textPrimary),
+                      checkmarkColor: AppColors.danger,
+                      selected: estatus == 'No liberado',
+                      onSelected: (v) => setS(() => estatus = v ? 'No liberado' : null),
+                      selectedColor: AppColors.danger.withValues(alpha: 0.2),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 20),
+                SizedBox(
+                  width: double.infinity,
+                  child: ElevatedButton(
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: AppColors.primary,
+                      foregroundColor: Colors.white,
+                      padding: const EdgeInsets.symmetric(vertical: 14),
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                    ),
+                    onPressed: () {
+                      setState(() {
+                        _filtroTramo = tramo;
+                        _filtroTipo = tipo;
+                        _filtroCop = cop;
+                        _filtroEstatus = estatus;
+                      });
+                      Navigator.pop(ctx);
+                    },
+                    child: const Text('Aplicar filtros'),
+                  ),
+                ),
+              ],
+            ),
           ),
         ),
       ),
