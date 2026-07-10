@@ -1,28 +1,27 @@
+import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:uuid/uuid.dart';
 
-import '../../../core/google_sheets/google_sheets_service.dart';
 import '../../predios/models/propietario.dart';
 
 final propietariosRepositoryProvider = Provider<PropietariosRepository>(
-  (ref) {
-    return PropietariosRepository(Supabase.instance.client);
-  },
+  (ref) => PropietariosRepository(FirebaseFirestore.instance),
 );
 
 class PropietariosRepository {
-  final SupabaseClient _client;
-  final GoogleSheetsService? _sheets;
+  PropietariosRepository(this._firestore);
 
-  PropietariosRepository(this._client, {GoogleSheetsService? sheets})
-      : _sheets = sheets;
-
+  final FirebaseFirestore _firestore;
   static const _uuid = Uuid();
 
-  bool get _usingSheets => _sheets != null;
+  CollectionReference<Map<String, dynamic>> get _propietarios =>
+      _firestore.collection('propietarios');
+
+  String _isoNow() => DateTime.now().toIso8601String();
 
   String _toIso(dynamic value, {required DateTime fallback}) {
+    if (value is Timestamp) return value.toDate().toIso8601String();
+    if (value is DateTime) return value.toIso8601String();
     if (value is String && value.trim().isNotEmpty) {
       final parsed = DateTime.tryParse(value.trim());
       if (parsed != null) return parsed.toIso8601String();
@@ -30,12 +29,13 @@ class PropietariosRepository {
     return fallback.toIso8601String();
   }
 
-  Map<String, dynamic> _normalizePropietarioMap(Map<String, dynamic> raw) {
+  Map<String, dynamic> _normalizePropietarioMap(
+    DocumentSnapshot<Map<String, dynamic>> doc,
+  ) {
+    final raw = Map<String, dynamic>.from(doc.data() ?? const {});
     final now = DateTime.now();
     return {
-      'id': (raw['id']?.toString().trim().isNotEmpty ?? false)
-          ? raw['id'].toString().trim()
-          : _uuid.v4(),
+      'id': doc.id,
       'nombre': raw['nombre']?.toString() ?? '',
       'apellidos': raw['apellidos']?.toString() ?? '',
       'tipo_persona': raw['tipo_persona']?.toString() ?? 'fisica',
@@ -56,108 +56,65 @@ class PropietariosRepository {
     String? tipoPersona,
     int limit = 100,
   }) async {
-    if (_usingSheets) {
-      var propietarios = (await _sheets!.getRows(sheet: 'propietarios'))
-          .map((e) => Propietario.fromMap(_normalizePropietarioMap(e)))
-          .toList();
+    final snap = await _propietarios.get();
 
-      if (busqueda != null && busqueda.trim().isNotEmpty) {
-        final q = busqueda.trim().toLowerCase();
-        propietarios = propietarios.where((p) {
-          return p.nombre.toLowerCase().contains(q) ||
-              p.apellidos.toLowerCase().contains(q) ||
-              (p.rfc?.toLowerCase().contains(q) ?? false) ||
-              (p.curp?.toLowerCase().contains(q) ?? false) ||
-              (p.razonSocial?.toLowerCase().contains(q) ?? false);
-        }).toList();
-      }
+    var propietarios = snap.docs
+        .map((doc) => Propietario.fromMap(_normalizePropietarioMap(doc)))
+        .toList();
 
-      if (tipoPersona != null && tipoPersona.isNotEmpty) {
-        propietarios = propietarios.where((p) => p.tipoPersona == tipoPersona).toList();
-      }
-
-      propietarios.sort((a, b) => a.nombre.toLowerCase().compareTo(b.nombre.toLowerCase()));
-      if (propietarios.length > limit) {
-        return propietarios.sublist(0, limit);
-      }
-      return propietarios;
-    }
-
-    var query = _client.from('propietarios').select();
-
-    if (busqueda != null && busqueda.isNotEmpty) {
-      query = query.or(
-        'nombre.ilike.%$busqueda%,apellidos.ilike.%$busqueda%,rfc.ilike.%$busqueda%,curp.ilike.%$busqueda%,razon_social.ilike.%$busqueda%',
-      );
+    if (busqueda != null && busqueda.trim().isNotEmpty) {
+      final q = busqueda.trim().toLowerCase();
+      propietarios = propietarios.where((p) {
+        return p.nombre.toLowerCase().contains(q) ||
+            p.apellidos.toLowerCase().contains(q) ||
+            (p.rfc?.toLowerCase().contains(q) ?? false) ||
+            (p.curp?.toLowerCase().contains(q) ?? false) ||
+            (p.razonSocial?.toLowerCase().contains(q) ?? false);
+      }).toList();
     }
 
     if (tipoPersona != null && tipoPersona.isNotEmpty) {
-      query = query.eq('tipo_persona', tipoPersona);
+      propietarios = propietarios.where((p) => p.tipoPersona == tipoPersona).toList();
     }
 
-    final response = await query
-        .order('nombre', ascending: true)
-        .limit(limit);
+    propietarios.sort((a, b) => a.nombre.toLowerCase().compareTo(b.nombre.toLowerCase()));
 
-    return (response as List).map((e) => Propietario.fromMap(e)).toList();
+    if (propietarios.length > limit) {
+      return propietarios.sublist(0, limit);
+    }
+    return propietarios;
   }
 
   Future<Propietario?> getPropietarioById(String id) async {
-    if (_usingSheets) {
-      final rows = await _sheets!.getRows(sheet: 'propietarios');
-      for (final row in rows) {
-        if (row['id']?.toString() == id) {
-          return Propietario.fromMap(_normalizePropietarioMap(row));
-        }
-      }
-      return null;
-    }
-
-    final response = await _client
-        .from('propietarios')
-        .select()
-        .eq('id', id)
-        .maybeSingle();
-
-    if (response == null) return null;
-    return Propietario.fromMap(response);
+    final doc = await _propietarios.doc(id).get();
+    if (!doc.exists) return null;
+    return Propietario.fromMap(_normalizePropietarioMap(doc));
   }
 
   Future<Propietario> createPropietario(Map<String, dynamic> data) async {
-    if (_usingSheets) {
-      final now = DateTime.now().toIso8601String();
-      final row = {
-        ...data,
-        'id': data['id']?.toString() ?? _uuid.v4(),
-        'created_at': data['created_at']?.toString() ?? now,
-        'updated_at': now,
-      };
-      final saved = await _sheets!.upsertRow(
-        sheet: 'propietarios',
-        row: row,
-        idField: 'id',
-      );
-      return Propietario.fromMap(_normalizePropietarioMap(saved));
+    final id = (data['id']?.toString().trim().isNotEmpty ?? false)
+        ? data['id'].toString().trim()
+        : _uuid.v4();
+
+    final payload = <String, dynamic>{
+      ...data,
+      'created_at': data['created_at']?.toString() ?? _isoNow(),
+      'updated_at': _isoNow(),
+    }..remove('id');
+
+    await _propietarios.doc(id).set(payload, SetOptions(merge: true));
+    final created = await getPropietarioById(id);
+    if (created == null) {
+      throw Exception('No se pudo crear el propietario en Firestore');
     }
-
-    final response = await _client
-        .from('propietarios')
-        .insert(data)
-        .select()
-        .single();
-
-    return Propietario.fromMap(response);
+    return created;
   }
 
   Future<Propietario> findOrCreateByNombreCompleto(String nombreCompleto) async {
     return findOrCreateFromData({'nombre_completo': nombreCompleto});
   }
 
-  /// Busca o crea un propietario usando todos los datos disponibles del mapa [data].
-  /// Acepta claves: nombre, apellidos, nombre_completo, rfc, curp,
-  /// telefono, correo, razon_social, tipo_persona.
   Future<Propietario> findOrCreateFromData(Map<String, dynamic> data) async {
-    // Resolver nombre y apellidos
     String nombre;
     String apellidos;
 
@@ -165,7 +122,9 @@ class PropietariosRepository {
       nombre = data['nombre'].toString().trim();
       apellidos = data['apellidos']?.toString().trim() ?? '';
     } else {
-      final full = (data['nombre_completo'] ?? '').toString().trim()
+      final full = (data['nombre_completo'] ?? '')
+          .toString()
+          .trim()
           .replaceAll(RegExp(r'\s+'), ' ');
       if (full.isEmpty) throw ArgumentError('Se requiere nombre del propietario');
       final parts = full.split(' ');
@@ -173,89 +132,55 @@ class PropietariosRepository {
       apellidos = parts.length > 1 ? parts.sublist(1).join(' ') : '';
     }
 
-    // Buscar por RFC primero (más preciso), luego por nombre
-    Map<String, dynamic>? existing;
+    final all = await getPropietarios(limit: 5000);
     final rfc = data['rfc']?.toString().trim();
-    if (_usingSheets) {
-      final rows = await _sheets!.getRows(sheet: 'propietarios');
-      if (rfc != null && rfc.isNotEmpty) {
-        for (final row in rows) {
-          if ((row['rfc']?.toString().toLowerCase().trim() ?? '') ==
-              rfc.toLowerCase()) {
-            existing = _normalizePropietarioMap(row);
-            break;
-          }
+
+    Propietario? existing;
+    if (rfc != null && rfc.isNotEmpty) {
+      for (final item in all) {
+        if ((item.rfc ?? '').trim().toUpperCase() == rfc.toUpperCase()) {
+          existing = item;
+          break;
         }
-      }
-
-      if (existing == null) {
-        for (final row in rows) {
-          final nombreRow = row['nombre']?.toString().toLowerCase().trim() ?? '';
-          final apellidosRow = row['apellidos']?.toString().toLowerCase().trim() ?? '';
-          if (nombreRow == nombre.toLowerCase() &&
-              apellidosRow == apellidos.toLowerCase()) {
-            existing = _normalizePropietarioMap(row);
-            break;
-          }
-        }
-      }
-    } else {
-      if (rfc != null && rfc.isNotEmpty) {
-        existing = await _client
-            .from('propietarios')
-            .select()
-            .ilike('rfc', rfc)
-            .limit(1)
-            .maybeSingle();
-      }
-
-      if (existing == null) {
-        var query = _client
-            .from('propietarios')
-            .select()
-            .ilike('nombre', nombre);
-
-        if (apellidos.isNotEmpty) {
-          query = query.ilike('apellidos', apellidos);
-        }
-
-        existing = await query.limit(1).maybeSingle();
       }
     }
+
+    existing ??= all.where((item) {
+      return item.nombre.trim().toUpperCase() == nombre.toUpperCase() &&
+          item.apellidos.trim().toUpperCase() == apellidos.toUpperCase();
+    }).firstOrNull;
 
     if (existing != null) {
-      // Actualizar con nuevos datos si los tenemos
       final updates = <String, dynamic>{};
-      if (rfc != null && existing['rfc'] == null) updates['rfc'] = rfc;
+      if (rfc != null && rfc.isNotEmpty && (existing.rfc == null || existing.rfc!.isEmpty)) {
+        updates['rfc'] = rfc;
+      }
       final curp = data['curp']?.toString().trim();
-      if (curp != null && curp.isNotEmpty && existing['curp'] == null) updates['curp'] = curp;
-      final tel = data['telefono']?.toString().trim();
-      if (tel != null && tel.isNotEmpty && existing['telefono'] == null) updates['telefono'] = tel;
+      if (curp != null && curp.isNotEmpty && (existing.curp == null || existing.curp!.isEmpty)) {
+        updates['curp'] = curp;
+      }
+      final telefono = data['telefono']?.toString().trim();
+      if (telefono != null && telefono.isNotEmpty && (existing.telefono == null || existing.telefono!.isEmpty)) {
+        updates['telefono'] = telefono;
+      }
       final correo = data['correo']?.toString().trim();
-      if (correo != null && correo.isNotEmpty && existing['correo'] == null) updates['correo'] = correo;
-
-      if (updates.isNotEmpty) {
-        updates['updated_at'] = DateTime.now().toIso8601String();
-        if (_usingSheets) {
-          await _sheets!.upsertRow(
-            sheet: 'propietarios',
-            row: {...existing, ...updates, 'id': existing['id']},
-            idField: 'id',
-          );
-        } else {
-          await _client.from('propietarios').update(updates).eq('id', existing['id']);
-        }
-        existing = {...existing, ...updates};
+      if (correo != null && correo.isNotEmpty && (existing.correo == null || existing.correo!.isEmpty)) {
+        updates['correo'] = correo;
       }
 
-      return Propietario.fromMap(existing);
+      if (updates.isNotEmpty) {
+        await updatePropietario(existing.id, updates);
+        final updated = await getPropietarioById(existing.id);
+        if (updated != null) return updated;
+      }
+
+      return existing;
     }
 
-    // Construir datos del nuevo propietario
     final razonSocial = data['razon_social']?.toString().trim();
-    final nombreCompleto = '$nombre $apellidos'.trim();
+    final nombreCompleto = '$nombre $apellidos'.trim().toUpperCase();
     final tipoPersona = data['tipo_persona']?.toString() ??
-        (razonSocial != null ||
+        ((razonSocial != null && razonSocial.isNotEmpty) ||
                 nombreCompleto.contains('S.A.') ||
                 nombreCompleto.contains('S.DE R.L.') ||
                 nombreCompleto.contains('SAPI') ||
@@ -278,38 +203,20 @@ class PropietariosRepository {
   }
 
   Future<Propietario> updatePropietario(String id, Map<String, dynamic> data) async {
-    if (_usingSheets) {
-      final existente = await getPropietarioById(id);
-      final row = {
-        ...existente?.toMap() ?? <String, dynamic>{},
-        ...data,
-        'id': id,
-        'created_at': existente?.createdAt.toIso8601String() ?? DateTime.now().toIso8601String(),
-        'updated_at': DateTime.now().toIso8601String(),
-      };
-      final saved = await _sheets!.upsertRow(
-        sheet: 'propietarios',
-        row: row,
-        idField: 'id',
-      );
-      return Propietario.fromMap(_normalizePropietarioMap(saved));
+    final payload = <String, dynamic>{
+      ...data,
+      'updated_at': _isoNow(),
+    }..remove('id');
+
+    await _propietarios.doc(id).set(payload, SetOptions(merge: true));
+    final updated = await getPropietarioById(id);
+    if (updated == null) {
+      throw Exception('No se pudo actualizar el propietario en Firestore');
     }
-
-    final response = await _client
-        .from('propietarios')
-        .update({...data, 'updated_at': DateTime.now().toIso8601String()})
-        .eq('id', id)
-        .select()
-        .single();
-
-    return Propietario.fromMap(response);
+    return updated;
   }
 
   Future<void> deletePropietario(String id) async {
-    if (_usingSheets) {
-      await _sheets!.deleteById(sheet: 'propietarios', id: id, idField: 'id');
-      return;
-    }
-    await _client.from('propietarios').delete().eq('id', id);
+    await _propietarios.doc(id).delete();
   }
 }

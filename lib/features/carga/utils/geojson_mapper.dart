@@ -1,5 +1,5 @@
 /// Normaliza las claves de un objeto `properties` de GeoJSON
-/// para que coincidan exactamente con las columnas del esquema de Supabase.
+/// para que coincidan exactamente con las columnas del esquema de datos.
 ///
 /// Uso:
 /// ```dart
@@ -8,7 +8,7 @@
 class GeoJsonMapper {
   GeoJsonMapper._();
 
-  /// Mapa de alias: columna_supabase → [alias1, alias2, ...]
+  /// Mapa de alias: columna_canonica → [alias1, alias2, ...]
   static const _keyAliases = <String, List<String>>{
     'clave_catastral': [
       'clave_catastral', 'CLAVE_CATASTRAL',
@@ -275,7 +275,7 @@ class GeoJsonMapper {
     return null;
   }
 
-  /// Normaliza las claves del mapa [props] al esquema de Supabase.
+  /// Normaliza las claves del mapa [props] al esquema canónico de la app.
   ///
   /// Las claves originales que no tienen alias conocido se preservan tal cual.
   /// Las claves canónicas tienen precedencia sobre las originales.

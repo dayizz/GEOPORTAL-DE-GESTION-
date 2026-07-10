@@ -1,128 +1,110 @@
-import 'dart:typed_data';
+import 'dart:convert';
 
+import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:supabase_flutter/supabase_flutter.dart';
-import '../../../core/api/api_client.dart';
 import 'package:uuid/uuid.dart';
 
-import '../../../core/google_sheets/google_sheets_service.dart';
 import '../models/predio.dart';
 
-final apiClientProvider = Provider<ApiClient>((ref) => ApiClient());
-
 final prediosRepositoryProvider = Provider<PrediosRepository>(
-  (ref) {
-    // Para migración: usar ApiClient en vez de Supabase
-    final api = ref.watch(apiClientProvider);
-    return PrediosRepository(Supabase.instance.client, apiClient: api);
-  },
+  (ref) => PrediosRepository(FirebaseFirestore.instance),
 );
 
-
 class PrediosRepository {
+  PrediosRepository(this._firestore);
 
-  bool get _usingSheets => _sheets != null;
-
-    double? _toDouble(dynamic value) {
-      if (value == null) return null;
-      if (value is num) return value.toDouble();
-      if (value is String) {
-        final parsed = double.tryParse(value.replaceAll(',', '').trim());
-        return parsed;
-      }
-      return null;
-    }
-
-    bool _toBool(dynamic value) {
-      if (value is bool) return value;
-      if (value is num) return value != 0;
-      if (value is String) {
-        final v = value.trim().toLowerCase();
-        return v == 'true' || v == '1' || v == 'si' || v == 'sí' || v == 'yes';
-      }
-      return false;
-    }
-
-    String _toIso(dynamic value, {required DateTime fallback}) {
-      if (value is String && value.trim().isNotEmpty) {
-        final parsed = DateTime.tryParse(value.trim());
-        if (parsed != null) return parsed.toIso8601String();
-      }
-      return fallback.toIso8601String();
-    }
-  final SupabaseClient _client;
-  final GoogleSheetsService? _sheets;
-  final ApiClient? _apiClient;
+  final FirebaseFirestore _firestore;
   static const _uuid = Uuid();
 
-  PrediosRepository(this._client, {GoogleSheetsService? sheets, ApiClient? apiClient})
-      : _sheets = sheets,
-        _apiClient = apiClient;
+  CollectionReference<Map<String, dynamic>> get _predios =>
+      _firestore.collection('predios');
+  CollectionReference<Map<String, dynamic>> get _propietarios =>
+      _firestore.collection('propietarios');
+
+  String _isoNow() => DateTime.now().toIso8601String();
+
+  double? _toDouble(dynamic value) {
+    if (value == null) return null;
+    if (value is num) return value.toDouble();
+    if (value is String) return double.tryParse(value.replaceAll(',', '').trim());
+    return null;
+  }
+
+  bool _toBool(dynamic value) {
+    if (value is bool) return value;
+    if (value is num) return value != 0;
+    if (value is String) {
+      final v = value.trim().toLowerCase();
+      return v == 'true' || v == '1' || v == 'si' || v == 'sí' || v == 'yes';
+    }
+    return false;
+  }
+
+  String? _timestampToIso(dynamic value) {
+    if (value == null) return null;
+    if (value is Timestamp) return value.toDate().toIso8601String();
+    if (value is DateTime) return value.toIso8601String();
+    if (value is String && value.trim().isNotEmpty) return value.trim();
+    return null;
+  }
+
+  Map<String, dynamic> _normalizePropietarioMap(
+    DocumentSnapshot<Map<String, dynamic>> doc,
+  ) {
+    final raw = Map<String, dynamic>.from(doc.data() ?? const {});
+    return {
+      'id': doc.id,
+      'nombre': raw['nombre']?.toString() ?? '',
+      'apellidos': raw['apellidos']?.toString() ?? '',
+      'tipo_persona': raw['tipo_persona']?.toString() ?? 'fisica',
+      'razon_social': raw['razon_social']?.toString(),
+      'curp': raw['curp']?.toString(),
+      'rfc': raw['rfc']?.toString(),
+      'telefono': raw['telefono']?.toString(),
+      'correo': raw['correo']?.toString(),
+      'created_at': _timestampToIso(raw['created_at']) ?? _isoNow(),
+      'updated_at': _timestampToIso(raw['updated_at']),
+    };
+  }
 
   Map<String, dynamic> _normalizePredioMap(
-    Map<String, dynamic> raw, {
+    DocumentSnapshot<Map<String, dynamic>> doc, {
     Map<String, dynamic>? propietario,
   }) {
-    final now = DateTime.now();
+    final raw = Map<String, dynamic>.from(doc.data() ?? const {});
     final geometryRaw = raw['geometry'];
 
-    String? pickText(List<String> keys) {
-      for (final key in keys) {
-        final value = raw[key];
-        if (value == null) continue;
-        final text = value.toString().trim();
-        if (text.isNotEmpty && text.toLowerCase() != 'null') return text;
-      }
-      return null;
+    Map<String, dynamic>? geometry;
+    if (geometryRaw is Map) {
+      geometry = Map<String, dynamic>.from(geometryRaw);
+    } else if (geometryRaw is String && geometryRaw.trim().isNotEmpty) {
+      try {
+        final decoded = jsonDecode(geometryRaw);
+        if (decoded is Map) geometry = Map<String, dynamic>.from(decoded);
+      } catch (_) {}
     }
 
-    double? pickDouble(List<String> keys) {
-      for (final key in keys) {
-        final value = raw[key];
-        final parsed = _toDouble(value);
-        if (parsed != null) return parsed;
-      }
-      return null;
-    }
-
-    return {
-      'id': (raw['id']?.toString().trim().isNotEmpty ?? false)
-          ? raw['id'].toString().trim()
-          : _uuid.v4(),
+    final map = <String, dynamic>{
+      'id': doc.id,
       'clave_catastral': raw['clave_catastral']?.toString().trim() ??
           raw['id_sedatu']?.toString().trim() ??
           '',
       'propietario_nombre': raw['propietario_nombre']?.toString(),
       'tramo': raw['tramo']?.toString() ?? '',
-      'tipo_propiedad': pickText([
-        'tipo_propiedad',
-        'TIPO_PROPIEDAD',
-        'tipopropiedad',
-        'tipo propiedad',
-        'tipo_de_propiedad',
-        'tipo',
-        'regimen',
-        'tenencia',
-          ]) ??
-          'PRIVADA',
-      'estructura': pickText([
-        'estructura', 'ESTRUCTURA',
-        'tipo_estructura', 'TIPO_ESTRUCTURA',
-        'clase_estructura', 'CLASE_ESTRUCTURA',
-        'estruc', 'ESTRUC',
-      ]),
+      'tipo_propiedad': raw['tipo_propiedad']?.toString() ?? 'PRIVADA',
+      'estructura': raw['estructura']?.toString(),
       'ejido': raw['ejido']?.toString(),
-      'estado': pickText(['estado', 'ESTADO', 'entidad', 'ENTIDAD', 'edo', 'EDO', 'state', 'STATE']),
-      'municipio': pickText(['municipio', 'MUNICIPIO', 'mun', 'MUN', 'mpio', 'MPIO', 'municipality', 'MUNICIPALITY']),
-      'km_inicio': pickDouble(['km_inicio', 'KM_INICIO', 'km inicio', 'KM INICIO', 'km_ini', 'KM_INI']),
-      'km_fin': pickDouble(['km_fin', 'KM_FIN', 'km fin', 'KM FIN', 'cadenamiento_final', 'CADENAMIENTO_FINAL']),
-      'km_lineales': pickDouble(['km_lineales', 'KM_LINEALES', 'km lineales', 'KM LINEALES', 'longitud_km', 'LONGITUD_KM']),
-      'km_efectivos': pickDouble(['km_efectivos', 'KM_EFECTIVOS', 'km efectivos', 'KM EFECTIVOS', 'longitud_efectiva', 'LONGITUD_EFECTIVA']),
-      'superficie': _toDouble(raw['superficie']) ?? 0,
+      'estado': raw['estado']?.toString(),
+      'municipio': raw['municipio']?.toString(),
+      'km_inicio': _toDouble(raw['km_inicio']),
+      'km_fin': _toDouble(raw['km_fin']),
+      'km_lineales': _toDouble(raw['km_lineales']),
+      'km_efectivos': _toDouble(raw['km_efectivos']),
+      'superficie': _toDouble(raw['superficie']),
       'cop': _toBool(raw['cop']),
       'cop_firmado': raw['cop_firmado']?.toString(),
-      'pdf_url': raw['pdf_url']?.toString() ?? raw['cop_firmado']?.toString(),
-      'cop_fecha': raw['cop_fecha']?.toString(),
+      'pdf_url': raw['pdf_url']?.toString(),
+      'cop_fecha': _timestampToIso(raw['cop_fecha']),
       'poligono_dwg': raw['poligono_dwg']?.toString(),
       'oficio': raw['oficio']?.toString(),
       'proyecto': raw['proyecto']?.toString(),
@@ -130,50 +112,20 @@ class PrediosRepository {
       'identificacion': _toBool(raw['identificacion']),
       'levantamiento': _toBool(raw['levantamiento']),
       'negociacion': _toBool(raw['negociacion']),
+      'situacion_social': raw['situacion_social']?.toString(),
+      'tipo_liberacion': raw['tipo_liberacion']?.toString(),
       'latitud': _toDouble(raw['latitud']),
       'longitud': _toDouble(raw['longitud']),
-      'geometry': geometryRaw,
+      'geometry': geometry,
       'propietario_id': raw['propietario_id']?.toString(),
-      'created_at': _toIso(raw['created_at'], fallback: now),
-      'updated_at': raw['updated_at'] == null
-          ? null
-          : _toIso(raw['updated_at'], fallback: now),
-      'uso_suelo': raw['uso_suelo']?.toString() ?? 'Otro',
-      'zona': raw['zona']?.toString(),
-      'valor_catastral': _toDouble(raw['valor_catastral']) ?? 0,
-      'descripcion': raw['descripcion']?.toString(),
-      'direccion': raw['direccion']?.toString(),
-      'colonia': raw['colonia']?.toString(),
-      'codigo_postal': raw['codigo_postal']?.toString(),
-      'imagen_url': raw['imagen_url']?.toString(),
-      if (propietario != null) 'propietarios': propietario,
+      'created_at': _timestampToIso(raw['created_at']) ?? _isoNow(),
+      'updated_at': _timestampToIso(raw['updated_at']),
     };
-  }
 
-  Future<Map<String, Map<String, dynamic>>> _propietariosPorId() async {
-    if (!_usingSheets) return const {};
-    final rows = await _sheets!.getRows(sheet: 'propietarios');
-    final out = <String, Map<String, dynamic>>{};
-    for (final row in rows) {
-      final id = row['id']?.toString();
-      if (id == null || id.isEmpty) continue;
-      out[id] = {
-        'id': id,
-        'nombre': row['nombre']?.toString() ?? '',
-        'apellidos': row['apellidos']?.toString() ?? '',
-        'tipo_persona': row['tipo_persona']?.toString() ?? 'fisica',
-        'razon_social': row['razon_social']?.toString(),
-        'curp': row['curp']?.toString(),
-        'rfc': row['rfc']?.toString(),
-        'telefono': row['telefono']?.toString(),
-        'correo': row['correo']?.toString(),
-        'created_at': _toIso(row['created_at'], fallback: DateTime.now()),
-        'updated_at': row['updated_at'] == null
-            ? null
-            : _toIso(row['updated_at'], fallback: DateTime.now()),
-      };
+    if (propietario != null) {
+      map['propietarios'] = propietario;
     }
-    return out;
+    return map;
   }
 
   Future<List<Predio>> getPredios({
@@ -184,363 +136,173 @@ class PrediosRepository {
     int limit = 10000,
     int offset = 0,
   }) async {
-    // Si hay ApiClient, usar backend FastAPI
-    if (_apiClient != null) {
-      final data = await _apiClient.getPredios();
-      return data.map((e) => Predio.fromMap(e as Map<String, dynamic>)).toList();
+    final snap = await _predios.get();
+
+    final propIds = <String>{};
+    for (final doc in snap.docs) {
+      final raw = doc.data();
+      final id = raw['propietario_id']?.toString();
+      if (id != null && id.isNotEmpty) propIds.add(id);
     }
-    // ...existing code...
-    if (_usingSheets) {
-      final rows = await _sheets!.getRows(sheet: 'predios');
-      final propietarios = await _propietariosPorId();
 
-      var predios = rows.map((row) {
-        final propietarioId = row['propietario_id']?.toString();
-        final propietario = propietarioId != null ? propietarios[propietarioId] : null;
-        return Predio.fromMap(_normalizePredioMap(row, propietario: propietario));
-      }).toList();
-
-      if (busqueda != null && busqueda.trim().isNotEmpty) {
-        final q = busqueda.trim().toLowerCase();
-        predios = predios.where((p) {
-          return p.claveCatastral.toLowerCase().contains(q) ||
-              (p.direccion.toLowerCase().contains(q));
-        }).toList();
+    final propietariosById = <String, Map<String, dynamic>>{};
+    if (propIds.isNotEmpty) {
+      final futures = propIds.map((id) => _propietarios.doc(id).get()).toList();
+      final propDocs = await Future.wait(futures);
+      for (final doc in propDocs) {
+        if (doc.exists) propietariosById[doc.id] = _normalizePropietarioMap(doc);
       }
-
-      return predios;
     }
 
-    final response = await _client
-        .from('predios')
-        .select('*, propietarios(*)')
-        .order('created_at', ascending: false)
-        .range(offset, offset + limit - 1);
+    var predios = snap.docs.map((doc) {
+      final propId = doc.data()['propietario_id']?.toString();
+      final propietario = propId != null ? propietariosById[propId] : null;
+      return Predio.fromMap(_normalizePredioMap(doc, propietario: propietario));
+    }).toList();
 
-    return (response as List).map((e) => Predio.fromMap(e)).toList();
+    if (busqueda != null && busqueda.trim().isNotEmpty) {
+      final q = busqueda.trim().toLowerCase();
+      predios = predios.where((p) {
+        return p.claveCatastral.toLowerCase().contains(q) ||
+            p.direccion.toLowerCase().contains(q) ||
+            (p.propietarioNombre ?? '').toLowerCase().contains(q);
+      }).toList();
+    }
+
+    if (usoSuelo != null && usoSuelo.isNotEmpty) {
+      predios = predios.where((p) => p.usoSuelo == usoSuelo).toList();
+    }
+
+    if (zona != null && zona.isNotEmpty) {
+      predios = predios.where((p) => p.zona == zona).toList();
+    }
+
+    if (propietarioId != null && propietarioId.isNotEmpty) {
+      predios = predios.where((p) => p.propietarioId == propietarioId).toList();
+    }
+
+    predios.sort((a, b) => b.createdAt.compareTo(a.createdAt));
+
+    if (offset > 0 && offset < predios.length) {
+      predios = predios.sublist(offset);
+    } else if (offset >= predios.length) {
+      return const [];
+    }
+
+    if (predios.length > limit) return predios.sublist(0, limit);
+    return predios;
   }
-
-
 
   Future<Predio?> getPredioById(String id) async {
-    // Si hay ApiClient, usar backend FastAPI
-    if (_apiClient != null) {
-      try {
-        final data = await _apiClient.getPredio(id);
-        return Predio.fromMap(data);
-      } catch (_) {
-        return null;
-      }
-    }
-    if (_usingSheets) {
-      final rows = await _sheets!.getRows(sheet: 'predios');
-      final row = rows.where((r) => r['id']?.toString() == id).firstOrNull;
-      if (row == null) return null;
+    final doc = await _predios.doc(id).get();
+    if (!doc.exists) return null;
 
-      Map<String, dynamic>? propietario;
-      final propId = row['propietario_id']?.toString();
-      if (propId != null && propId.isNotEmpty) {
-        final propietarios = await _propietariosPorId();
-        propietario = propietarios[propId];
-      }
-
-      return Predio.fromMap(_normalizePredioMap(row, propietario: propietario));
+    final propId = doc.data()?['propietario_id']?.toString();
+    Map<String, dynamic>? propietario;
+    if (propId != null && propId.isNotEmpty) {
+      final propDoc = await _propietarios.doc(propId).get();
+      if (propDoc.exists) propietario = _normalizePropietarioMap(propDoc);
     }
 
-    final response = await _client
-        .from('predios')
-        .select('*, propietarios(*)')
-        .eq('id', id)
-        .maybeSingle();
-
-    if (response == null) return null;
-    return Predio.fromMap(response);
+    return Predio.fromMap(_normalizePredioMap(doc, propietario: propietario));
   }
 
-  /// Busca un predio por clave catastral. Devuelve el mapa crudo (con join de
-  /// propietarios) para que el motor de sincronización pueda inyectar los datos
-  /// directamente en las properties del feature GeoJSON.
   Future<Map<String, dynamic>?> buscarPorClaveCatastral(String clave) async {
-    if (_apiClient != null) {
-      return _apiClient.getPredioByClaveCatastral(clave);
-    }
-    if (_usingSheets) {
-      final rows = await _sheets!.getRows(sheet: 'predios');
-      final row = rows.where((r) {
-        final c = r['clave_catastral']?.toString().trim() ?? '';
-        return c == clave.trim();
-      }).firstOrNull;
+    final query = await _predios
+        .where('clave_catastral', isEqualTo: clave.trim())
+        .limit(1)
+        .get();
+    if (query.docs.isEmpty) return null;
 
-      if (row == null) return null;
-
-      final propId = row['propietario_id']?.toString();
-      Map<String, dynamic>? propietario;
-      if (propId != null && propId.isNotEmpty) {
-        final propietarios = await _propietariosPorId();
-        propietario = propietarios[propId];
-      }
-
-      return _normalizePredioMap(row, propietario: propietario);
+    final doc = query.docs.first;
+    final propId = doc.data()['propietario_id']?.toString();
+    Map<String, dynamic>? propietario;
+    if (propId != null && propId.isNotEmpty) {
+      final propDoc = await _propietarios.doc(propId).get();
+      if (propDoc.exists) propietario = _normalizePropietarioMap(propDoc);
     }
 
-    final response = await _client
-        .from('predios')
-        .select('*, propietarios(*)')
-        .eq('clave_catastral', clave)
-        .maybeSingle();
-
-    return response != null ? Map<String, dynamic>.from(response) : null;
+    return _normalizePredioMap(doc, propietario: propietario);
   }
 
   Future<Predio> createPredio(Map<String, dynamic> data) async {
-    if (_apiClient != null) {
-      final saved = await _apiClient.createPredio(data);
-      return Predio.fromMap(saved);
+    final id = (data['id']?.toString().trim().isNotEmpty ?? false)
+        ? data['id'].toString().trim()
+        : _uuid.v4();
+
+    final payload = <String, dynamic>{
+      ...data,
+      'created_at': data['created_at']?.toString() ?? _isoNow(),
+      'updated_at': _isoNow(),
+    }..remove('id');
+
+    await _predios.doc(id).set(payload, SetOptions(merge: true));
+    final created = await getPredioById(id);
+    if (created == null) {
+      throw Exception('No se pudo crear el predio en Firestore');
     }
-    if (_usingSheets) {
-      final now = DateTime.now().toIso8601String();
-      final row = {
-        ...data,
-        'id': data['id']?.toString() ?? _uuid.v4(),
-        'created_at': data['created_at']?.toString() ?? now,
-        'updated_at': now,
-      };
-
-      final saved = await _sheets!.upsertRow(
-        sheet: 'predios',
-        row: row,
-        idField: 'id',
-      );
-
-      final normalized = _normalizePredioMap(saved);
-      return Predio.fromMap(normalized);
-    }
-
-    final response = await _client
-        .from('predios')
-        .insert(data)
-        .select('*, propietarios(*)')
-        .single();
-
-    return Predio.fromMap(response);
+    return created;
   }
 
   Future<Predio> updatePredio(String id, Map<String, dynamic> data) async {
-    if (_apiClient != null) {
-      final saved = await _apiClient.updatePredio(id, data);
-      return Predio.fromMap(saved);
+    final payload = <String, dynamic>{
+      ...data,
+      'updated_at': _isoNow(),
+    }..remove('id');
+
+    await _predios.doc(id).set(payload, SetOptions(merge: true));
+    final updated = await getPredioById(id);
+    if (updated == null) {
+      throw Exception('No se pudo actualizar el predio en Firestore');
     }
-    if (_usingSheets) {
-      final existente = await getPredioById(id);
-      final row = {
-        ...existente?.toMap() ?? <String, dynamic>{},
-        ...data,
-        'id': id,
-        'created_at': existente?.createdAt.toIso8601String() ?? DateTime.now().toIso8601String(),
-        'updated_at': DateTime.now().toIso8601String(),
-      };
-
-      final saved = await _sheets!.upsertRow(
-        sheet: 'predios',
-        row: row,
-        idField: 'id',
-      );
-
-      final normalized = _normalizePredioMap(saved);
-      return Predio.fromMap(normalized);
-    }
-
-    final response = await _client
-        .from('predios')
-        .update({...data, 'updated_at': DateTime.now().toIso8601String()})
-        .eq('id', id)
-        .select('*, propietarios(*)')
-        .single();
-
-    return Predio.fromMap(response);
+    return updated;
   }
 
   Future<void> deletePredio(String id) async {
-    if (_apiClient != null) {
-      await _apiClient.deletePredio(id);
-      return;
-    }
-    if (_usingSheets) {
-      await _sheets!.deleteById(sheet: 'predios', id: id, idField: 'id');
-      return;
-    }
-    await _client.from('predios').delete().eq('id', id);
+    await _predios.doc(id).delete();
   }
 
   Future<List<Predio>> getPrediosConGeometria() async {
-    if (_apiClient != null) {
-      final all = await getPredios(limit: 100000);
-      return all.where((p) => p.geometry != null).toList();
-    }
-    if (_usingSheets) {
-      final all = await getPredios(limit: 100000);
-      return all.where((p) => p.geometry != null).toList();
-    }
-
-    final response = await _client
-        .from('predios')
-        .select('*, propietarios(*)')
-        .not('geometry', 'is', null);
-
-    return (response as List).map((e) => Predio.fromMap(e)).toList();
+    final all = await getPredios(limit: 100000);
+    return all.where((p) => p.geometry != null).toList();
   }
 
   Future<Map<String, dynamic>> getEstadisticas() async {
-    if (_apiClient != null) {
-      return _apiClient.getEstadisticas();
-    }
-    if (_usingSheets) {
-      final predios = await getPredios(limit: 100000);
-      final conteoUso = <String, int>{};
-      var superficieTotal = 0.0;
+    final predios = await getPredios(limit: 100000);
+    final conteoUso = <String, int>{};
+    var superficieTotal = 0.0;
 
-      for (final p in predios) {
-        conteoUso[p.usoSuelo] = (conteoUso[p.usoSuelo] ?? 0) + 1;
-        superficieTotal += p.superficie ?? 0;
-      }
-
-      return {
-        'total': predios.length,
-        'por_uso_suelo': conteoUso,
-        'superficie_total': superficieTotal,
-      };
-    }
-
-    final total = await _client.from('predios').select('id');
-    final porUso = await _client
-        .from('predios')
-        .select('uso_suelo')
-        .order('uso_suelo');
-
-    final Map<String, int> conteoUso = {};
-    for (final item in porUso as List) {
-      final uso = item['uso_suelo'] as String;
-      conteoUso[uso] = (conteoUso[uso] ?? 0) + 1;
-    }
-
-    double superficieTotal = 0;
-    final superficies = await _client
-        .from('predios')
-        .select('superficie')
-        .not('superficie', 'is', null);
-
-    for (final item in superficies as List) {
-      superficieTotal += (item['superficie'] as num).toDouble();
+    for (final p in predios) {
+      conteoUso[p.usoSuelo] = (conteoUso[p.usoSuelo] ?? 0) + 1;
+      superficieTotal += p.superficie ?? 0;
     }
 
     return {
-      'total': (total as List).length,
+      'total': predios.length,
       'por_uso_suelo': conteoUso,
       'superficie_total': superficieTotal,
     };
   }
 
-  /// Vincula un poligono huérfano con un registro de Gestión.
-  ///
-  /// En Supabase actualiza el predio con la geometría del polígono y marca
-  /// `poligono_insertado=true`. Si la columna `id_poligono` existe, también
-  /// la actualiza; si no existe, hace fallback sin esa columna.
   Future<Predio> vincularPoligonoConPredio({
     required String idPoligono,
     required String idGestion,
     required Map<String, dynamic> geometry,
   }) async {
-    final payload = <String, dynamic>{
-      'geometry': geometry,
-      'id_poligono': idPoligono,
-      'poligono_insertado': true,
-      'updated_at': DateTime.now().toIso8601String(),
-    };
-
-    if (_apiClient != null) {
-      final saved = await _apiClient.updatePredio(idGestion, payload);
-      return Predio.fromMap(saved);
-    }
-
-    if (_usingSheets) {
-      final existente = await getPredioById(idGestion);
-      final row = {
-        ...existente?.toMap() ?? <String, dynamic>{},
-        ...payload,
-        'id': idGestion,
+    await _predios.doc(idGestion).set(
+      {
+        'geometry': geometry,
         'id_poligono': idPoligono,
-        'created_at': existente?.createdAt.toIso8601String() ?? DateTime.now().toIso8601String(),
-      };
+        'poligono_insertado': true,
+        'updated_at': _isoNow(),
+      },
+      SetOptions(merge: true),
+    );
 
-      final saved = await _sheets!.upsertRow(
-        sheet: 'predios',
-        row: row,
-        idField: 'id',
-      );
-
-      final normalized = _normalizePredioMap(saved);
-      return Predio.fromMap(normalized);
+    final updated = await getPredioById(idGestion);
+    if (updated == null) {
+      throw Exception('No se pudo vincular el poligono en Firestore');
     }
-
-    try {
-      final rpcResponse = await _client.rpc(
-        'api_predios_vincular',
-        params: {
-          'p_id_poligono': idPoligono,
-          'p_id_gestion': idGestion,
-          'p_geometry': geometry,
-        },
-      );
-
-      if (rpcResponse is List && rpcResponse.isNotEmpty) {
-        final raw = Map<String, dynamic>.from(rpcResponse.first as Map);
-        final hydrated = await _client
-            .from('predios')
-            .select('*, propietarios(*)')
-            .eq('id', raw['id'])
-            .single();
-        return Predio.fromMap(hydrated);
-      }
-
-      final response = await _client
-          .from('predios')
-          .update({...payload, 'id_poligono': idPoligono})
-          .eq('id', idGestion)
-          .select('*, propietarios(*)')
-          .single();
-      return Predio.fromMap(response);
-    } on PostgrestException {
-      final response = await _client
-          .from('predios')
-          .update(payload)
-          .eq('id', idGestion)
-          .select('*, propietarios(*)')
-          .single();
-      return Predio.fromMap(response);
-    }
-  }
-
-  Future<String> uploadPredioPdf({
-    required String predioId,
-    required Uint8List bytes,
-    required String extension,
-  }) async {
-    if (_usingSheets) {
-      final fileName = '${DateTime.now().millisecondsSinceEpoch}.$extension';
-      return fileName;
-    }
-
-    final normalizedExtension = extension.toLowerCase();
-    final fileName = 'cop-dot-${DateTime.now().millisecondsSinceEpoch}.$normalizedExtension';
-    final path = 'predios/$predioId/$fileName';
-    await _client.storage.from('predios-archivos').uploadBinary(
-          path,
-          bytes,
-          fileOptions: const FileOptions(
-            upsert: true,
-            contentType: 'application/pdf',
-          ),
-        );
-    return _client.storage.from('predios-archivos').getPublicUrl(path);
+    return updated;
   }
 }

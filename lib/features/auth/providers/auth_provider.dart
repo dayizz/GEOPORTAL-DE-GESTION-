@@ -1,7 +1,7 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:supabase_flutter/supabase_flutter.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 
-const bool localOnlyAuthMode = true;
+const bool localOnlyAuthMode = false;
 const String localAdminEmail = 'admin@sao.mx';
 const String localAdminPassword = 'admin123';
 
@@ -24,26 +24,24 @@ final proyectoActivoProvider = StateProvider<String?>((ref) => null);
 final localAuthSessionProvider = StateProvider<bool>((ref) => false);
 
 // Provider del usuario autenticado
-final authStateProvider = StreamProvider<AuthState>((ref) {
-  return Supabase.instance.client.auth.onAuthStateChange;
+final authStateProvider = StreamProvider<User?>((ref) {
+  return FirebaseAuth.instance.authStateChanges();
 });
 
 final currentUserProvider = Provider<User?>((ref) {
   final authState = ref.watch(authStateProvider);
-  return authState.whenOrNull(
-    data: (state) => state.session?.user,
-  );
+  return authState.valueOrNull;
 });
 
 // Provider para operaciones de auth
 final authRepositoryProvider = Provider<AuthRepository>(
-  (ref) => AuthRepository(Supabase.instance.client),
+  (ref) => AuthRepository(FirebaseAuth.instance),
 );
 
 class AuthRepository {
-  final SupabaseClient _client;
+  final FirebaseAuth _auth;
 
-  AuthRepository(this._client);
+  AuthRepository(this._auth);
 
   Future<void> signInWithEmail(String email, String password) async {
     if (localOnlyAuthMode) {
@@ -54,12 +52,11 @@ class AuthRepository {
       throw Exception('Credenciales locales inválidas.');
     }
 
-    // Local-only fallback credentials when Supabase is not configured.
     if (email.trim().toLowerCase() == localAdminEmail &&
         password == localAdminPassword) {
       return;
     }
-    await _client.auth.signInWithPassword(
+    await _auth.signInWithEmailAndPassword(
       email: email,
       password: password,
     );
@@ -74,7 +71,7 @@ class AuthRepository {
         password == localAdminPassword) {
       return;
     }
-    await _client.auth.signUp(
+    await _auth.createUserWithEmailAndPassword(
       email: email,
       password: password,
     );
@@ -82,15 +79,15 @@ class AuthRepository {
 
   Future<void> signOut() async {
     if (localOnlyAuthMode) return;
-    await _client.auth.signOut();
+    await _auth.signOut();
   }
 
   Future<void> resetPassword(String email) async {
     if (localOnlyAuthMode) {
       throw Exception('Reset de contrasena no disponible en modo local');
     }
-    await _client.auth.resetPasswordForEmail(email);
+    await _auth.sendPasswordResetEmail(email: email);
   }
 
-  User? get currentUser => _client.auth.currentUser;
+  User? get currentUser => _auth.currentUser;
 }

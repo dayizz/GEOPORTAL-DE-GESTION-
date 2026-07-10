@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "24534879724",
+    "project_id": "geoportal-de-gestion",
+    "storage_bucket": "geoportal-de-gestion.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:24534879724:android:4be8117562c13b3aa344c9",
+        "android_client_info": {
+          "package_name": "com.geoportal.geoportal_predios"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyBsdrap7k73POLpen_OjFTPyrREem-riW8"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

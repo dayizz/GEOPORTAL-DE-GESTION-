@@ -21,21 +21,21 @@ Aplicación web Flutter para la gestión y visualización de predios catastrales
 | Navegación | go_router |
 | Mapas | flutter_map + OpenStreetMap |
 | Persistencia | shared_preferences (localStorage en web) |
-| Backend (opcional) | FastAPI (`backend/`) |
-| Base de datos (opcional) | Supabase (credenciales en `lib/core/supabase/supabase_config.dart`) |
+| Backend | Firebase (Auth + Firestore) |
+| Base de datos | Cloud Firestore |
 
 ## Estructura del proyecto
 
 ```
 lib/
-├── main.dart               # Punto de entrada, inicialización Supabase
+├── main.dart               # Punto de entrada, inicialización Firebase
 ├── app.dart                # MaterialApp + ThemeData
 ├── core/
 │   ├── constants/          # AppColors, AppStrings
+│   ├── firebase/           # FirebaseConfig (dart-define)
 │   ├── router/             # app_router.dart (rutas go_router)
-│   ├── supabase/           # SupabaseConfig (credenciales)
 │   ├── theme/              # AppTheme
-│   └── api/                # ApiClient (cliente HTTP para backend FastAPI)
+│   └── ...
 ├── features/
 │   ├── auth/               # Login, providers de autenticación y demo
 │   ├── carga/              # Importación de archivos GeoJSON/XLSX
@@ -49,7 +49,7 @@ lib/
 │   ├── reportes/           # Pantalla de reportes y estadísticas
 │   └── tabla/              # Tabla de gestión, detalle de gestión
 └── shared/
-    ├── services/           # BackendService (HTTP)
+   ├── services/           # Servicios auxiliares
     └── widgets/            # AppScaffold (navbar/sidebar compartido)
 ```
 
@@ -66,32 +66,50 @@ lib/
    flutter pub get
    ```
 
-3. (Opcional) Configura Supabase en `lib/core/supabase/supabase_config.dart`:
-   ```dart
-   static const String url = 'https://TU_PROJECT_ID.supabase.co';
-   static const String anonKey = 'TU_ANON_KEY';
-   ```
-   Sin configuración válida, la app funciona en modo local (localStorage).
-
-4. Construye para web:
+3. Configura Firebase por `--dart-define` (obligatorio):
    ```bash
-   flutter build web
+   --dart-define=FIREBASE_API_KEY=... \
+   --dart-define=FIREBASE_APP_ID=... \
+   --dart-define=FIREBASE_MESSAGING_SENDER_ID=... \
+   --dart-define=FIREBASE_PROJECT_ID=... \
+   --dart-define=FIREBASE_AUTH_DOMAIN=... \
+   --dart-define=FIREBASE_STORAGE_BUCKET=... \
+   --dart-define=FIREBASE_MEASUREMENT_ID=...
    ```
 
-5. Sirve localmente:
+4. Ejecuta web contra Firebase:
+   ```bash
+   flutter run -d web-server --web-hostname 127.0.0.1 --web-port 8080 \
+     --dart-define=FIREBASE_API_KEY=... \
+     --dart-define=FIREBASE_APP_ID=... \
+     --dart-define=FIREBASE_MESSAGING_SENDER_ID=... \
+     --dart-define=FIREBASE_PROJECT_ID=... \
+     --dart-define=FIREBASE_AUTH_DOMAIN=... \
+     --dart-define=FIREBASE_STORAGE_BUCKET=... \
+     --dart-define=FIREBASE_MEASUREMENT_ID=...
+   ```
+
+5. Construye para web:
+   ```bash
+   flutter build web \
+     --dart-define=FIREBASE_API_KEY=... \
+     --dart-define=FIREBASE_APP_ID=... \
+     --dart-define=FIREBASE_MESSAGING_SENDER_ID=... \
+     --dart-define=FIREBASE_PROJECT_ID=... \
+     --dart-define=FIREBASE_AUTH_DOMAIN=... \
+     --dart-define=FIREBASE_STORAGE_BUCKET=... \
+     --dart-define=FIREBASE_MEASUREMENT_ID=...
+   ```
+
+6. Sirve localmente:
    ```bash
    python3 -m http.server 8083 --directory build/web
    ```
    Abre `http://localhost:8083` en el navegador.
 
-## Backend FastAPI (opcional)
+## Backend
 
-```bash
-cd backend
-python3 -m venv .venv && source .venv/bin/activate
-pip install -r requirements.txt
-uvicorn app.main:app --host 0.0.0.0 --port 8000
-```
+El backend de la app es 100% Firebase (Authentication + Cloud Firestore).
 
 ## Ramas
 

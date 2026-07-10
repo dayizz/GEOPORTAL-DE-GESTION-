@@ -7,7 +7,7 @@ import 'package:file_picker/file_picker.dart';
 import 'package:go_router/go_router.dart';
 import 'package:share_plus/share_plus.dart';
 import '../../../core/constants/app_colors.dart';
-import '../../../core/supabase/supabase_config.dart';
+import '../../../core/firebase/firebase_config.dart';
 import '../../../shared/widgets/app_scaffold.dart';
 import '../../mapa/providers/mapa_provider.dart';
 import '../../predios/providers/predios_provider.dart';
@@ -464,7 +464,7 @@ class _CargaArchivoScreenState extends ConsumerState<CargaArchivoScreen> {
       if (resultado.errores > 0 && resultado.creados == 0 && resultado.encontrados == 0) {
         final detalle = resultado.mensajesError.isNotEmpty
             ? resultado.mensajesError.first
-            : 'Verifica que la migración SQL (sección 9 del supabase_schema.sql) haya sido ejecutada en Supabase.';
+            : 'Verifica que las colecciones y reglas de Firestore estén configuradas en Firebase.';
         _mostrarSnackBar('No se pudo registrar en Gestión.\n$detalle', exito: false);
       } else if (resultado.errores > 0) {
         _mostrarSnackBar(
@@ -717,8 +717,11 @@ class _CargaArchivoScreenState extends ConsumerState<CargaArchivoScreen> {
     final parseResult = _xlsxParseResult;
     if (parseResult == null) return;
 
-    if (!SupabaseConfig.isConfigured) {
-      await _inyectarXlsxLocal(parseResult);
+    if (!FirebaseConfig.isConfigured) {
+      _mostrarSnackBar(
+        'Firebase no esta configurado. Define FIREBASE_API_KEY, FIREBASE_APP_ID, FIREBASE_MESSAGING_SENDER_ID y FIREBASE_PROJECT_ID.',
+        exito: false,
+      );
       return;
     }
 
@@ -790,8 +793,8 @@ class _CargaArchivoScreenState extends ConsumerState<CargaArchivoScreen> {
       if (!mounted) return;
       setState(() => _sincronizando = false);
       _mostrarSnackBar(
-        !SupabaseConfig.isConfigured
-            ? 'Supabase no está configurado. Reemplaza la URL y la anon key reales en lib/core/supabase/supabase_config.dart antes de inyectar el XLSX.'
+        !FirebaseConfig.isConfigured
+          ? 'Firebase no está configurado. Define FIREBASE_API_KEY, FIREBASE_APP_ID, FIREBASE_MESSAGING_SENDER_ID y FIREBASE_PROJECT_ID antes de inyectar el XLSX.'
             : 'Error al inyectar XLSX: $e',
         exito: false,
       );

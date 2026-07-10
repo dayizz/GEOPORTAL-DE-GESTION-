@@ -33,7 +33,9 @@ dependencies:
   cupertino_icons: ^1.0.8
 
   # Backend
-  supabase_flutter: ^2.8.4
+  firebase_core: ^3.15.2
+  firebase_auth: ^5.6.2
+  cloud_firestore: ^5.6.11
 
   # Mapas
   flutter_map: ^7.0.2

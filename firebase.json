@@ -1,16 +1,1 @@
-{
-  "hosting": {
-    "public": "build/web",
-    "ignore": [
-      "firebase.json",
-      "**/.*",
-      "**/node_modules/**"
-    ],
-    "rewrites": [
-      {
-        "source": "**",
-        "destination": "/index.html"
-      }
-    ]
-  }
-}
+{"hosting":{"public":"build/web","ignore":["firebase.json","**/.*","**/node_modules/**"],"rewrites":[{"source":"**","destination":"/index.html"}]},"flutter":{"platforms":{"android":{"default":{"projectId":"geoportal-de-gestion","appId":"1:24534879724:android:4be8117562c13b3aa344c9","fileOutput":"android/app/google-services.json"}},"ios":{"default":{"projectId":"geoportal-de-gestion","appId":"1:24534879724:ios:c9a4eb21c3dae594a344c9","uploadDebugSymbols":false,"fileOutput":"ios/Runner/GoogleService-Info.plist"}},"macos":{"default":{"projectId":"geoportal-de-gestion","appId":"1:24534879724:ios:c9a4eb21c3dae594a344c9","uploadDebugSymbols":false,"fileOutput":"macos/Runner/GoogleService-Info.plist"}},"dart":{"lib/firebase_options.dart":{"projectId":"geoportal-de-gestion","configurations":{"android":"1:24534879724:android:4be8117562c13b3aa344c9","ios":"1:24534879724:ios:c9a4eb21c3dae594a344c9","macos":"1:24534879724:ios:c9a4eb21c3dae594a344c9","web":"1:24534879724:web:2d76a12f0c854191a344c9","windows":"1:24534879724:web:3e98df06fc880360a344c9"}}}}}}
