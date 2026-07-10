@@ -566,6 +566,12 @@ class SincronizacionService {
         't_f_s', 'T_F_S', 'tipofs', 'TIPO_FS',
       ]) ?? '',
       'tipo_propiedad': _resolveTipoPropiedad(props),
+      'estructura': _pickFlexible(props, [
+        'estructura', 'ESTRUCTURA',
+        'tipo_estructura', 'TIPO_ESTRUCTURA',
+        'clase_estructura', 'CLASE_ESTRUCTURA',
+        'estruc', 'ESTRUC',
+      ]),
       'ejido': _pick(props, [
         'ejido', 'nom_ejido', 'nombre_ejido', 'NOM_EJIDO', 'EJIDO',
         'comunidad', 'localidad',
@@ -791,6 +797,12 @@ class SincronizacionService {
 
     trySet('tramo',      _pick(props, ['tramo', 'TRAMO', 'tramo_vial', 'seccion', 'SECCION']));
     trySet('tipo_propiedad', _resolveTipoPropiedad(props), overwrite: true);
+    trySet('estructura', _pickFlexible(props, [
+      'estructura', 'ESTRUCTURA',
+      'tipo_estructura', 'TIPO_ESTRUCTURA',
+      'clase_estructura', 'CLASE_ESTRUCTURA',
+      'estruc', 'ESTRUC',
+    ]), overwrite: true);
     trySet('ejido',      _pick(props, ['ejido', 'EJIDO', 'nom_ejido', 'NOM_EJIDO', 'comunidad', 'localidad']));
     trySet('proyecto',   _resolveProyecto(props));
     trySet('propietario_nombre', _pick(props, [

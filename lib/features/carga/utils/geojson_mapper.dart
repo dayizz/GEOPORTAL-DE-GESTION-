@@ -54,6 +54,12 @@ class GeoJsonMapper {
       'regimen', 'REGIMEN',
       'tenencia', 'TENENCIA',
     ],
+    'estructura': [
+      'estructura', 'ESTRUCTURA',
+      'tipo_estructura', 'TIPO_ESTRUCTURA',
+      'clase_estructura', 'CLASE_ESTRUCTURA',
+      'estruc', 'ESTRUC',
+    ],
     'ejido': [
       'ejido', 'EJIDO',
       'nom_ejido', 'NOM_EJIDO',

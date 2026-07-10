@@ -212,6 +212,12 @@ ALTER TABLE predios
 ALTER TABLE predios
   ADD COLUMN IF NOT EXISTS tipo_liberacion      TEXT;
 
+-- ============================================================
+-- 10d. MIGRACIÓN: Campo estructura para gestión
+-- ============================================================
+ALTER TABLE predios
+  ADD COLUMN IF NOT EXISTS estructura           TEXT;
+
 -- Índice para búsqueda por estado/municipio
 CREATE INDEX IF NOT EXISTS idx_predios_estado     ON predios(estado);
 CREATE INDEX IF NOT EXISTS idx_predios_municipio  ON predios(municipio);

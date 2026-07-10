@@ -134,6 +134,12 @@ class XlsxImportService {
       'tenencia',
     ],
     'ejido': ['ejido', 'comunidad', 'localidad', 'municipio'],
+      'estructura': [
+        'estructura',
+        'tipo_estructura',
+        'clase_estructura',
+        'estruc',
+      ],
     'km_inicio': [
       'km_inicio',
       'km_inicial',
@@ -511,6 +517,9 @@ class XlsxImportService {
 
     final tipo = pick(_prediosAliases['tipo_propiedad']!);
     if (tipo != null) out['tipo_propiedad'] = _normalizeTipoPropiedadValue(tipo);
+
+    final estructura = pick(_prediosAliases['estructura']!);
+    if (estructura != null) out['estructura'] = _normalizePlainText(estructura);
 
     final ejido = pick(_prediosAliases['ejido']!);
     if (ejido != null) out['ejido'] = _normalizePlainText(ejido);

@@ -87,6 +87,7 @@ class LocalPrediosNotifier extends StateNotifier<List<Predio>> {
         propietarioNombre: _normalizeOptionalText(predio.propietarioNombre),
         tramo: _normalizeUpperCode(predio.tramo),
         tipoPropiedad: _normalizeTipoPropiedad(predio.tipoPropiedad),
+        estructura: _normalizeOptionalText(predio.estructura),
         ejido: _normalizeOptionalText(predio.ejido),
         proyecto: _normalizeProyecto(predio.proyecto),
         copFirmado: _normalizeOptionalText(predio.copFirmado),
@@ -178,6 +179,7 @@ class LocalPrediosNotifier extends StateNotifier<List<Predio>> {
         propietarioNombre: propietarioDetectado,
         tramo: _stringValue(normalized['tramo']) ?? '',
         tipoPropiedad: _normalizeTipoPropiedadValue(_stringValue(normalized['tipo_propiedad']) ?? _stringValue(props['tipo_propiedad'])),
+        estructura: _stringValue(normalized['estructura']) ?? _stringValue(props['estructura']),
         ejido: _stringValue(normalized['ejido']),
         estado: estado,
         municipio: municipio,
@@ -345,6 +347,7 @@ class LocalPrediosNotifier extends StateNotifier<List<Predio>> {
       tipoPropiedad: incoming.tipoPropiedad?.trim().isNotEmpty == true 
           ? incoming.tipoPropiedad!.trim() 
           : (existing.tipoPropiedad?.trim().isNotEmpty == true ? existing.tipoPropiedad!.trim() : 'PRIVADA'),
+        estructura: _preferNullableText(existing.estructura, incoming.estructura),
       ejido: _preferNullableText(existing.ejido, incoming.ejido),
         estado: _preferNullableText(existing.estado, incoming.estado),
         municipio: _preferNullableText(existing.municipio, incoming.municipio),
@@ -541,6 +544,7 @@ class LocalPrediosNotifier extends StateNotifier<List<Predio>> {
         a.propietarioNombre == b.propietarioNombre &&
         a.tramo == b.tramo &&
         a.tipoPropiedad == b.tipoPropiedad &&
+        a.estructura == b.estructura &&
         a.ejido == b.ejido &&
         a.proyecto == b.proyecto &&
         a.copFirmado == b.copFirmado &&

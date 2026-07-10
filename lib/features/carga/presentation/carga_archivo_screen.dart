@@ -874,6 +874,7 @@ class _CargaArchivoScreenState extends ConsumerState<CargaArchivoScreen> {
                 tipoPropiedad: _normalizeTipoPropiedad(
                     row['tipo_propiedad']?.toString().trim(),
                 ),
+                estructura: _optionalText(row['estructura']),
                 ejido: _optionalText(row['ejido']),
                 kmInicio: _toDouble(row['km_inicio']),
                 kmFin: _toDouble(row['km_fin']),

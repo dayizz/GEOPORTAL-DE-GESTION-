@@ -105,6 +105,12 @@ class PrediosRepository {
         'tenencia',
           ]) ??
           'PRIVADA',
+      'estructura': pickText([
+        'estructura', 'ESTRUCTURA',
+        'tipo_estructura', 'TIPO_ESTRUCTURA',
+        'clase_estructura', 'CLASE_ESTRUCTURA',
+        'estruc', 'ESTRUC',
+      ]),
       'ejido': raw['ejido']?.toString(),
       'estado': pickText(['estado', 'ESTADO', 'entidad', 'ENTIDAD', 'edo', 'EDO', 'state', 'STATE']),
       'municipio': pickText(['municipio', 'MUNICIPIO', 'mun', 'MUN', 'mpio', 'MPIO', 'municipality', 'MUNICIPALITY']),

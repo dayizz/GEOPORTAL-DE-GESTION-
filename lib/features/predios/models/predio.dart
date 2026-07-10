@@ -8,6 +8,7 @@ class Predio {
   final String? propietarioNombre; // Nombre directo del propietario
   final String tramo; // T1, T2, T3, T4
   final String tipoPropiedad; // SOCIAL, DOMINIO PLENO, PRIVADA
+  final String? estructura;
   final String? ejido;
   final String? estado;
   final String? municipio;
@@ -48,6 +49,7 @@ class Predio {
     this.propietarioNombre,
     required this.tramo,
     required this.tipoPropiedad,
+    this.estructura,
     this.ejido,
     this.estado,
     this.municipio,
@@ -186,6 +188,12 @@ class Predio {
           'tenencia',
         ]) ?? map['tipo_propiedad']?.toString(),
       ),
+      estructura: pickText([
+        'estructura', 'ESTRUCTURA',
+        'tipo_estructura', 'TIPO_ESTRUCTURA',
+        'clase_estructura', 'CLASE_ESTRUCTURA',
+        'estruc', 'ESTRUC',
+      ]),
       ejido: map['ejido'] as String?,
       estado: pickText([
         'estado', 'ESTADO',
@@ -245,6 +253,7 @@ class Predio {
       'propietario_nombre': propietarioNombre,
       'tramo': tramo,
       'tipo_propiedad': tipoPropiedad,
+      'estructura': estructura,
       'ejido': ejido,
       'estado': estado,
       'municipio': municipio,
@@ -293,6 +302,7 @@ class Predio {
     String? propietarioNombre,
     String? tramo,
     String? tipoPropiedad,
+    String? estructura,
     String? ejido,
     String? estado,
     String? municipio,
@@ -328,6 +338,7 @@ class Predio {
       propietarioNombre: propietarioNombre ?? this.propietarioNombre,
       tramo: tramo ?? this.tramo,
       tipoPropiedad: tipoPropiedad ?? this.tipoPropiedad,
+      estructura: estructura ?? this.estructura,
       ejido: ejido ?? this.ejido,
       estado: estado ?? this.estado,
       municipio: municipio ?? this.municipio,

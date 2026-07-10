@@ -9,6 +9,7 @@ import 'package:excel/excel.dart' hide Border;
 import 'package:share_plus/share_plus.dart';
 import 'dart:async';
 import 'dart:io';
+import 'dart:math' as math;
 import 'package:path_provider/path_provider.dart';
 import 'dart:html' as html;
 import '../../../shared/widgets/app_scaffold.dart';
@@ -34,6 +35,7 @@ class _TablaScreenState extends ConsumerState<TablaScreen> {
 
   final _searchCtrl = TextEditingController();
   final _verticalScroll = ScrollController();
+  final _horizontalScroll = ScrollController();
   final Map<String, Predio> _prediosOptimistas = {};
   List<Predio> _ultimosPredios = const [];
 
@@ -41,7 +43,7 @@ class _TablaScreenState extends ConsumerState<TablaScreen> {
   String _busqueda = '';
   String? _filtroTramo;
   String? _filtroTipo;
-  String? _filtroCop; // 'SI' | 'NO' | null
+  String? _filtroTipoLiberacion;
   String? _filtroEstatus; // 'Liberado' | 'No liberado' | null
 
   final _nf = NumberFormat('#,##0.00');
@@ -74,6 +76,7 @@ class _TablaScreenState extends ConsumerState<TablaScreen> {
   void dispose() {
     _searchCtrl.dispose();
     _verticalScroll.dispose();
+    _horizontalScroll.dispose();
     super.dispose();
   }
 
@@ -112,7 +115,7 @@ class _TablaScreenState extends ConsumerState<TablaScreen> {
   String? _lastProyecto;
   String? _lastTramo;
   String? _lastTipo;
-  String? _lastCop;
+  String? _lastTipoLiberacion;
   String? _lastEstatus;
   String? _lastBusqueda;
   List<Predio>? _lastFiltered;
@@ -122,7 +125,7 @@ class _TablaScreenState extends ConsumerState<TablaScreen> {
         _lastProyecto != _proyectoActual ||
         _lastTramo != _filtroTramo ||
         _lastTipo != _filtroTipo ||
-        _lastCop != _filtroCop ||
+      _lastTipoLiberacion != _filtroTipoLiberacion ||
         _lastEstatus != _filtroEstatus ||
         _lastBusqueda != _busqueda;
     if (!shouldRecompute && _lastFiltered != null) {
@@ -136,9 +139,9 @@ class _TablaScreenState extends ConsumerState<TablaScreen> {
         final estatus = p.cop ? 'Liberado' : 'No liberado';
         if (estatus != _filtroEstatus) return false;
       }
-      if (_filtroCop != null) {
-        final want = _filtroCop == 'SI';
-        if (p.cop != want) return false;
+      if (_filtroTipoLiberacion != null) {
+        final tipoLiberacion = _normalizarTipoLiberacion(p.tipoLiberacion);
+        if (tipoLiberacion != _filtroTipoLiberacion) return false;
       }
       if (_busqueda.isNotEmpty) {
         final q = _busqueda.toLowerCase();
@@ -152,11 +155,17 @@ class _TablaScreenState extends ConsumerState<TablaScreen> {
     _lastProyecto = _proyectoActual;
     _lastTramo = _filtroTramo;
     _lastTipo = _filtroTipo;
-    _lastCop = _filtroCop;
+    _lastTipoLiberacion = _filtroTipoLiberacion;
     _lastEstatus = _filtroEstatus;
     _lastBusqueda = _busqueda;
     _lastFiltered = filtered;
     return filtered;
+  }
+
+  String _normalizarTipoLiberacion(String? value) {
+    final text = (value ?? '').trim().toUpperCase();
+    if (text.isEmpty || text == '-') return 'SIN TIPO';
+    return text;
   }
 
   String _predioProyecto(Predio predio) {
@@ -212,6 +221,20 @@ class _TablaScreenState extends ConsumerState<TablaScreen> {
         .toList();
     tipos.sort((a, b) => a.compareTo(b));
     return tipos;
+  }
+
+  List<String> _opcionesTipoLiberacionProyecto(List<Predio> predios) {
+    final tiposLiberacion = predios
+        .where((predio) => _predioProyecto(predio) == _proyectoActual)
+        .map((predio) => _normalizarTipoLiberacion(predio.tipoLiberacion))
+        .toSet()
+        .toList();
+    tiposLiberacion.sort((a, b) {
+      if (a == 'SIN TIPO') return 1;
+      if (b == 'SIN TIPO') return -1;
+      return a.compareTo(b);
+    });
+    return tiposLiberacion;
   }
 
   int _compararCodigoAlfanumerico(String a, String b) {
@@ -312,7 +335,7 @@ class _TablaScreenState extends ConsumerState<TablaScreen> {
               _searchCtrl.clear();
               _filtroTramo = null;
               _filtroTipo = null;
-              _filtroCop = null;
+              _filtroTipoLiberacion = null;
               _filtroEstatus = null;
               _currentPage = 0;
             });
@@ -421,7 +444,7 @@ class _TablaScreenState extends ConsumerState<TablaScreen> {
       
       // Headers
       final headers = [
-        'CLAVE', 'PROYECTO', 'T/F/S', 'TIPO', 'ESTADO', 'MUNICIPIO', 
+        'CLAVE', 'PROYECTO', 'T/F/S', 'TIPO', 'ESTRUCTURA', 'ESTADO', 'MUNICIPIO', 
         'EJIDO', 'PROPIETARIO', 'KM INICIO', 'KM FIN', 'KM EFECTIVOS',
         'SUPERFICIE M2', 'COP', 'FECHA COP', 'ESTATUS',
         'IDENTIFICACION', 'LEVANTAMIENTO', 'NEGOCIACION', 'OBSERVACIONES'
@@ -439,6 +462,7 @@ class _TablaScreenState extends ConsumerState<TablaScreen> {
           _predioProyecto(p),
           p.tramo,
           p.tipoPropiedad,
+          p.estructura ?? '',
           p.estado ?? '',
           p.municipio ?? '',
           p.ejido ?? '',
@@ -612,7 +636,7 @@ class _TablaScreenState extends ConsumerState<TablaScreen> {
               TextButton.icon(
                 icon: const Icon(Icons.filter_alt_outlined, size: 18),
                 label: Text(
-                  'Filtros${_filtroTramo != null || _filtroTipo != null || _filtroCop != null || _filtroEstatus != null ? ' ✓' : ''}',
+                  'Filtros${_filtroTramo != null || _filtroTipo != null || _filtroTipoLiberacion != null || _filtroEstatus != null ? ' ✓' : ''}',
                 ),
                 style: TextButton.styleFrom(
                   padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
@@ -629,7 +653,7 @@ class _TablaScreenState extends ConsumerState<TablaScreen> {
               style: const TextStyle(fontSize: 12, color: AppColors.textSecondary),
             ),
           ),
-          if (_filtroTramo != null || _filtroTipo != null || _filtroCop != null || _filtroEstatus != null) ...[
+          if (_filtroTramo != null || _filtroTipo != null || _filtroTipoLiberacion != null || _filtroEstatus != null) ...[
             const SizedBox(height: 6),
             SingleChildScrollView(
               scrollDirection: Axis.horizontal,
@@ -658,15 +682,13 @@ class _TablaScreenState extends ConsumerState<TablaScreen> {
                         visualDensity: VisualDensity.compact,
                       ),
                     ),
-                  if (_filtroCop != null)
+                  if (_filtroTipoLiberacion != null)
                     Padding(
                       padding: const EdgeInsets.only(right: 6),
                       child: Chip(
-                        label: Text('COP: $_filtroCop'),
-                        onDeleted: () => setState(() => _filtroCop = null),
-                        backgroundColor: _filtroCop == 'SI'
-                            ? AppColors.secondary.withValues(alpha: 0.15)
-                            : AppColors.danger.withValues(alpha: 0.15),
+                        label: Text('Tipo liberacion: $_filtroTipoLiberacion'),
+                        onDeleted: () => setState(() => _filtroTipoLiberacion = null),
+                        backgroundColor: AppColors.info.withValues(alpha: 0.15),
                         deleteIcon: const Icon(Icons.close, size: 14),
                         materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
                         visualDensity: VisualDensity.compact,
@@ -713,6 +735,7 @@ class _TablaScreenState extends ConsumerState<TablaScreen> {
        44, // ACCIONES
        55, // VER MAPA
       180, // CLAVE
+       90, // ESTRUCTURA
        50, // T/F/S
        90, // TIPO
        95, // ESTADO
@@ -734,7 +757,7 @@ class _TablaScreenState extends ConsumerState<TablaScreen> {
     ];
 
     const headers = <String>[
-      '', 'MAPA', 'CLAVE', 'T/F/S', 'TIPO', 'ESTADO', 'MUNICIPIO', 'EJIDO', 'PROPIETARIOS',
+      '', 'MAPA', 'CLAVE', 'ESTRUCTURA', 'T/F/S', 'TIPO', 'ESTADO', 'MUNICIPIO', 'EJIDO', 'PROPIETARIOS',
       'KM INICIO', 'KM FIN', 'KM EF', 'M²', 'TIPO\nLIBERACION',
       'COP/DOT', 'FECHA', 'ESTATUS',
       'IDENT.', 'LEVANT.', 'NEGOC.', 'OBSERVACIONES',
@@ -743,28 +766,39 @@ class _TablaScreenState extends ConsumerState<TablaScreen> {
     return LayoutBuilder(
       builder: (ctx, constraints) {
         final rawTotal = rawWidths.reduce((a, b) => a + b) + rawWidths.length * 1.0;
-        final scale = (constraints.maxWidth / rawTotal).clamp(0.45, 1.4);
-        final colWidths = rawWidths.map((w) => w * scale).toList();
-        final totalWidth = constraints.maxWidth;
+        final colWidths = List<double>.from(rawWidths);
+        final totalWidth = math.max(constraints.maxWidth, rawTotal);
 
         return Scrollbar(
-          controller: _verticalScroll,
+          controller: _horizontalScroll,
           thumbVisibility: true,
-          child: Column(
-            children: [
-              // Header fijo
-              _buildHeaderRow(headers, colWidths, totalWidth),
-              const Divider(height: 1, thickness: 1.5, color: AppColors.border),
-              // Filas
-              Expanded(
-                child: ListView.builder(
-                  controller: _verticalScroll,
-                  itemCount: rows.length,
-                  itemExtent: 38,
-                  itemBuilder: (ctx2, idx) => _buildDataRow(rows[idx], colWidths, idx),
+          notificationPredicate: (notification) => notification.depth == 0,
+          child: SingleChildScrollView(
+            controller: _horizontalScroll,
+            scrollDirection: Axis.horizontal,
+            child: SizedBox(
+              width: totalWidth,
+              child: Scrollbar(
+                controller: _verticalScroll,
+                thumbVisibility: true,
+                child: Column(
+                  children: [
+                    // Header fijo
+                    _buildHeaderRow(headers, colWidths, totalWidth),
+                    const Divider(height: 1, thickness: 1.5, color: AppColors.border),
+                    // Filas
+                    Expanded(
+                      child: ListView.builder(
+                        controller: _verticalScroll,
+                        itemCount: rows.length,
+                        itemExtent: 38,
+                        itemBuilder: (ctx2, idx) => _buildDataRow(rows[idx], colWidths, idx),
+                      ),
+                    ),
+                  ],
                 ),
               ),
-            ],
+            ),
           ),
         );
       },
@@ -1075,37 +1109,39 @@ class _TablaScreenState extends ConsumerState<TablaScreen> {
           _dataCell(p.claveCatastral, widths[2],
               style: const TextStyle(fontSize: 11, fontFamily: 'monospace'),
               color: tipoColor.withValues(alpha: 0.08)),
+            // ESTRUCTURA
+            _dataCell(p.estructura ?? '-', widths[3]),
           // T/F/S
-          _tramoBadgeCell(p.tramo, widths[3]),
+            _tramoBadgeCell(p.tramo, widths[4]),
           // TIPO
-          _tipoBadgeCell(p.tipoPropiedad, tipoColor, widths[4]),
+            _tipoBadgeCell(p.tipoPropiedad, tipoColor, widths[5]),
           // ESTADO
-          _dataCell((p.estado == null || p.estado!.isEmpty) ? '-' : p.estado!, widths[5]),
+          _dataCell((p.estado == null || p.estado!.isEmpty) ? '-' : p.estado!, widths[6]),
           // MUNICIPIO
-          _dataCell((p.municipio == null || p.municipio!.isEmpty) ? '-' : p.municipio!, widths[6]),
+          _dataCell((p.municipio == null || p.municipio!.isEmpty) ? '-' : p.municipio!, widths[7]),
           // EJIDO
-          _dataCell(p.ejido ?? '-', widths[7]),
+          _dataCell(p.ejido ?? '-', widths[8]),
           // PROPIETARIOS
-          _dataCell(p.propietarioNombre ?? '-', widths[8]),
+          _dataCell(p.propietarioNombre ?? '-', widths[9]),
           // KM INICIO
-          _numCell(p.kmInicio, widths[9], decimals: 4),
+          _numCell(p.kmInicio, widths[10], decimals: 4),
           // KM FIN
-          _numCell(p.kmFin, widths[10], decimals: 4),
+          _numCell(p.kmFin, widths[11], decimals: 4),
           // KM EF
-          _numCell(p.kmEfectivos, widths[11], decimals: 4),
+          _numCell(p.kmEfectivos, widths[12], decimals: 4),
           // M²
-          _numCell(p.superficie, widths[12], decimals: 2),
+          _numCell(p.superficie, widths[13], decimals: 2),
           // TIPO LIBERACION
-          _dataCell(p.tipoLiberacion ?? '-', widths[13]),
+          _dataCell(p.tipoLiberacion ?? '-', widths[14]),
           // COP/DOT PDF (icono de estado)
-          _copPdfIndicatorCell(p, widths[14]),
+          _copPdfIndicatorCell(p, widths[15]),
           // FECHA COP/DOT
-          _dataCell(_copFechaLabel(p), widths[15]),
+          _dataCell(_copFechaLabel(p), widths[16]),
           // ESTATUS
-          _estatusCell(p, widths[16]),
+          _estatusCell(p, widths[17]),
           // IDENTIFICACION (tappable)
           _tappableBoolCell(
-            p.identificacion, widths[17],
+            p.identificacion, widths[18],
             onTap: () => _savePredio(
               p,
               p.copyWith(
@@ -1116,7 +1152,7 @@ class _TablaScreenState extends ConsumerState<TablaScreen> {
           ),
           // LEVANTAMIENTO (tappable)
           _tappableBoolCell(
-            p.levantamiento, widths[18],
+            p.levantamiento, widths[19],
             onTap: () => _savePredio(
               p,
               p.copyWith(
@@ -1127,7 +1163,7 @@ class _TablaScreenState extends ConsumerState<TablaScreen> {
           ),
           // NEGOCIACION (tappable)
           _tappableBoolCell(
-            p.negociacion, widths[19],
+            p.negociacion, widths[20],
             onTap: () => _savePredio(
               p,
               p.copyWith(
@@ -1137,7 +1173,7 @@ class _TablaScreenState extends ConsumerState<TablaScreen> {
             ),
           ),
           // OBSERVACIONES (antes situacion social)
-          _dataCell(p.situacionSocial ?? '-', widths[20]),
+          _dataCell(p.situacionSocial ?? '-', widths[21]),
         ],
       ),
     );
@@ -1479,10 +1515,11 @@ class _TablaScreenState extends ConsumerState<TablaScreen> {
   void _showFiltros(BuildContext context, List<Predio> allPredios) {
     String? tramo = _filtroTramo;
     String? tipo = _filtroTipo;
-    String? cop = _filtroCop;
+    String? tipoLiberacion = _filtroTipoLiberacion;
     String? estatus = _filtroEstatus;
     final tramos = _opcionesTramoProyecto(allPredios);
     final tipos = _opcionesTipoProyecto(allPredios);
+    final tiposLiberacion = _opcionesTipoLiberacionProyecto(allPredios);
     final tieneDatosProyecto =
         allPredios.any((predio) => _predioProyecto(predio) == _proyectoActual);
 
@@ -1520,7 +1557,7 @@ class _TablaScreenState extends ConsumerState<TablaScreen> {
                         setS(() {
                           tramo = null;
                           tipo = null;
-                          cop = null;
+                          tipoLiberacion = null;
                           estatus = null;
                         });
                       },
@@ -1595,7 +1632,7 @@ class _TablaScreenState extends ConsumerState<TablaScreen> {
                 ),
                 const SizedBox(height: 16),
                 Text(
-                  'C.O.P.',
+                  'Tipo de liberacion',
                   style: Theme.of(ctx).textTheme.labelLarge?.copyWith(
                         color: AppColors.textPrimary,
                         fontWeight: FontWeight.w700,
@@ -1605,24 +1642,18 @@ class _TablaScreenState extends ConsumerState<TablaScreen> {
                 Wrap(
                   spacing: 8,
                   runSpacing: 6,
-                  children: [
-                    FilterChip(
-                      label: const Text('Con COP'),
-                      labelStyle: const TextStyle(color: AppColors.textPrimary),
-                      checkmarkColor: AppColors.secondary,
-                      selected: cop == 'SI',
-                      onSelected: (v) => setS(() => cop = v ? 'SI' : null),
-                      selectedColor: AppColors.secondary.withValues(alpha: 0.2),
-                    ),
-                    FilterChip(
-                      label: const Text('Sin COP'),
-                      labelStyle: const TextStyle(color: AppColors.textPrimary),
-                      checkmarkColor: AppColors.danger,
-                      selected: cop == 'NO',
-                      onSelected: (v) => setS(() => cop = v ? 'NO' : null),
-                      selectedColor: AppColors.danger.withValues(alpha: 0.2),
-                    ),
-                  ],
+                  children: tiposLiberacion
+                      .map(
+                        (t) => FilterChip(
+                          label: Text(t),
+                          labelStyle: const TextStyle(color: AppColors.textPrimary),
+                          checkmarkColor: AppColors.info,
+                          selected: tipoLiberacion == t,
+                          onSelected: (v) => setS(() => tipoLiberacion = v ? t : null),
+                          selectedColor: AppColors.info.withValues(alpha: 0.2),
+                        ),
+                      )
+                      .toList(),
                 ),
                 const SizedBox(height: 16),
                 Text(
@@ -1669,7 +1700,7 @@ class _TablaScreenState extends ConsumerState<TablaScreen> {
                       setState(() {
                         _filtroTramo = tramo;
                         _filtroTipo = tipo;
-                        _filtroCop = cop;
+                        _filtroTipoLiberacion = tipoLiberacion;
                         _filtroEstatus = estatus;
                       });
                       Navigator.pop(ctx);
