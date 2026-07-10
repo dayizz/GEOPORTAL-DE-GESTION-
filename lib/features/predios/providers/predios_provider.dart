@@ -51,14 +51,19 @@ final prediosListProvider = FutureProvider<List<Predio>>((ref) async {
   final locales = ref.watch(localPrediosProvider);
   // Filtro por proyecto de sesión (null = admin, ve todos)
   final proyectoSesion = ref.watch(proyectoActivoProvider);
+  final allowedProjects = ref.watch(currentUserAssignedProjectsProvider);
+  final canAccessAllProjects = ref.watch(canAccessAllProjectsProvider);
   final repo = ref.read(prediosRepositoryProvider);
   List<Predio> remotos = const [];
   try {
+    final proyectoFiltro = filtros.proyecto ?? proyectoSesion;
     remotos = await repo.getPredios(
       busqueda: filtros.busqueda,
       usoSuelo: filtros.usoSuelo,
       zona: filtros.zona,
       propietarioId: filtros.propietarioId,
+      proyecto: proyectoFiltro,
+      proyectosPermitidos: canAccessAllProjects ? null : allowedProjects,
       limit: 100000,
     );
   } catch (_) {
@@ -134,10 +139,16 @@ final prediosMapaProvider = FutureProvider<List<Predio>>((ref) async {
   ref.keepAlive();
   final locales = ref.watch(localPrediosProvider);
   final proyectoSesion = ref.watch(proyectoActivoProvider);
+  final allowedProjects = ref.watch(currentUserAssignedProjectsProvider);
+  final canAccessAllProjects = ref.watch(canAccessAllProjectsProvider);
   final repo = ref.read(prediosRepositoryProvider);
   List<Predio> remotos = const [];
   try {
-    remotos = await repo.getPredios(limit: 100000);
+    remotos = await repo.getPredios(
+      proyecto: proyectoSesion,
+      proyectosPermitidos: canAccessAllProjects ? null : allowedProjects,
+      limit: 100000,
+    );
   } catch (_) {
     remotos = const [];
   }

@@ -1,8 +1,12 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:flutter/services.dart';
+import 'package:firebase_auth/firebase_auth.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:uuid/uuid.dart';
 import '../../../shared/widgets/app_scaffold.dart';
 import '../../../core/constants/app_colors.dart';
+import '../../auth/providers/auth_provider.dart';
 
 // ============================================================
 // MODELOS
@@ -43,6 +47,29 @@ class Usuario {
       createdAt: createdAt ?? this.createdAt,
     );
   }
+
+  factory Usuario.fromFirestore(DocumentSnapshot<Map<String, dynamic>> doc) {
+    final data = doc.data() ?? <String, dynamic>{};
+    final createdAtRaw = data['created_at'];
+    final createdAt = createdAtRaw is Timestamp
+        ? createdAtRaw.toDate()
+        : DateTime.now();
+
+    return Usuario(
+      id: doc.id,
+      nombre: (data['nombre'] as String?)?.trim().isNotEmpty == true
+          ? (data['nombre'] as String).trim()
+          : 'Usuario',
+      correo: (data['correo'] as String?)?.trim() ?? '',
+      perfil: (data['perfil'] as String?)?.trim().isNotEmpty == true
+          ? (data['perfil'] as String).trim()
+          : 'Operativo auxiliar',
+      proyectos: (data['proyectos'] as List<dynamic>? ?? const [])
+          .whereType<String>()
+          .toList(),
+      createdAt: createdAt,
+    );
+  }
 }
 
 /// Modelo para proyectos del sistema
@@ -79,56 +106,22 @@ class ProyectoItem {
 }
 
 // ============================================================
-// PROVIDERS (Estado en memoria)
+// PROVIDERS
 // ============================================================
 
-/// Provider para usuarios
-final usuariosProvider = StateNotifierProvider<UsuariosNotifier, List<Usuario>>((ref) {
-  return UsuariosNotifier();
+final usuariosCollectionProvider =
+    Provider<CollectionReference<Map<String, dynamic>>>((ref) {
+  return FirebaseFirestore.instance.collection('usuarios_sistema');
 });
 
-class UsuariosNotifier extends StateNotifier<List<Usuario>> {
-  UsuariosNotifier() : super(_usuariosIniciales);
-
-  static final _usuariosIniciales = [
-    Usuario(
-      id: const Uuid().v4(),
-      nombre: 'Juan Pérez García',
-      correo: 'juan.perez@lddv.com',
-      perfil: 'Administrador',
-      proyectos: ['TQI', 'TSNL'],
-      createdAt: DateTime.now(),
-    ),
-    Usuario(
-      id: const Uuid().v4(),
-      nombre: 'María Rodríguez',
-      correo: 'maria.rodriguez@lddv.com',
-      perfil: 'Gestor de proyecto',
-      proyectos: ['TAP'],
-      createdAt: DateTime.now(),
-    ),
-    Usuario(
-      id: const Uuid().v4(),
-      nombre: 'Carlos López',
-      correo: 'carlos.lopez@lddv.com',
-      perfil: 'Operativo auxiliar',
-      proyectos: ['TQM', 'TQI'],
-      createdAt: DateTime.now(),
-    ),
-  ];
-
-  void agregarUsuario(Usuario usuario) {
-    state = [...state, usuario];
-  }
-
-  void actualizarUsuario(Usuario usuario) {
-    state = state.map((u) => u.id == usuario.id ? usuario : u).toList();
-  }
-
-  void eliminarUsuario(String id) {
-    state = state.where((u) => u.id != id).toList();
-  }
-}
+/// Stream de usuarios persistidos en Firestore
+final usuariosProvider = StreamProvider<List<Usuario>>((ref) {
+  final collection = ref.watch(usuariosCollectionProvider);
+  return collection
+      .snapshots()
+      .map((snapshot) =>
+          snapshot.docs.map(Usuario.fromFirestore).toList(growable: false));
+});
 
 /// Provider para proyectos
 final proyectosItemsProvider = StateNotifierProvider<ProyectosItemsNotifier, List<ProyectoItem>>((ref) {
@@ -256,28 +249,313 @@ class _EstructuraScreenState extends ConsumerState<EstructuraScreen> with Single
 // SECCIÓN 1: CUENTAS DE USUARIO
 // ============================================================
 
-class _CuentasUsuarioTab extends ConsumerWidget {
+class _CuentasUsuarioTab extends ConsumerStatefulWidget {
   const _CuentasUsuarioTab();
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final usuarios = ref.watch(usuariosProvider);
+  ConsumerState<_CuentasUsuarioTab> createState() => _CuentasUsuarioTabState();
+}
+
+class _CuentasUsuarioTabState extends ConsumerState<_CuentasUsuarioTab> {
+  final TextEditingController _searchCtrl = TextEditingController();
+  String _selectedRole = 'Todos';
+
+  @override
+  void dispose() {
+    _searchCtrl.dispose();
+    super.dispose();
+  }
+
+  bool _matchesFilters(Usuario usuario) {
+    final q = _searchCtrl.text.trim().toLowerCase();
+    final byRole = _selectedRole == 'Todos' || usuario.perfil == _selectedRole;
+    if (q.isEmpty) return byRole;
+
+    final matchesText = usuario.nombre.toLowerCase().contains(q) ||
+        usuario.correo.toLowerCase().contains(q) ||
+        usuario.proyectos.any((p) => p.toLowerCase().contains(q));
+    return byRole && matchesText;
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    ref.watch(ensureCurrentUserProfileProvider);
+    final usuariosAsync = ref.watch(usuariosProvider);
+    final authUser = ref.watch(currentUserProvider) ?? FirebaseAuth.instance.currentUser;
+    final currentIsAdminAsync = ref.watch(currentUserIsAdminProvider);
+    final currentPerfil = ref.watch(currentUserPerfilProvider);
+    final isAdmin = currentIsAdminAsync.valueOrNull == true ||
+        isPerfilAdministrador(currentPerfil) ||
+        isAdminApproverUser(authUser);
+    final canViewUsers = isAdmin || canViewEstructura(currentPerfil);
+
+    if (currentIsAdminAsync.isLoading && !canViewUsers) {
+      return const Center(child: CircularProgressIndicator());
+    }
+
+    if (!canViewUsers) {
+      return const Center(
+        child: Padding(
+          padding: EdgeInsets.all(24),
+          child: Text(
+            'Tu perfil no tiene acceso a Estructura.\n\n'
+            'Administrador: gestion completa\n'
+            'Gestor de proyecto: consulta de estructura\n'
+            'Operativo auxiliar: sin acceso',
+            textAlign: TextAlign.center,
+          ),
+        ),
+      );
+    }
 
     return Scaffold(
-      body: usuarios.isEmpty
-          ? _buildEmptyState(context, ref)
-          : _buildUsuariosList(context, ref, usuarios),
-      floatingActionButton: FloatingActionButton.extended(
-        onPressed: () => _showAgregarUsuarioDialog(context, ref),
-        icon: const Icon(Icons.person_add),
-        label: const Text('Nuevo Usuario'),
-        backgroundColor: AppColors.primary,
-        foregroundColor: Colors.white,
+      body: Column(
+        children: [
+          Padding(
+            padding: const EdgeInsets.fromLTRB(16, 16, 16, 0),
+            child: _buildPermissionsCard(currentPerfil),
+          ),
+          if (isAdmin)
+            Padding(
+              padding: const EdgeInsets.fromLTRB(16, 16, 16, 0),
+              child: _buildAdminApprovalCard(context, ref),
+            ),
+          Expanded(
+            child: usuariosAsync.when(
+              data: (usuarios) {
+                final filtrados = usuarios.where(_matchesFilters).toList();
+                if (usuarios.isEmpty) {
+                  return _buildEmptyState(context, ref, isAdmin: isAdmin);
+                }
+                return Column(
+                  children: [
+                    Padding(
+                      padding: const EdgeInsets.fromLTRB(16, 12, 16, 0),
+                      child: _buildResumenUsuarios(usuarios),
+                    ),
+                    Padding(
+                      padding: const EdgeInsets.fromLTRB(16, 12, 16, 0),
+                      child: _buildFiltros(),
+                    ),
+                    Expanded(
+                      child: filtrados.isEmpty
+                          ? const Center(child: Text('No hay usuarios con ese filtro'))
+                          : _buildUsuariosList(context, ref, filtrados, isAdmin: isAdmin),
+                    ),
+                  ],
+                );
+              },
+              loading: () => const Center(child: CircularProgressIndicator()),
+              error: (error, _) => Center(
+                child: Padding(
+                  padding: const EdgeInsets.all(24),
+                  child: Text(
+                    'No fue posible cargar usuarios: $error',
+                    style: const TextStyle(color: AppColors.danger),
+                  ),
+                ),
+              ),
+            ),
+          ),
+        ],
+      ),
+      floatingActionButton: isAdmin
+          ? FloatingActionButton.extended(
+              onPressed: () => _showAgregarUsuarioDialog(context, ref),
+              icon: const Icon(Icons.person_add),
+              label: const Text('Nuevo Usuario'),
+              backgroundColor: AppColors.primary,
+              foregroundColor: Colors.white,
+            )
+          : null,
+    );
+  }
+
+  Widget _buildResumenUsuarios(List<Usuario> usuarios) {
+    final admins = usuarios.where((u) => u.perfil == perfilAdministrador).length;
+    final gestores = usuarios.where((u) => u.perfil == perfilGestorProyecto).length;
+    final operativos = usuarios.where((u) => u.perfil == perfilOperativoAuxiliar).length;
+
+    Widget metric(String label, int value, Color color) {
+      return Expanded(
+        child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+          decoration: BoxDecoration(
+            color: color.withValues(alpha: 0.1),
+            borderRadius: BorderRadius.circular(10),
+            border: Border.all(color: color.withValues(alpha: 0.25)),
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                '$value',
+                style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: color),
+              ),
+              const SizedBox(height: 2),
+              Text(label, style: const TextStyle(fontSize: 12)),
+            ],
+          ),
+        ),
+      );
+    }
+
+    return Row(
+      children: [
+        metric('Total', usuarios.length, AppColors.primary),
+        const SizedBox(width: 8),
+        metric('Admins', admins, Colors.red),
+        const SizedBox(width: 8),
+        metric('Gestores', gestores, Colors.blue),
+        const SizedBox(width: 8),
+        metric('Operativos', operativos, Colors.green),
+      ],
+    );
+  }
+
+  Widget _buildFiltros() {
+    return Column(
+      children: [
+        TextField(
+          controller: _searchCtrl,
+          onChanged: (_) => setState(() {}),
+          decoration: InputDecoration(
+            hintText: 'Buscar por nombre, correo o proyecto',
+            prefixIcon: const Icon(Icons.search),
+            suffixIcon: _searchCtrl.text.isEmpty
+                ? null
+                : IconButton(
+                    onPressed: () {
+                      _searchCtrl.clear();
+                      setState(() {});
+                    },
+                    icon: const Icon(Icons.clear),
+                  ),
+            border: const OutlineInputBorder(),
+          ),
+        ),
+        const SizedBox(height: 10),
+        Wrap(
+          spacing: 8,
+          runSpacing: 8,
+          children: ['Todos', perfilAdministrador, perfilGestorProyecto, perfilOperativoAuxiliar]
+              .map(
+                (rol) => ChoiceChip(
+                  label: Text(rol),
+                  selected: _selectedRole == rol,
+                  onSelected: (_) => setState(() => _selectedRole = rol),
+                ),
+              )
+              .toList(),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildPermissionsCard(String perfil) {
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.all(14),
+        child: Row(
+          children: [
+            const Icon(Icons.admin_panel_settings_outlined, color: AppColors.primary),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Text(
+                'Perfil activo: $perfil. '
+                'Administrador: gestiona usuarios, proyectos y codigos. '
+                'Gestor: consulta estructura. '
+                'Operativo: sin acceso a estructura.',
+                style: const TextStyle(fontSize: 13),
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }
 
-  Widget _buildEmptyState(BuildContext context, WidgetRef ref) {
+  Widget _buildAdminApprovalCard(BuildContext context, WidgetRef ref) {
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Text(
+              'Aprobacion de Usuarios',
+              style: TextStyle(
+                fontSize: 16,
+                fontWeight: FontWeight.bold,
+              ),
+            ),
+            const SizedBox(height: 8),
+            const Text(
+              'Genera un codigo de aprobacion para habilitar el registro de un nuevo usuario. '
+              'Cada codigo se puede usar una sola vez y vence automaticamente.',
+              style: TextStyle(fontSize: 13, color: AppColors.textSecondary),
+            ),
+            const SizedBox(height: 12),
+            ElevatedButton.icon(
+              onPressed: () => _generarCodigoAprobacion(context, ref),
+              icon: const Icon(Icons.password_rounded),
+              label: const Text('Generar codigo de aprobacion'),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Future<void> _generarCodigoAprobacion(BuildContext context, WidgetRef ref) async {
+    try {
+      final code = await ref.read(authRepositoryProvider).generateApprovalCode();
+      if (!context.mounted) return;
+      await showDialog<void>(
+        context: context,
+        builder: (ctx) {
+          return AlertDialog(
+            title: const Text('Codigo generado'),
+            content: SelectableText(
+              code,
+              style: const TextStyle(
+                fontSize: 22,
+                fontWeight: FontWeight.w700,
+                letterSpacing: 1.5,
+              ),
+            ),
+            actions: [
+              TextButton(
+                onPressed: () async {
+                  await Clipboard.setData(ClipboardData(text: code));
+                  if (ctx.mounted) {
+                    ScaffoldMessenger.of(ctx).showSnackBar(
+                      const SnackBar(content: Text('Codigo copiado al portapapeles.')),
+                    );
+                  }
+                },
+                child: const Text('Copiar'),
+              ),
+              TextButton(
+                onPressed: () => Navigator.of(ctx).pop(),
+                child: const Text('Cerrar'),
+              ),
+            ],
+          );
+        },
+      );
+    } catch (e) {
+      if (!context.mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(e.toString().replaceAll('Exception: ', '')),
+          backgroundColor: AppColors.danger,
+        ),
+      );
+    }
+  }
+
+  Widget _buildEmptyState(BuildContext context, WidgetRef ref, {required bool isAdmin}) {
     return Center(
       child: Column(
         mainAxisSize: MainAxisSize.min,
@@ -288,18 +566,25 @@ class _CuentasUsuarioTab extends ConsumerWidget {
             'No hay usuarios registrados',
             style: TextStyle(fontSize: 16, color: Colors.grey[600]),
           ),
-          const SizedBox(height: 8),
-          ElevatedButton.icon(
-            onPressed: () => _showAgregarUsuarioDialog(context, ref),
-            icon: const Icon(Icons.person_add),
-            label: const Text('Agregar Usuario'),
-          ),
+          if (isAdmin) ...[
+            const SizedBox(height: 8),
+            ElevatedButton.icon(
+              onPressed: () => _showAgregarUsuarioDialog(context, ref),
+              icon: const Icon(Icons.person_add),
+              label: const Text('Agregar Usuario'),
+            ),
+          ],
         ],
       ),
     );
   }
 
-  Widget _buildUsuariosList(BuildContext context, WidgetRef ref, List<Usuario> usuarios) {
+  Widget _buildUsuariosList(
+    BuildContext context,
+    WidgetRef ref,
+    List<Usuario> usuarios, {
+    required bool isAdmin,
+  }) {
     return ListView.builder(
       padding: const EdgeInsets.all(16),
       itemCount: usuarios.length,
@@ -361,37 +646,39 @@ class _CuentasUsuarioTab extends ConsumerWidget {
                 ),
               ],
             ),
-            trailing: PopupMenuButton<String>(
-              onSelected: (value) {
-                if (value == 'editar') {
-                  _showEditarUsuarioDialog(context, ref, usuario);
-                } else if (value == 'eliminar') {
-                  _showEliminarUsuarioDialog(context, ref, usuario);
-                }
-              },
-              itemBuilder: (context) => [
-                const PopupMenuItem(
-                  value: 'editar',
-                  child: Row(
-                    children: [
-                      Icon(Icons.edit, size: 18),
-                      SizedBox(width: 8),
-                      Text('Editar'),
+            trailing: isAdmin
+                ? PopupMenuButton<String>(
+                    onSelected: (value) {
+                      if (value == 'editar') {
+                        _showEditarUsuarioDialog(context, ref, usuario);
+                      } else if (value == 'eliminar') {
+                        _showEliminarUsuarioDialog(context, ref, usuario);
+                      }
+                    },
+                    itemBuilder: (context) => [
+                      const PopupMenuItem(
+                        value: 'editar',
+                        child: Row(
+                          children: [
+                            Icon(Icons.edit, size: 18),
+                            SizedBox(width: 8),
+                            Text('Editar'),
+                          ],
+                        ),
+                      ),
+                      const PopupMenuItem(
+                        value: 'eliminar',
+                        child: Row(
+                          children: [
+                            Icon(Icons.delete, size: 18, color: AppColors.danger),
+                            SizedBox(width: 8),
+                            Text('Eliminar', style: TextStyle(color: AppColors.danger)),
+                          ],
+                        ),
+                      ),
                     ],
-                  ),
-                ),
-                const PopupMenuItem(
-                  value: 'eliminar',
-                  child: Row(
-                    children: [
-                      Icon(Icons.delete, size: 18, color: AppColors.danger),
-                      SizedBox(width: 8),
-                      Text('Eliminar', style: TextStyle(color: AppColors.danger)),
-                    ],
-                  ),
-                ),
-              ],
-            ),
+                  )
+                : null,
           ),
         );
       },
@@ -401,13 +688,13 @@ class _CuentasUsuarioTab extends ConsumerWidget {
   Widget _buildPerfilChip(String perfil) {
     Color color;
     switch (perfil) {
-      case 'Administrador':
+      case perfilAdministrador:
         color = Colors.red;
         break;
-      case 'Gestor de proyecto':
+      case perfilGestorProyecto:
         color = Colors.blue;
         break;
-      case 'Operativo auxiliar':
+      case perfilOperativoAuxiliar:
         color = Colors.green;
         break;
       default:
@@ -432,10 +719,38 @@ class _CuentasUsuarioTab extends ConsumerWidget {
     );
   }
 
+  Future<void> _saveUsuario(BuildContext context, WidgetRef ref, Usuario usuario) async {
+    final collection = ref.read(usuariosCollectionProvider);
+    await collection.doc(usuario.id).set({
+      'uid': usuario.id,
+      'nombre': usuario.nombre.trim(),
+      'correo': usuario.correo.trim().toLowerCase(),
+      'perfil': usuario.perfil,
+      'proyectos': usuario.proyectos,
+      'created_at': Timestamp.fromDate(usuario.createdAt),
+      'updated_at': FieldValue.serverTimestamp(),
+    }, SetOptions(merge: true));
+    if (context.mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Usuario guardado')),
+      );
+    }
+  }
+
+  Future<void> _deleteUsuario(BuildContext context, WidgetRef ref, String id) async {
+    final collection = ref.read(usuariosCollectionProvider);
+    await collection.doc(id).delete();
+    if (context.mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Usuario eliminado')),
+      );
+    }
+  }
+
   void _showAgregarUsuarioDialog(BuildContext context, WidgetRef ref) {
     final nombreCtrl = TextEditingController();
     final correoCtrl = TextEditingController();
-    String perfilSeleccionado = 'Operativo auxiliar';
+    String perfilSeleccionado = perfilOperativoAuxiliar;
     List<String> proyectosSeleccionados = [];
 
     final proyectosItems = ref.read(proyectosItemsProvider);
@@ -479,9 +794,9 @@ class _CuentasUsuarioTab extends ConsumerWidget {
                   Wrap(
                     spacing: 8,
                     children: [
-                      'Administrador',
-                      'Gestor de proyecto',
-                      'Operativo auxiliar',
+                      perfilAdministrador,
+                      perfilGestorProyecto,
+                      perfilOperativoAuxiliar,
                     ].map((perfil) {
                       return ChoiceChip(
                         label: Text(perfil),
@@ -530,7 +845,7 @@ class _CuentasUsuarioTab extends ConsumerWidget {
               child: const Text('Cancelar'),
             ),
             ElevatedButton(
-              onPressed: () {
+              onPressed: () async {
                 if (nombreCtrl.text.isNotEmpty && correoCtrl.text.isNotEmpty) {
                   final usuario = Usuario(
                     id: const Uuid().v4(),
@@ -540,11 +855,9 @@ class _CuentasUsuarioTab extends ConsumerWidget {
                     proyectos: proyectosSeleccionados,
                     createdAt: DateTime.now(),
                   );
-                  ref.read(usuariosProvider.notifier).agregarUsuario(usuario);
+                  await _saveUsuario(context, ref, usuario);
+                  if (!context.mounted) return;
                   Navigator.pop(context);
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(content: Text('Usuario agregado')),
-                  );
                 }
               },
               child: const Text('Agregar'),
@@ -602,9 +915,9 @@ class _CuentasUsuarioTab extends ConsumerWidget {
                   Wrap(
                     spacing: 8,
                     children: [
-                      'Administrador',
-                      'Gestor de proyecto',
-                      'Operativo auxiliar',
+                      perfilAdministrador,
+                      perfilGestorProyecto,
+                      perfilOperativoAuxiliar,
                     ].map((perfil) {
                       return ChoiceChip(
                         label: Text(perfil),
@@ -653,7 +966,7 @@ class _CuentasUsuarioTab extends ConsumerWidget {
               child: const Text('Cancelar'),
             ),
             ElevatedButton(
-              onPressed: () {
+              onPressed: () async {
                 if (nombreCtrl.text.isNotEmpty && correoCtrl.text.isNotEmpty) {
                   final usuarioActualizado = usuario.copyWith(
                     nombre: nombreCtrl.text,
@@ -661,11 +974,9 @@ class _CuentasUsuarioTab extends ConsumerWidget {
                     perfil: perfilSeleccionado,
                     proyectos: proyectosSeleccionados,
                   );
-                  ref.read(usuariosProvider.notifier).actualizarUsuario(usuarioActualizado);
+                  await _saveUsuario(context, ref, usuarioActualizado);
+                  if (!context.mounted) return;
                   Navigator.pop(context);
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(content: Text('Usuario actualizado')),
-                  );
                 }
               },
               child: const Text('Guardar'),
@@ -688,12 +999,10 @@ class _CuentasUsuarioTab extends ConsumerWidget {
             child: const Text('Cancelar'),
           ),
           ElevatedButton(
-            onPressed: () {
-              ref.read(usuariosProvider.notifier).eliminarUsuario(usuario.id);
+            onPressed: () async {
+              await _deleteUsuario(context, ref, usuario.id);
+              if (!context.mounted) return;
               Navigator.pop(context);
-              ScaffoldMessenger.of(context).showSnackBar(
-                const SnackBar(content: Text('Usuario eliminado')),
-              );
             },
             style: ElevatedButton.styleFrom(backgroundColor: AppColors.danger),
             child: const Text('Eliminar'),
@@ -714,22 +1023,27 @@ class _ProyectosTab extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final proyectos = ref.watch(proyectosItemsProvider);
+    final currentIsAdminAsync = ref.watch(currentUserIsAdminProvider);
+    final perfil = ref.watch(currentUserPerfilProvider);
+    final canManageProjects = currentIsAdminAsync.valueOrNull == true || isPerfilAdministrador(perfil) || isPerfilGestor(perfil);
 
     return Scaffold(
       body: proyectos.isEmpty
-          ? _buildEmptyState(context, ref)
-          : _buildProyectosList(context, ref, proyectos),
-      floatingActionButton: FloatingActionButton.extended(
-        onPressed: () => _showAgregarProyectoDialog(context, ref),
-        icon: const Icon(Icons.add_business),
-        label: const Text('Nuevo Proyecto'),
-        backgroundColor: AppColors.secondary,
-        foregroundColor: Colors.white,
-      ),
+          ? _buildEmptyState(context, ref, canManageProjects: canManageProjects)
+          : _buildProyectosList(context, ref, proyectos, canManageProjects: canManageProjects),
+      floatingActionButton: canManageProjects
+          ? FloatingActionButton.extended(
+              onPressed: () => _showAgregarProyectoDialog(context, ref),
+              icon: const Icon(Icons.add_business),
+              label: const Text('Nuevo Proyecto'),
+              backgroundColor: AppColors.secondary,
+              foregroundColor: Colors.white,
+            )
+          : null,
     );
   }
 
-  Widget _buildEmptyState(BuildContext context, WidgetRef ref) {
+  Widget _buildEmptyState(BuildContext context, WidgetRef ref, {required bool canManageProjects}) {
     return Center(
       child: Column(
         mainAxisSize: MainAxisSize.min,
@@ -740,18 +1054,25 @@ class _ProyectosTab extends ConsumerWidget {
             'No hay proyectos registrados',
             style: TextStyle(fontSize: 16, color: Colors.grey[600]),
           ),
-          const SizedBox(height: 8),
-          ElevatedButton.icon(
-            onPressed: () => _showAgregarProyectoDialog(context, ref),
-            icon: const Icon(Icons.add_business),
-            label: const Text('Agregar Proyecto'),
-          ),
+          if (canManageProjects) ...[
+            const SizedBox(height: 8),
+            ElevatedButton.icon(
+              onPressed: () => _showAgregarProyectoDialog(context, ref),
+              icon: const Icon(Icons.add_business),
+              label: const Text('Agregar Proyecto'),
+            ),
+          ],
         ],
       ),
     );
   }
 
-  Widget _buildProyectosList(BuildContext context, WidgetRef ref, List<ProyectoItem> proyectos) {
+  Widget _buildProyectosList(
+    BuildContext context,
+    WidgetRef ref,
+    List<ProyectoItem> proyectos, {
+    required bool canManageProjects,
+  }) {
     return ListView.builder(
       padding: const EdgeInsets.all(16),
       itemCount: proyectos.length,
@@ -809,52 +1130,54 @@ class _ProyectosTab extends ConsumerWidget {
                 ),
               ],
             ),
-            trailing: PopupMenuButton<String>(
-              onSelected: (value) {
-                if (value == 'editar') {
-                  _showEditarProyectoDialog(context, ref, proyecto);
-                } else if (value == 'eliminar') {
-                  _showEliminarProyectoDialog(context, ref, proyecto);
-                } else if (value == 'toggle') {
-                  ref.read(proyectosItemsProvider.notifier).togglearActivo(proyecto.id);
-                }
-              },
-              itemBuilder: (context) => [
-                const PopupMenuItem(
-                  value: 'editar',
-                  child: Row(
-                    children: [
-                      Icon(Icons.edit, size: 18),
-                      SizedBox(width: 8),
-                      Text('Editar'),
-                    ],
-                  ),
-                ),
-                PopupMenuItem(
-                  value: 'toggle',
-                  child: Row(
-                    children: [
-                      Icon(
-                        proyecto.activo ? Icons.pause : Icons.play_arrow,
-                        size: 18,
+            trailing: canManageProjects
+                ? PopupMenuButton<String>(
+                    onSelected: (value) {
+                      if (value == 'editar') {
+                        _showEditarProyectoDialog(context, ref, proyecto);
+                      } else if (value == 'eliminar') {
+                        _showEliminarProyectoDialog(context, ref, proyecto);
+                      } else if (value == 'toggle') {
+                        ref.read(proyectosItemsProvider.notifier).togglearActivo(proyecto.id);
+                      }
+                    },
+                    itemBuilder: (context) => [
+                      const PopupMenuItem(
+                        value: 'editar',
+                        child: Row(
+                          children: [
+                            Icon(Icons.edit, size: 18),
+                            SizedBox(width: 8),
+                            Text('Editar'),
+                          ],
+                        ),
                       ),
-                      const SizedBox(width: 8),
-                      Text(proyecto.activo ? 'Desactivar' : 'Activar'),
+                      PopupMenuItem(
+                        value: 'toggle',
+                        child: Row(
+                          children: [
+                            Icon(
+                              proyecto.activo ? Icons.pause : Icons.play_arrow,
+                              size: 18,
+                            ),
+                            const SizedBox(width: 8),
+                            Text(proyecto.activo ? 'Desactivar' : 'Activar'),
+                          ],
+                        ),
+                      ),
+                      const PopupMenuItem(
+                        value: 'eliminar',
+                        child: Row(
+                          children: [
+                            Icon(Icons.delete, size: 18, color: AppColors.danger),
+                            SizedBox(width: 8),
+                            Text('Eliminar', style: TextStyle(color: AppColors.danger)),
+                          ],
+                        ),
+                      ),
                     ],
-                  ),
-                ),
-                const PopupMenuItem(
-                  value: 'eliminar',
-                  child: Row(
-                    children: [
-                      Icon(Icons.delete, size: 18, color: AppColors.danger),
-                      SizedBox(width: 8),
-                      Text('Eliminar', style: TextStyle(color: AppColors.danger)),
-                    ],
-                  ),
-                ),
-              ],
-            ),
+                  )
+                : null,
           ),
         );
       },

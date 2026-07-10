@@ -1,9 +1,25 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import '../../core/constants/app_colors.dart';
 import '../../core/constants/app_strings.dart';
+import '../../features/auth/providers/auth_provider.dart';
 
-class AppScaffold extends StatelessWidget {
+class _NavItem {
+  final IconData icon;
+  final String label;
+  final String route;
+  final bool Function(String perfil) isVisible;
+
+  const _NavItem({
+    required this.icon,
+    required this.label,
+    required this.route,
+    required this.isVisible,
+  });
+}
+
+class AppScaffold extends ConsumerWidget {
   final Widget child;
   final int currentIndex;
   final String title;
@@ -19,20 +35,67 @@ class AppScaffold extends StatelessWidget {
     this.floatingActionButton,
   });
 
-  static const _navItems = [
-    (icon: Icons.map_outlined, label: AppStrings.mapa, route: '/mapa'),
-    (icon: Icons.analytics_outlined, label: 'Balance', route: '/balance'),
-    (icon: Icons.upload_file_outlined, label: 'Archivos', route: '/carga'),
-    (icon: Icons.folder_outlined, label: 'Gestion', route: '/tabla'),
-    (icon: Icons.receipt_long_outlined, label: 'Reportes', route: '/reportes'),
-    (icon: Icons.person_outlined, label: 'Perfil', route: '/perfil'),
-    (icon: Icons.account_tree_outlined, label: 'Estructura', route: '/estructura'),
+  static final _navItems = [
+    _NavItem(
+      icon: Icons.map_outlined,
+      label: AppStrings.mapa,
+      route: '/mapa',
+      isVisible: (perfil) => canAccessRouteByPerfil('/mapa', perfil),
+    ),
+    _NavItem(
+      icon: Icons.analytics_outlined,
+      label: 'Balance',
+      route: '/balance',
+      isVisible: (perfil) => canAccessRouteByPerfil('/balance', perfil),
+    ),
+    _NavItem(
+      icon: Icons.upload_file_outlined,
+      label: 'Archivos',
+      route: '/carga',
+      isVisible: (perfil) => canAccessRouteByPerfil('/carga', perfil),
+    ),
+    _NavItem(
+      icon: Icons.folder_outlined,
+      label: 'Gestion',
+      route: '/tabla',
+      isVisible: (perfil) => canAccessRouteByPerfil('/tabla', perfil),
+    ),
+    _NavItem(
+      icon: Icons.receipt_long_outlined,
+      label: 'Reportes',
+      route: '/reportes',
+      isVisible: (perfil) => canAccessRouteByPerfil('/reportes', perfil),
+    ),
+    _NavItem(
+      icon: Icons.person_outlined,
+      label: 'Perfil',
+      route: '/perfil',
+      isVisible: (perfil) => canAccessRouteByPerfil('/perfil', perfil),
+    ),
+    _NavItem(
+      icon: Icons.account_tree_outlined,
+      label: 'Estructura',
+      route: '/estructura',
+      isVisible: (perfil) => canAccessRouteByPerfil('/estructura', perfil),
+    ),
   ];
   static const double _desktopRailWidth = 88;
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
     final isWide = MediaQuery.of(context).size.width > 768;
+    final perfil = ref.watch(currentUserPerfilProvider);
+
+    void onTapItem(int i) {
+      final item = _navItems[i];
+      if (!item.isVisible(perfil)) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('No tienes permiso para acceder a esta seccion.')),
+        );
+        return;
+      }
+      context.go(item.route);
+    }
 
     if (isWide) {
       return Scaffold(
@@ -46,7 +109,7 @@ class AppScaffold extends StatelessWidget {
                 width: _desktopRailWidth,
                 child: NavigationRail(
                   selectedIndex: currentIndex,
-                  onDestinationSelected: (i) => context.go(_navItems[i].route),
+                  onDestinationSelected: onTapItem,
                   labelType: NavigationRailLabelType.all,
                   leading: Padding(
                     padding: const EdgeInsets.symmetric(vertical: 8),
@@ -70,7 +133,15 @@ class AppScaffold extends StatelessWidget {
                               item.icon,
                               color: AppColors.primary,
                             ),
-                            label: Text(item.label, style: const TextStyle(fontSize: 11)),
+                            label: Text(
+                              item.label,
+                              style: TextStyle(
+                                fontSize: 11,
+                                color: item.isVisible(perfil)
+                                    ? null
+                                    : Colors.grey,
+                              ),
+                            ),
                           ))
                       .toList(),
                 ),
@@ -92,7 +163,7 @@ class AppScaffold extends StatelessWidget {
       body: child,
       bottomNavigationBar: NavigationBar(
         selectedIndex: currentIndex,
-        onDestinationSelected: (i) => context.go(_navItems[i].route),
+        onDestinationSelected: onTapItem,
         labelBehavior: NavigationDestinationLabelBehavior.onlyShowSelected,
         destinations: _navItems
             .map((item) => NavigationDestination(

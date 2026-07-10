@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:intl/intl.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 import '../../../shared/widgets/app_scaffold.dart';
 import '../../../core/constants/app_colors.dart';
 import '../../estructura/presentation/estructura_screen.dart';
@@ -15,10 +16,27 @@ import '../../mapa/providers/mapa_state_cleanup.dart';
 
 /// Provider para obtener el primer usuario (simulaciรณn de usuario logueado)
 final usuarioActualProvider = Provider<Usuario?>((ref) {
-  final usuarios = ref.watch(usuariosProvider);
-  if (usuarios.isNotEmpty) {
+  final authUser = ref.watch(currentUserProvider) ?? FirebaseAuth.instance.currentUser;
+  final usuarios = ref.watch(usuariosProvider).valueOrNull ?? const <Usuario>[];
+
+  if (usuarios.isEmpty) {
+    return null;
+  }
+
+  if (authUser == null) {
     return usuarios.first;
   }
+
+  final email = authUser.email?.trim().toLowerCase();
+  for (final usuario in usuarios) {
+    if (usuario.id == authUser.uid) {
+      return usuario;
+    }
+    if (email != null && usuario.correo.trim().toLowerCase() == email) {
+      return usuario;
+    }
+  }
+
   return null;
 });
 
@@ -50,6 +68,14 @@ class PerfilScreen extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final usuario = ref.watch(usuarioActualProvider);
+    final authUser = ref.watch(currentUserProvider) ?? FirebaseAuth.instance.currentUser;
+    final correoMostrado =
+      usuario?.correo ?? authUser?.email ?? 'No disponible';
+    final nombreMostrado =
+      usuario?.nombre ?? authUser?.displayName ?? 'Usuario LDDV';
+    final inicial = nombreMostrado.isNotEmpty
+      ? nombreMostrado[0].toUpperCase()
+      : '?';
     final nf = DateFormat('dd/MM/yyyy HH:mm');
 
     return AppScaffold(
@@ -75,9 +101,7 @@ class PerfilScreen extends ConsumerWidget {
                     radius: 50,
                     backgroundColor: AppColors.primary,
                     child: Text(
-                      usuario?.nombre.isNotEmpty == true 
-                          ? usuario!.nombre[0].toUpperCase() 
-                          : '?',
+                      inicial,
                       style: const TextStyle(
                         fontSize: 40, 
                         fontWeight: FontWeight.bold,
@@ -87,12 +111,12 @@ class PerfilScreen extends ConsumerWidget {
                   ),
                   const SizedBox(height: 16),
                   Text(
-                    usuario?.nombre ?? 'Usuario LDDV',
+                    nombreMostrado,
                     style: const TextStyle(fontSize: 24, fontWeight: FontWeight.bold),
                   ),
                   const SizedBox(height: 4),
                   Text(
-                    usuario?.correo ?? 'admin@sao.mx',
+                    correoMostrado,
                     style: TextStyle(fontSize: 14, color: Colors.grey[600]),
                   ),
                 ],
@@ -120,7 +144,7 @@ class PerfilScreen extends ConsumerWidget {
                     _buildInfoRow(
                       icon: Icons.person,
                       label: 'Nombre',
-                      value: usuario?.nombre ?? 'No disponible',
+                      value: nombreMostrado,
                     ),
                     const Divider(height: 24),
                     
@@ -128,7 +152,7 @@ class PerfilScreen extends ConsumerWidget {
                     _buildInfoRow(
                       icon: Icons.email,
                       label: 'Correo electronico',
-                      value: usuario?.correo ?? 'No disponible',
+                      value: correoMostrado,
                     ),
                     const Divider(height: 24),
                     

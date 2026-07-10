@@ -22,6 +22,7 @@ app.add_middleware(
 
 DATA_DIR = Path(__file__).resolve().parents[1] / "data"
 DATA_FILE = DATA_DIR / "predios.json"
+MUNICIPIOS_FILE = DATA_DIR / "municipios.geojson"
 PROJECT_CODES = ("TQI", "TSNL", "TAP", "TQM")
 
 
@@ -70,6 +71,72 @@ def _read_predios() -> list[dict[str, Any]]:
             return recovered
 
         raise ValueError("El almacén de predios está dañado y no se pudo recuperar.")
+
+
+def _read_municipios_geojson() -> list[dict[str, Any]]:
+    if not MUNICIPIOS_FILE.exists():
+        return []
+
+    try:
+        raw = MUNICIPIOS_FILE.read_text(encoding="utf-8").strip()
+        if not raw:
+            return []
+
+        data = json.loads(raw)
+        features = data.get("features") if isinstance(data, dict) else None
+        if not isinstance(features, list):
+            return []
+
+        municipios: list[dict[str, Any]] = []
+        for feature in features:
+            if not isinstance(feature, dict):
+                continue
+
+            properties = feature.get("properties")
+            props = properties if isinstance(properties, dict) else {}
+            geometry = feature.get("geometry") if isinstance(feature.get("geometry"), dict) else {}
+
+            nombre = ""
+            for key in (
+                "municipio",
+                "MUNICIPIO",
+                "nombre",
+                "NOMBRE",
+                "nom_municipio",
+                "NOM_MUNICIPIO",
+                "name",
+                "NAME",
+            ):
+                value = props.get(key)
+                if isinstance(value, str) and value.strip():
+                    nombre = value.strip()
+                    break
+
+            if not nombre:
+                feature_name = feature.get("id")
+                if isinstance(feature_name, str) and feature_name.strip():
+                    nombre = feature_name.strip()
+
+            if not nombre:
+                continue
+
+            estado = None
+            for key in ("estado", "ESTADO", "shapeGroup", "state", "STATE"):
+                value = props.get(key)
+                if isinstance(value, str) and value.strip():
+                    estado = value.strip()
+                    break
+
+            municipios.append({
+                "id": str(feature.get("id") or nombre).strip(),
+                "nombre": nombre,
+                "estado": estado,
+                "geometry": geometry,
+            })
+
+        return municipios
+    except (JSONDecodeError, ValueError):
+        return []
 
 
 def _write_predios(predios: list[dict[str, Any]]) -> None:
@@ -519,9 +586,11 @@ def _matches_project(predio: dict[str, Any], proyecto: str) -> bool:
 def _matches_clave(predio: dict[str, Any], clave_catastral: str) -> bool:
     return str(predio.get("clave_catastral") or "").strip().upper() == clave_catastral.strip().upper()
 
+
 @app.get("/")
 def root():
     return {"message": "Geoportal Backend API running"}
+
 
 @app.get("/predios")
 def list_predios(
@@ -568,6 +637,25 @@ def get_predio_by_clave(clave_catastral: str):
         if _matches_clave(predio, clave_catastral):
             return predio
     raise HTTPException(status_code=404, detail="Predio no encontrado")
+
+
+@app.get("/municipios")
+def list_municipios():
+    return _read_municipios_geojson()
+
+
+@app.get("/api/v1/municipios")
+def list_municipios_v1():
+    return list_municipios()
+
+
+@app.get("/api/v1/predios")
+def list_predios_v1(
+    proyecto: str | None = Query(default=None),
+    clave_catastral: str | None = Query(default=None),
+):
+    return list_predios(proyecto=proyecto, clave_catastral=clave_catastral)
+
 
 @app.get("/predios/{predio_id}")
 def get_predio(predio_id: str):

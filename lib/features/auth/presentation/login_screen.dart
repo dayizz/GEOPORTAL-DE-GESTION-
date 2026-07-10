@@ -17,6 +17,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
   final _formKey = GlobalKey<FormState>();
   final _emailCtrl = TextEditingController();
   final _passCtrl = TextEditingController();
+  final _approvalCodeCtrl = TextEditingController();
   bool _obscure = true;
   bool _loading = false;
   bool _isRegister = false;
@@ -36,6 +37,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
   void dispose() {
     _emailCtrl.dispose();
     _passCtrl.dispose();
+    _approvalCodeCtrl.dispose();
     super.dispose();
   }
 
@@ -50,6 +52,11 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
       if (localOnlyAuthMode) {
         if (_isRegister) {
           throw Exception('Registro deshabilitado en modo local.');
+        }
+        if (!hasLocalAdminCredentials) {
+          throw Exception(
+            'Modo local habilitado sin LOCAL_ADMIN_EMAIL/LOCAL_ADMIN_PASSWORD.',
+          );
         }
         // Admin general (acceso total)
         if (email == localAdminEmail && password == localAdminPassword) {
@@ -74,7 +81,11 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
 
       final auth = ref.read(authRepositoryProvider);
       if (_isRegister) {
-        await auth.signUpWithEmail(_emailCtrl.text.trim(), _passCtrl.text);
+        await auth.signUpWithEmail(
+          _emailCtrl.text.trim(),
+          _passCtrl.text,
+          approvalCode: _approvalCodeCtrl.text,
+        );
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
             const SnackBar(
@@ -85,6 +96,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
         }
       } else {
         await auth.signInWithEmail(_emailCtrl.text.trim(), _passCtrl.text);
+        ref.read(localAuthSessionProvider.notifier).state = false;
         final proyecto = extractProyectoFromPassword(_passCtrl.text);
         ref.read(proyectoActivoProvider.notifier).state = proyecto;
         clearImportedMapState(ref.read);
@@ -212,6 +224,25 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                               },
                               onFieldSubmitted: (_) => _submit(),
                             ),
+                            if (_isRegister) ...[
+                              const SizedBox(height: 16),
+                              TextFormField(
+                                controller: _approvalCodeCtrl,
+                                textCapitalization: TextCapitalization.characters,
+                                decoration: const InputDecoration(
+                                  labelText: 'Codigo de aprobacion',
+                                  hintText: 'Ej. A7K9Q2LM',
+                                  prefixIcon: Icon(Icons.verified_user_outlined),
+                                ),
+                                validator: (v) {
+                                  if (_isRegister && (v == null || v.trim().isEmpty)) {
+                                    return 'Ingresa el codigo de aprobacion';
+                                  }
+                                  return null;
+                                },
+                                onFieldSubmitted: (_) => _submit(),
+                              ),
+                            ],
                             const SizedBox(height: 24),
                             ElevatedButton(
                               onPressed: _loading ? null : _submit,

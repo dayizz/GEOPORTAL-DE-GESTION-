@@ -133,13 +133,49 @@ class PrediosRepository {
     String? usoSuelo,
     String? zona,
     String? propietarioId,
+    String? proyecto,
+    List<String>? proyectosPermitidos,
     int limit = 10000,
     int offset = 0,
   }) async {
-    final snap = await _predios.get();
+    final allowedProjects = (proyectosPermitidos ?? const <String>[])
+        .map((p) => p.trim().toUpperCase())
+        .where((p) => p.isNotEmpty)
+        .toSet();
+
+    if (proyectosPermitidos != null && allowedProjects.isEmpty) {
+      return const [];
+    }
+
+    final proyectoFiltro = proyecto?.trim().toUpperCase();
+
+    List<QueryDocumentSnapshot<Map<String, dynamic>>> docs = const [];
+
+    if (proyectoFiltro != null && proyectoFiltro.isNotEmpty) {
+      if (proyectosPermitidos != null && !allowedProjects.contains(proyectoFiltro)) {
+        return const [];
+      }
+      final snap = await _predios.where('proyecto', isEqualTo: proyectoFiltro).get();
+      docs = snap.docs;
+    } else if (allowedProjects.isNotEmpty) {
+      final futures = allowedProjects
+          .map((p) => _predios.where('proyecto', isEqualTo: p).get())
+          .toList(growable: false);
+      final snapshots = await Future.wait(futures);
+      final merged = <String, QueryDocumentSnapshot<Map<String, dynamic>>>{};
+      for (final snap in snapshots) {
+        for (final doc in snap.docs) {
+          merged[doc.id] = doc;
+        }
+      }
+      docs = merged.values.toList(growable: false);
+    } else {
+      final snap = await _predios.get();
+      docs = snap.docs;
+    }
 
     final propIds = <String>{};
-    for (final doc in snap.docs) {
+    for (final doc in docs) {
       final raw = doc.data();
       final id = raw['propietario_id']?.toString();
       if (id != null && id.isNotEmpty) propIds.add(id);
@@ -154,7 +190,7 @@ class PrediosRepository {
       }
     }
 
-    var predios = snap.docs.map((doc) {
+    var predios = docs.map((doc) {
       final propId = doc.data()['propietario_id']?.toString();
       final propietario = propId != null ? propietariosById[propId] : null;
       return Predio.fromMap(_normalizePredioMap(doc, propietario: propietario));

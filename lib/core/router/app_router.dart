@@ -23,17 +23,41 @@ final routerProvider = Provider<GoRouter>((ref) {
   // Observar cambios de auth para refrescar el redirect
   ref.watch(authStateProvider);
   final localSession = ref.watch(localAuthSessionProvider);
+  final currentIsAdminAsync = ref.watch(currentUserIsAdminProvider);
+  final currentPerfil = ref.watch(currentUserPerfilProvider);
+  final currentProfileAsync = ref.watch(currentUserProfileProvider);
 
   return GoRouter(
     initialLocation: '/mapa',
     redirect: (context, state) {
       final user = FirebaseAuth.instance.currentUser;
-      final isLoggedIn = user != null || localSession;
-      return resolveAuthRedirect(
+      final canUseLocalSession = localOnlyAuthMode && localSession;
+      final isLoggedIn = user != null || canUseLocalSession;
+      final authRedirect = resolveAuthRedirect(
         isLoggedIn: isLoggedIn,
         matchedLocation: state.matchedLocation,
         allowLocalOnlyAuthBypass: localOnlyAuthMode,
       );
+
+      if (authRedirect != null) {
+        return authRedirect;
+      }
+
+      if (currentIsAdminAsync.isLoading) {
+        return null;
+      }
+
+      final isAdmin = currentIsAdminAsync.valueOrNull == true;
+      if (isAdmin) {
+        return null;
+      }
+
+      if (!currentProfileAsync.isLoading &&
+          !canAccessRouteByPerfil(state.matchedLocation, currentPerfil)) {
+        return '/mapa';
+      }
+
+      return null;
     },
     routes: [
       GoRoute(

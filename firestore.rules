@@ -5,39 +5,157 @@ service cloud.firestore {
       return request.auth != null;
     }
 
+    function hasAdminClaim() {
+      return request.auth.token.admin == true;
+    }
+
+    function isBootstrapAdminUid() {
+      return request.auth.uid in ['cZg4LhniabSxLQuosExJrFOJQWw2'];
+    }
+
+    function isAdmin() {
+      return isSignedIn()
+        && (hasAdminClaim() || isBootstrapAdminUid());
+    }
+
+    function userProfile() {
+      return get(/databases/$(database)/documents/usuarios_sistema/$(request.auth.uid));
+    }
+
+    function userRole() {
+      return userProfile().data.perfil;
+    }
+
+    function userProjects() {
+      return userProfile().data.proyectos;
+    }
+
+    function hasAssignedProject(projectCode) {
+      return projectCode is string
+        && userProjects() is list
+        && userProjects().hasAny([projectCode]);
+    }
+
+    function canReadPredio(data) {
+      return isAdmin()
+        || hasAssignedProject(data.proyecto);
+    }
+
+    function canWritePredio(data) {
+      return isAdmin()
+        || (canWriteOperationalData() && hasAssignedProject(data.proyecto));
+    }
+
+    function isGestor() {
+      return isSignedIn() && userRole() == 'Gestor de proyecto';
+    }
+
+    function isOperativo() {
+      return isSignedIn() && userRole() == 'Operativo auxiliar';
+    }
+
+    function canWriteOperationalData() {
+      return isAdmin() || isGestor();
+    }
+
     function isString(v, min, max) {
       return v is string && v.size() >= min && v.size() <= max;
     }
 
     // Predios de gestion
     match /predios/{predioId} {
-      allow read: if isSignedIn();
+      allow read: if isSignedIn() && canReadPredio(resource.data);
       allow create, update: if isSignedIn()
+        && canWritePredio(request.resource.data)
         && request.resource.data.keys().hasAll(['clave_catastral', 'tramo', 'tipo_propiedad'])
         && isString(request.resource.data.clave_catastral, 1, 120)
         && isString(request.resource.data.tramo, 1, 20)
         && isString(request.resource.data.tipo_propiedad, 1, 60);
-      allow delete: if isSignedIn();
+      allow delete: if isAdmin();
     }
 
     // Catalogo de propietarios
     match /propietarios/{propietarioId} {
       allow read: if isSignedIn();
-      allow create, update: if isSignedIn()
+      allow create, update: if canWriteOperationalData()
         && request.resource.data.keys().hasAll(['nombre', 'tipo_persona'])
         && isString(request.resource.data.nombre, 1, 120)
         && isString(request.resource.data.tipo_persona, 1, 20);
-      allow delete: if isSignedIn();
+      allow delete: if isAdmin();
     }
 
     // Archivos importados
     match /archivos_geojson/{archivoId} {
       allow read: if isSignedIn();
-      allow create, update: if isSignedIn()
+      allow create, update: if canWriteOperationalData()
         && request.resource.data.keys().hasAll(['nombre', 'features_count'])
         && isString(request.resource.data.nombre, 1, 220)
         && request.resource.data.features_count is int;
-      allow delete: if isSignedIn();
+      allow delete: if isAdmin();
+    }
+
+    // Perfiles de usuarios del sistema para administración.
+    match /usuarios_sistema/{uid} {
+      allow read: if isAdmin() || isGestor() || (isSignedIn() && request.auth.uid == uid);
+
+      allow create: if isSignedIn() && (
+        isAdmin() || (
+          request.auth.uid == uid
+          && request.resource.data.uid == request.auth.uid
+          && request.resource.data.correo == request.auth.token.email
+          && request.resource.data.perfil == 'Operativo auxiliar'
+          && request.resource.data.proyectos is list
+        )
+      );
+
+      allow update: if isSignedIn() && (
+        isAdmin() || (
+          request.auth.uid == uid
+          && request.resource.data.uid == resource.data.uid
+          && request.resource.data.correo == resource.data.correo
+          && request.resource.data.perfil == resource.data.perfil
+          && request.resource.data.proyectos == resource.data.proyectos
+        )
+      );
+
+      allow delete: if isAdmin();
+    }
+
+    // Codigos de aprobacion para registro de usuarios.
+    match /user_approval_codes/{codeId} {
+      allow read: if isSignedIn();
+
+      allow create: if isAdmin()
+        && request.resource.data.keys().hasAll([
+          'code',
+          'active',
+          'created_by_uid',
+          'created_by_email',
+          'created_at',
+          'expires_at'
+        ])
+        && isString(request.resource.data.code, 6, 24)
+        && request.resource.data.active == true
+        && request.resource.data.created_by_uid == request.auth.uid
+        && request.resource.data.created_by_email == request.auth.token.email;
+
+      // Un usuario autenticado puede consumir un codigo libre marcandolo como usado por su propia cuenta.
+      allow update: if isAdmin() || (
+        isSignedIn()
+        && resource.data.active == true
+        && resource.data.used_at == null
+        && request.resource.data.code == resource.data.code
+        && request.resource.data.created_by_uid == resource.data.created_by_uid
+        && request.resource.data.created_by_email == resource.data.created_by_email
+        && request.resource.data.created_at == resource.data.created_at
+        && request.resource.data.expires_at == resource.data.expires_at
+        && request.resource.data.active == false
+        && request.resource.data.used_by_uid == request.auth.uid
+        && request.resource.data.used_by_email == request.auth.token.email
+        && request.resource.data.used_at is timestamp
+      );
+
+      allow delete: if isAdmin();
     }
 
     // Default deny para cualquier coleccion no contemplada.
