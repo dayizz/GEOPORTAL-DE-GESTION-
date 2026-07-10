@@ -1,0 +1,48 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function isString(v, min, max) {
+      return v is string && v.size() >= min && v.size() <= max;
+    }
+
+    // Predios de gestion
+    match /predios/{predioId} {
+      allow read: if isSignedIn();
+      allow create, update: if isSignedIn()
+        && request.resource.data.keys().hasAll(['clave_catastral', 'tramo', 'tipo_propiedad'])
+        && isString(request.resource.data.clave_catastral, 1, 120)
+        && isString(request.resource.data.tramo, 1, 20)
+        && isString(request.resource.data.tipo_propiedad, 1, 60);
+      allow delete: if isSignedIn();
+    }
+
+    // Catalogo de propietarios
+    match /propietarios/{propietarioId} {
+      allow read: if isSignedIn();
+      allow create, update: if isSignedIn()
+        && request.resource.data.keys().hasAll(['nombre', 'tipo_persona'])
+        && isString(request.resource.data.nombre, 1, 120)
+        && isString(request.resource.data.tipo_persona, 1, 20);
+      allow delete: if isSignedIn();
+    }
+
+    // Archivos importados
+    match /archivos_geojson/{archivoId} {
+      allow read: if isSignedIn();
+      allow create, update: if isSignedIn()
+        && request.resource.data.keys().hasAll(['nombre', 'features_count'])
+        && isString(request.resource.data.nombre, 1, 220)
+        && request.resource.data.features_count is int;
+      allow delete: if isSignedIn();
+    }
+
+    // Default deny para cualquier coleccion no contemplada.
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}

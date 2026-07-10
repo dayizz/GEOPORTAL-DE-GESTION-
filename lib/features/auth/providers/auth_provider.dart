@@ -52,10 +52,6 @@ class AuthRepository {
       throw Exception('Credenciales locales inválidas.');
     }
 
-    if (email.trim().toLowerCase() == localAdminEmail &&
-        password == localAdminPassword) {
-      return;
-    }
     await _auth.signInWithEmailAndPassword(
       email: email,
       password: password,
@@ -67,10 +63,6 @@ class AuthRepository {
       throw Exception('Registro deshabilitado en modo local.');
     }
 
-    if (email.trim().toLowerCase() == localAdminEmail &&
-        password == localAdminPassword) {
-      return;
-    }
     await _auth.createUserWithEmailAndPassword(
       email: email,
       password: password,
