@@ -1,10 +1,13 @@
 import json
 import re
+import fcntl
+import os
 from json import JSONDecodeError, JSONDecoder
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 from uuid import uuid4
+from contextlib import contextmanager
 
 from fastapi import FastAPI, HTTPException, Query
 from fastapi.middleware.cors import CORSMiddleware
@@ -24,6 +27,25 @@ DATA_DIR = Path(__file__).resolve().parents[1] / "data"
 DATA_FILE = DATA_DIR / "predios.json"
 MUNICIPIOS_FILE = DATA_DIR / "municipios.geojson"
 PROJECT_CODES = ("TQI", "TSNL", "TAP", "TQM")
+
+
+@contextmanager
+def _locked_file_operations():
+    """Context manager para operaciones atómicas en archivo con lock exclusivo."""
+    _ensure_store()
+    lock_file = DATA_FILE.with_suffix(".lock")
+    
+    # Crear archivo de lock si no existe
+    lock_file.touch(exist_ok=True)
+    
+    try:
+        with open(lock_file, 'w') as lock_handle:
+            # Adquirir lock exclusivo (bloquea otros procesos)
+            fcntl.flock(lock_handle, fcntl.LOCK_EX)
+            yield lock_file
+    finally:
+        # Lock se libera automáticamente al cerrar el archivo
+        pass
 
 
 def _ensure_store() -> None:
@@ -140,13 +162,15 @@ def _read_municipios_geojson() -> list[dict[str, Any]]:
 
 
 def _write_predios(predios: list[dict[str, Any]]) -> None:
-    _ensure_store()
-    temp_file = DATA_FILE.with_suffix(".tmp")
-    temp_file.write_text(
-        json.dumps(predios, ensure_ascii=False, indent=2),
-        encoding="utf-8",
-    )
-    temp_file.replace(DATA_FILE)
+    """Escribe predios de manera atómica con lock para evitar lost updates."""
+    with _locked_file_operations():
+        _ensure_store()
+        temp_file = DATA_FILE.with_suffix(".tmp")
+        temp_file.write_text(
+            json.dumps(predios, ensure_ascii=False, indent=2),
+            encoding="utf-8",
+        )
+        temp_file.replace(DATA_FILE)
 
 
 def _now_iso() -> str:

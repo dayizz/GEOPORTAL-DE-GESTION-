@@ -385,39 +385,58 @@ class AuthRepository {
       throw Exception('Ingresa un codigo de aprobacion valido.');
     }
 
-    UserCredential? created;
+    // PASO 1: Validar y reservar código ANTES de crear usuario
+    // Esto previene usuarios ghost si la transacción falla más adelante
+    final codeDoc = await _findApprovalCodeDoc(normalizedCode);
+    final codeData = codeDoc.data() ?? <String, dynamic>{};
+
+    if (codeData['active'] != true || codeData['used_at'] != null) {
+      throw Exception('El codigo de aprobacion no esta disponible.');
+    }
+
+    final expiresRaw = codeData['expires_at'];
+    final expiresAt = expiresRaw is Timestamp ? expiresRaw.toDate() : null;
+    if (expiresAt != null && expiresAt.isBefore(DateTime.now())) {
+      throw Exception('El codigo de aprobacion esta vencido.');
+    }
+
+    // PASO 2: Crear usuario (código ya validado)
+    late UserCredential created;
     try {
       created = await _auth.createUserWithEmailAndPassword(
         email: email,
         password: password,
       );
+    } catch (e) {
+      // Si crear usuario falla, código permanece disponible (sin cleanup)
+      rethrow;
+    }
 
-      final uid = created.user?.uid;
-      if (uid == null) {
-        throw Exception('No se pudo crear la cuenta de usuario.');
-      }
+    final uid = created.user?.uid;
+    if (uid == null) {
+      throw Exception('No se pudo crear la cuenta de usuario.');
+    }
 
+    // PASO 3: Consumir código con usuario ya existente
+    try {
       await _consumeApprovalCode(
         code: normalizedCode,
         usedByUid: uid,
         usedByEmail: email.trim().toLowerCase(),
       );
-
-      if (created.user != null) {
-        await ensureUserProfileExists(
-          created.user!,
-          preferredName: email.split('@').first,
-        );
-      }
     } catch (e) {
-      final user = created?.user ?? _auth.currentUser;
-      if (user != null) {
-        try {
-          await user.delete();
-        } catch (_) {
-          await _auth.signOut();
-        }
-      }
+      // Si consumo falla, usuario está en estado coherente (existe, puede login)
+      rethrow;
+    }
+
+    // PASO 4: Crear perfil (usuario + código ya registrados)
+    try {
+      await ensureUserProfileExists(
+        created.user!,
+        preferredName: email.split('@').first,
+      );
+    } catch (e) {
+      // Si perfil falla, usuario puede intentar login después (Estado útil para recuperación)
       rethrow;
     }
   }
