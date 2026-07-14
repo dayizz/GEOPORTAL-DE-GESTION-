@@ -39,10 +39,10 @@ class _TablaScreenState extends ConsumerState<TablaScreen> {
 
   String _proyectoActual = 'TQI';
   String _busqueda = '';
-  String? _filtroTramo;
-  String? _filtroTipo;
-  String? _filtroTipoLiberacion;
-  String? _filtroEstatus; // 'Liberado' | 'No liberado' | null
+  Set<String> _filtroTramo = {};
+  Set<String> _filtroTipo = {};
+  Set<String> _filtroTipoLiberacion = {};
+  Set<String> _filtroEstatus = {}; // 'Liberado' | 'No liberado'
 
   final _nf = NumberFormat('#,##0.00');
   final _nf4 = NumberFormat('0.0000');
@@ -111,35 +111,35 @@ class _TablaScreenState extends ConsumerState<TablaScreen> {
   // Memoización de filtros
   List<Predio>? _lastAll;
   String? _lastProyecto;
-  String? _lastTramo;
-  String? _lastTipo;
-  String? _lastTipoLiberacion;
-  String? _lastEstatus;
+  Set<String> _lastTramo = {};
+  Set<String> _lastTipo = {};
+  Set<String> _lastTipoLiberacion = {};
+  Set<String> _lastEstatus = {};
   String? _lastBusqueda;
   List<Predio>? _lastFiltered;
 
   List<Predio> _applyFilters(List<Predio> all) {
     final shouldRecompute = _lastAll != all ||
         _lastProyecto != _proyectoActual ||
-        _lastTramo != _filtroTramo ||
-        _lastTipo != _filtroTipo ||
-      _lastTipoLiberacion != _filtroTipoLiberacion ||
-        _lastEstatus != _filtroEstatus ||
+        !setEquals(_lastTramo, _filtroTramo) ||
+        !setEquals(_lastTipo, _filtroTipo) ||
+        !setEquals(_lastTipoLiberacion, _filtroTipoLiberacion) ||
+        !setEquals(_lastEstatus, _filtroEstatus) ||
         _lastBusqueda != _busqueda;
     if (!shouldRecompute && _lastFiltered != null) {
       return _lastFiltered!;
     }
     final filtered = all.where((p) {
       if (_predioProyecto(p) != _proyectoActual) return false;
-      if (_filtroTramo != null && p.tramo != _filtroTramo) return false;
-      if (_filtroTipo != null && p.tipoPropiedad != _filtroTipo) return false;
-      if (_filtroEstatus != null) {
+      if (_filtroTramo.isNotEmpty && !_filtroTramo.contains(p.tramo)) return false;
+      if (_filtroTipo.isNotEmpty && !_filtroTipo.contains(p.tipoPropiedad)) return false;
+      if (_filtroEstatus.isNotEmpty) {
         final estatus = p.cop ? 'Liberado' : 'No liberado';
-        if (estatus != _filtroEstatus) return false;
+        if (!_filtroEstatus.contains(estatus)) return false;
       }
-      if (_filtroTipoLiberacion != null) {
+      if (_filtroTipoLiberacion.isNotEmpty) {
         final tipoLiberacion = _normalizarTipoLiberacion(p.tipoLiberacion);
-        if (tipoLiberacion != _filtroTipoLiberacion) return false;
+        if (!_filtroTipoLiberacion.contains(tipoLiberacion)) return false;
       }
       if (_busqueda.isNotEmpty) {
         final q = _busqueda.toLowerCase();
@@ -151,14 +151,26 @@ class _TablaScreenState extends ConsumerState<TablaScreen> {
     }).toList();
     _lastAll = all;
     _lastProyecto = _proyectoActual;
-    _lastTramo = _filtroTramo;
-    _lastTipo = _filtroTipo;
-    _lastTipoLiberacion = _filtroTipoLiberacion;
-    _lastEstatus = _filtroEstatus;
+    _lastTramo = Set.of(_filtroTramo);
+    _lastTipo = Set.of(_filtroTipo);
+    _lastTipoLiberacion = Set.of(_filtroTipoLiberacion);
+    _lastEstatus = Set.of(_filtroEstatus);
     _lastBusqueda = _busqueda;
     _lastFiltered = filtered;
     return filtered;
   }
+
+  bool get _tieneFiltrosActivos =>
+      _filtroTramo.isNotEmpty ||
+      _filtroTipo.isNotEmpty ||
+      _filtroTipoLiberacion.isNotEmpty ||
+      _filtroEstatus.isNotEmpty;
+
+  int get _totalFiltrosActivos =>
+      _filtroTramo.length +
+      _filtroTipo.length +
+      _filtroTipoLiberacion.length +
+      _filtroEstatus.length;
 
   String _normalizarTipoLiberacion(String? value) {
     final text = (value ?? '').trim().toUpperCase();
@@ -331,10 +343,10 @@ class _TablaScreenState extends ConsumerState<TablaScreen> {
               _proyectoActual = proyectoSolicitado;
               _busqueda = '';
               _searchCtrl.clear();
-              _filtroTramo = null;
-              _filtroTipo = null;
-              _filtroTipoLiberacion = null;
-              _filtroEstatus = null;
+              _filtroTramo = {};
+              _filtroTipo = {};
+              _filtroTipoLiberacion = {};
+              _filtroEstatus = {};
               _currentPage = 0;
             });
             ref.read(gestionProyectoProvider.notifier).state = null;
@@ -633,7 +645,7 @@ class _TablaScreenState extends ConsumerState<TablaScreen> {
               TextButton.icon(
                 icon: const Icon(Icons.filter_alt_outlined, size: 18),
                 label: Text(
-                  'Filtros${_filtroTramo != null || _filtroTipo != null || _filtroTipoLiberacion != null || _filtroEstatus != null ? ' ✓' : ''}',
+                  'Filtros${_tieneFiltrosActivos ? ' ($_totalFiltrosActivos)' : ''}',
                 ),
                 style: TextButton.styleFrom(
                   padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
@@ -650,54 +662,54 @@ class _TablaScreenState extends ConsumerState<TablaScreen> {
               style: const TextStyle(fontSize: 12, color: AppColors.textSecondary),
             ),
           ),
-          if (_filtroTramo != null || _filtroTipo != null || _filtroTipoLiberacion != null || _filtroEstatus != null) ...[
+          if (_tieneFiltrosActivos) ...[
             const SizedBox(height: 6),
             SingleChildScrollView(
               scrollDirection: Axis.horizontal,
               child: Row(
                 children: [
-                  if (_filtroTramo != null)
+                  for (final t in _filtroTramo)
                     Padding(
                       padding: const EdgeInsets.only(right: 6),
                       child: Chip(
-                        label: Text('T/F/S: $_filtroTramo'),
-                        onDeleted: () => setState(() => _filtroTramo = null),
+                        label: Text('T/F/S: $t'),
+                        onDeleted: () => setState(() => _filtroTramo = {..._filtroTramo}..remove(t)),
                         deleteIcon: const Icon(Icons.close, size: 14),
                         materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
                         visualDensity: VisualDensity.compact,
                       ),
                     ),
-                  if (_filtroTipo != null)
+                  for (final t in _filtroTipo)
                     Padding(
                       padding: const EdgeInsets.only(right: 6),
                       child: Chip(
-                        label: Text(_filtroTipo!),
-                        onDeleted: () => setState(() => _filtroTipo = null),
-                        backgroundColor: AppColors.tipoPropiedadColor(_filtroTipo!).withValues(alpha: 0.15),
+                        label: Text(t),
+                        onDeleted: () => setState(() => _filtroTipo = {..._filtroTipo}..remove(t)),
+                        backgroundColor: AppColors.tipoPropiedadColor(t).withValues(alpha: 0.15),
                         deleteIcon: const Icon(Icons.close, size: 14),
                         materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
                         visualDensity: VisualDensity.compact,
                       ),
                     ),
-                  if (_filtroTipoLiberacion != null)
+                  for (final t in _filtroTipoLiberacion)
                     Padding(
                       padding: const EdgeInsets.only(right: 6),
                       child: Chip(
-                        label: Text('Tipo liberacion: $_filtroTipoLiberacion'),
-                        onDeleted: () => setState(() => _filtroTipoLiberacion = null),
+                        label: Text('Tipo liberacion: $t'),
+                        onDeleted: () => setState(() => _filtroTipoLiberacion = {..._filtroTipoLiberacion}..remove(t)),
                         backgroundColor: AppColors.info.withValues(alpha: 0.15),
                         deleteIcon: const Icon(Icons.close, size: 14),
                         materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
                         visualDensity: VisualDensity.compact,
                       ),
                     ),
-                  if (_filtroEstatus != null)
+                  for (final t in _filtroEstatus)
                     Padding(
                       padding: const EdgeInsets.only(right: 6),
                       child: Chip(
-                        label: Text('Estatus: $_filtroEstatus'),
-                        onDeleted: () => setState(() => _filtroEstatus = null),
-                        backgroundColor: _filtroEstatus == 'Liberado'
+                        label: Text('Estatus: $t'),
+                        onDeleted: () => setState(() => _filtroEstatus = {..._filtroEstatus}..remove(t)),
+                        backgroundColor: t == 'Liberado'
                             ? AppColors.secondary.withValues(alpha: 0.15)
                             : AppColors.danger.withValues(alpha: 0.15),
                         deleteIcon: const Icon(Icons.close, size: 14),
@@ -1496,10 +1508,10 @@ class _TablaScreenState extends ConsumerState<TablaScreen> {
   }
 
   void _showFiltros(BuildContext context, List<Predio> allPredios) {
-    String? tramo = _filtroTramo;
-    String? tipo = _filtroTipo;
-    String? tipoLiberacion = _filtroTipoLiberacion;
-    String? estatus = _filtroEstatus;
+    final tramo = Set<String>.of(_filtroTramo);
+    final tipo = Set<String>.of(_filtroTipo);
+    final tipoLiberacion = Set<String>.of(_filtroTipoLiberacion);
+    final estatus = Set<String>.of(_filtroEstatus);
     final tramos = _opcionesTramoProyecto(allPredios);
     final tipos = _opcionesTipoProyecto(allPredios);
     final tiposLiberacion = _opcionesTipoLiberacionProyecto(allPredios);
@@ -1538,10 +1550,10 @@ class _TablaScreenState extends ConsumerState<TablaScreen> {
                       style: TextButton.styleFrom(foregroundColor: AppColors.primary),
                       onPressed: () {
                         setS(() {
-                          tramo = null;
-                          tipo = null;
-                          tipoLiberacion = null;
-                          estatus = null;
+                          tramo.clear();
+                          tipo.clear();
+                          tipoLiberacion.clear();
+                          estatus.clear();
                         });
                       },
                       child: const Text('Limpiar todo'),
@@ -1581,8 +1593,8 @@ class _TablaScreenState extends ConsumerState<TablaScreen> {
                           label: Text(t),
                           labelStyle: const TextStyle(color: AppColors.textPrimary),
                           checkmarkColor: AppColors.primary,
-                          selected: tramo == t,
-                          onSelected: (v) => setS(() => tramo = v ? t : null),
+                          selected: tramo.contains(t),
+                          onSelected: (v) => setS(() => v ? tramo.add(t) : tramo.remove(t)),
                           selectedColor: AppColors.primary.withValues(alpha: 0.2),
                         ),
                       )
@@ -1606,8 +1618,8 @@ class _TablaScreenState extends ConsumerState<TablaScreen> {
                           label: Text(t),
                           labelStyle: const TextStyle(color: AppColors.textPrimary),
                           checkmarkColor: AppColors.textPrimary,
-                          selected: tipo == t,
-                          onSelected: (v) => setS(() => tipo = v ? t : null),
+                          selected: tipo.contains(t),
+                          onSelected: (v) => setS(() => v ? tipo.add(t) : tipo.remove(t)),
                           selectedColor: AppColors.tipoPropiedadColor(t).withValues(alpha: 0.2),
                         ),
                       )
@@ -1631,8 +1643,8 @@ class _TablaScreenState extends ConsumerState<TablaScreen> {
                           label: Text(t),
                           labelStyle: const TextStyle(color: AppColors.textPrimary),
                           checkmarkColor: AppColors.info,
-                          selected: tipoLiberacion == t,
-                          onSelected: (v) => setS(() => tipoLiberacion = v ? t : null),
+                          selected: tipoLiberacion.contains(t),
+                          onSelected: (v) => setS(() => v ? tipoLiberacion.add(t) : tipoLiberacion.remove(t)),
                           selectedColor: AppColors.info.withValues(alpha: 0.2),
                         ),
                       )
@@ -1655,16 +1667,16 @@ class _TablaScreenState extends ConsumerState<TablaScreen> {
                       label: const Text('Liberado'),
                       labelStyle: const TextStyle(color: AppColors.textPrimary),
                       checkmarkColor: AppColors.secondary,
-                      selected: estatus == 'Liberado',
-                      onSelected: (v) => setS(() => estatus = v ? 'Liberado' : null),
+                      selected: estatus.contains('Liberado'),
+                      onSelected: (v) => setS(() => v ? estatus.add('Liberado') : estatus.remove('Liberado')),
                       selectedColor: AppColors.secondary.withValues(alpha: 0.2),
                     ),
                     FilterChip(
                       label: const Text('No liberado'),
                       labelStyle: const TextStyle(color: AppColors.textPrimary),
                       checkmarkColor: AppColors.danger,
-                      selected: estatus == 'No liberado',
-                      onSelected: (v) => setS(() => estatus = v ? 'No liberado' : null),
+                      selected: estatus.contains('No liberado'),
+                      onSelected: (v) => setS(() => v ? estatus.add('No liberado') : estatus.remove('No liberado')),
                       selectedColor: AppColors.danger.withValues(alpha: 0.2),
                     ),
                   ],

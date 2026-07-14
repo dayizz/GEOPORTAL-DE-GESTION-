@@ -82,6 +82,11 @@ class _MapaScreenState extends ConsumerState<MapaScreen> {
   double _currentRotation = 0;
   /// Si el panel de rotación está expandido.
   bool _showRotationPanel = false;
+  bool _showFiltrosPanel = false;
+  Set<String> _filtroEstatusMapa = {};
+  Set<String> _filtroTipoMapa = {};
+  Set<String> _filtroTramoMapa = {};
+  Set<String> _filtroEstadoMapa = {};
   bool _isMiddleMouseRotateActive = false;
   Offset? _lastMiddleMousePosition;
   bool _isTrackpadRotateActive = false;
@@ -200,7 +205,8 @@ class _MapaScreenState extends ConsumerState<MapaScreen> {
       child: Stack(
         children: [
           prediosAsync.when(
-            data: (predios) {
+            data: (rawPredios) {
+              final predios = _applyFiltrosMapa(rawPredios);
               List<_PredioVisualData> visuals;
               if (_lastPredios == predios && _lastColorModeVisual == colorMode) {
                 visuals = _lastVisuals ?? [];
@@ -596,6 +602,50 @@ class _MapaScreenState extends ConsumerState<MapaScreen> {
                         ),
                       ),
                     ),
+                    const SizedBox(width: 8),
+                    Material(
+                      color: Colors.white,
+                      elevation: 4,
+                      borderRadius: BorderRadius.circular(10),
+                      child: InkWell(
+                        borderRadius: BorderRadius.circular(10),
+                        onTap: () => setState(() {
+                          _showFiltrosPanel = !_showFiltrosPanel;
+                        }),
+                        child: Container(
+                          width: 40,
+                          height: 40,
+                          alignment: Alignment.center,
+                          child: Stack(
+                            clipBehavior: Clip.none,
+                            children: [
+                              Icon(
+                                _tieneFiltrosMapaActivos
+                                    ? Icons.filter_alt
+                                    : Icons.filter_alt_outlined,
+                                size: 22,
+                                color: _showFiltrosPanel || _tieneFiltrosMapaActivos
+                                    ? AppColors.primary
+                                    : const Color(0xFF555555),
+                              ),
+                              if (_tieneFiltrosMapaActivos)
+                                Positioned(
+                                  right: -2,
+                                  top: -2,
+                                  child: Container(
+                                    width: 8,
+                                    height: 8,
+                                    decoration: const BoxDecoration(
+                                      color: AppColors.danger,
+                                      shape: BoxShape.circle,
+                                    ),
+                                  ),
+                                ),
+                            ],
+                          ),
+                        ),
+                      ),
+                    ),
                   ],
                 ),
                 if (_showVisualizacionPanel) ...[
@@ -605,6 +655,10 @@ class _MapaScreenState extends ConsumerState<MapaScreen> {
                 if (_showLayersPanel) ...[
                   const SizedBox(height: 6),
                   _buildLayersPanel(colorMode, baseLayer),
+                ],
+                if (_showFiltrosPanel) ...[
+                  const SizedBox(height: 6),
+                  _buildFiltrosMapaPanel(prediosAsync.asData?.value ?? const []),
                 ],
                 if (_showRotationPanel) ...[
                   const SizedBox(height: 6),
@@ -709,6 +763,139 @@ class _MapaScreenState extends ConsumerState<MapaScreen> {
     }
     return 'https://tile.openstreetmap.org/{z}/{x}/{y}.png';
   }
+  bool get _tieneFiltrosMapaActivos =>
+      _filtroEstatusMapa.isNotEmpty ||
+      _filtroTipoMapa.isNotEmpty ||
+      _filtroTramoMapa.isNotEmpty ||
+      _filtroEstadoMapa.isNotEmpty;
+
+  List<Predio> _applyFiltrosMapa(List<Predio> predios) {
+    if (!_tieneFiltrosMapaActivos) return predios;
+    return predios.where((p) {
+      if (_filtroEstatusMapa.isNotEmpty) {
+        final estatus = p.cop ? 'Liberado' : 'No liberado';
+        if (!_filtroEstatusMapa.contains(estatus)) return false;
+      }
+      if (_filtroTipoMapa.isNotEmpty && !_filtroTipoMapa.contains(p.tipoPropiedad)) {
+        return false;
+      }
+      if (_filtroTramoMapa.isNotEmpty && !_filtroTramoMapa.contains(p.tramo)) {
+        return false;
+      }
+      if (_filtroEstadoMapa.isNotEmpty && !_filtroEstadoMapa.contains(p.estado ?? '')) {
+        return false;
+      }
+      return true;
+    }).toList(growable: false);
+  }
+
+  Widget _buildFiltrosMapaPanel(List<Predio> predios) {
+    final tipos = predios.map((p) => p.tipoPropiedad).where((t) => t.trim().isNotEmpty).toSet().toList()..sort();
+    final tramos = predios.map((p) => p.tramo).where((t) => t.trim().isNotEmpty).toSet().toList()..sort();
+    final estados = predios.map((p) => p.estado ?? '').where((e) => e.trim().isNotEmpty).toSet().toList()..sort();
+
+    Widget seccion(String titulo, List<String> opciones, Set<String> seleccion, Color color) {
+      if (opciones.isEmpty) return const SizedBox.shrink();
+      return Padding(
+        padding: const EdgeInsets.only(bottom: 12),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              titulo,
+              style: const TextStyle(
+                fontSize: 12,
+                fontWeight: FontWeight.w700,
+                color: Color(0xFF333333),
+              ),
+            ),
+            const SizedBox(height: 6),
+            Wrap(
+              spacing: 6,
+              runSpacing: 6,
+              children: opciones
+                  .map(
+                    (o) => FilterChip(
+                      label: Text(
+                        o,
+                        style: const TextStyle(fontSize: 12, color: Color(0xFF333333)),
+                      ),
+                      backgroundColor: Colors.white,
+                      selected: seleccion.contains(o),
+                      visualDensity: VisualDensity.compact,
+                      materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                      selectedColor: color.withValues(alpha: 0.2),
+                      checkmarkColor: color,
+                      onSelected: (v) => setState(() {
+                        if (v) {
+                          seleccion.add(o);
+                        } else {
+                          seleccion.remove(o);
+                        }
+                      }),
+                    ),
+                  )
+                  .toList(),
+            ),
+          ],
+        ),
+      );
+    }
+
+    return Material(
+      color: Colors.white,
+      elevation: 4,
+      borderRadius: BorderRadius.circular(10),
+      child: Container(
+        width: 260,
+        constraints: const BoxConstraints(maxHeight: 420),
+        padding: const EdgeInsets.all(12),
+        child: SingleChildScrollView(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                children: [
+                  const Expanded(
+                    child: Text(
+                      'Filtrar predios visibles',
+                      style: TextStyle(
+                        fontSize: 13,
+                        fontWeight: FontWeight.w700,
+                        color: Color(0xFF333333),
+                      ),
+                    ),
+                  ),
+                  if (_tieneFiltrosMapaActivos)
+                    TextButton(
+                      style: TextButton.styleFrom(
+                        foregroundColor: AppColors.primary,
+                        padding: EdgeInsets.zero,
+                        minimumSize: const Size(0, 0),
+                        tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                      ),
+                      onPressed: () => setState(() {
+                        _filtroEstatusMapa = {};
+                        _filtroTipoMapa = {};
+                        _filtroTramoMapa = {};
+                        _filtroEstadoMapa = {};
+                      }),
+                      child: const Text('Limpiar', style: TextStyle(fontSize: 12)),
+                    ),
+                ],
+              ),
+              const SizedBox(height: 10),
+              seccion('Estatus', const ['Liberado', 'No liberado'], _filtroEstatusMapa, AppColors.secondary),
+              seccion('Tipo de propiedad', tipos, _filtroTipoMapa, AppColors.primary),
+              seccion('Segmento / Frente / Tramo', tramos, _filtroTramoMapa, AppColors.info),
+              seccion('Estado', estados, _filtroEstadoMapa, AppColors.primary),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
   List<_PredioVisualData> _buildVisualData(
     List<Predio> predios,
     MapaColorMode mode,
