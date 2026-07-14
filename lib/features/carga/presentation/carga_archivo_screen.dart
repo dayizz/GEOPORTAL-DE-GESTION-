@@ -40,6 +40,8 @@ class CargaArchivoScreen extends ConsumerStatefulWidget {
 class _CargaArchivoScreenState extends ConsumerState<CargaArchivoScreen> {
   bool _loading = false;
   bool _sincronizando = false;
+  String? _eliminandoFileId;
+  bool _eliminandoTodos = false;
   List<Map<String, dynamic>> _preview = [];
   PlatformFile? _archivoSeleccionado;
   Map<String, dynamic>? _geoJsonData;
@@ -657,76 +659,93 @@ class _CargaArchivoScreenState extends ConsumerState<CargaArchivoScreen> {
   }
 
   /// Elimina un archivo: del provider en memoria y, si tiene bdId, también de la BD.
+  ///
+  /// El archivo se mantiene en la lista (con spinner) hasta que termina de
+  /// borrarse de Gestión/BD, en vez de quitarse de inmediato: así el usuario
+  /// ve que la operación sigue en curso y no necesita reintentar creyendo
+  /// que no hizo nada.
   Future<void> _eliminarArchivo(ImportedFile file) async {
-    final currentImported = ref.read(importedFeaturesProvider);
-    final shouldClearMap = shouldClearImportedMapAfterFileDeletion(
-      currentImported: currentImported,
-      fileFeatures: file.features,
-    );
-    final currentPks = ref.read(pksPointFeaturesProvider);
-    final shouldClearPks = _shouldClearPksPointsAfterFileDeletion(
-      currentPks: currentPks,
-      fileFeatures: file.features,
-    );
-    final claves = extractClavesFromFeatures(file.features);
-
-    ref.read(cargaProvider.notifier).removeFile(file.id);
-    if (shouldClearMap) {
-      ref.read(importedFeaturesProvider.notifier).state = const [];
-      ref.read(importacionAsyncProvider.notifier).reset();
-    }
-    if (shouldClearPks) {
-      ref.read(pksPointFeaturesProvider.notifier).state = const [];
-    }
-
-    final eliminadosGestion = await _eliminarPrediosDeGestionPorClaves(claves);
-
-    if (file.guardadoEnBD && file.bdId != null) {
-      try {
-        final repo = ref.read(localArchivosRepositoryProvider);
-        await repo.deleteArchivo(file.bdId!);
-      } catch (_) {
-        // Error silencioso: el archivo ya fue quitado de la UI.
-      }
-    }
-
-    ref.invalidate(prediosListProvider);
-    ref.invalidate(prediosMapaProvider);
-    if (mounted) {
-      _mostrarSnackBar(
-        eliminadosGestion > 0
-            ? 'Archivo eliminado y $eliminadosGestion predio(s) removido(s) de Gestión.'
-            : 'Archivo eliminado de Gestión y Mapa.',
+    if (_eliminandoFileId != null || _eliminandoTodos) return;
+    setState(() => _eliminandoFileId = file.id);
+    try {
+      final currentImported = ref.read(importedFeaturesProvider);
+      final shouldClearMap = shouldClearImportedMapAfterFileDeletion(
+        currentImported: currentImported,
+        fileFeatures: file.features,
       );
+      final currentPks = ref.read(pksPointFeaturesProvider);
+      final shouldClearPks = _shouldClearPksPointsAfterFileDeletion(
+        currentPks: currentPks,
+        fileFeatures: file.features,
+      );
+      final claves = extractClavesFromFeatures(file.features);
+
+      final eliminadosGestion = await _eliminarPrediosDeGestionPorClaves(claves);
+
+      ref.read(cargaProvider.notifier).removeFile(file.id);
+      if (shouldClearMap) {
+        ref.read(importedFeaturesProvider.notifier).state = const [];
+        ref.read(importacionAsyncProvider.notifier).reset();
+      }
+      if (shouldClearPks) {
+        ref.read(pksPointFeaturesProvider.notifier).state = const [];
+      }
+
+      if (file.guardadoEnBD && file.bdId != null) {
+        try {
+          final repo = ref.read(localArchivosRepositoryProvider);
+          await repo.deleteArchivo(file.bdId!);
+        } catch (_) {
+          // Error silencioso: el archivo ya fue quitado de la UI.
+        }
+      }
+
+      ref.invalidate(prediosListProvider);
+      ref.invalidate(prediosMapaProvider);
+      if (mounted) {
+        _mostrarSnackBar(
+          eliminadosGestion > 0
+              ? 'Archivo eliminado y $eliminadosGestion predio(s) removido(s) de Gestión.'
+              : 'Archivo eliminado de Gestión y Mapa.',
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _eliminandoFileId = null);
     }
   }
 
   Future<void> _eliminarTodos(List<ImportedFile> files) async {
-    final claves = <String>{};
-    for (final file in files) {
-      claves.addAll(extractClavesFromFeatures(file.features));
-    }
-
-    ref.read(cargaProvider.notifier).clearAll();
-    ref.read(importedFeaturesProvider.notifier).state = const [];
-    ref.read(pksPointFeaturesProvider.notifier).state = const [];
-    ref.read(importacionAsyncProvider.notifier).reset();
-
-    final eliminadosGestion = await _eliminarPrediosDeGestionPorClaves(claves);
-
+    if (_eliminandoFileId != null || _eliminandoTodos) return;
+    setState(() => _eliminandoTodos = true);
     try {
-      final repo = ref.read(localArchivosRepositoryProvider);
-      await repo.deleteAll();
-    } catch (_) {}
+      final claves = <String>{};
+      for (final file in files) {
+        claves.addAll(extractClavesFromFeatures(file.features));
+      }
 
-    ref.invalidate(prediosListProvider);
-    ref.invalidate(prediosMapaProvider);
-    if (mounted) {
-      _mostrarSnackBar(
-        eliminadosGestion > 0
-            ? 'Archivos eliminados y $eliminadosGestion predio(s) removido(s) de Gestión.'
-            : 'Archivos eliminados de Gestión y Mapa.',
-      );
+      final eliminadosGestion = await _eliminarPrediosDeGestionPorClaves(claves);
+
+      ref.read(cargaProvider.notifier).clearAll();
+      ref.read(importedFeaturesProvider.notifier).state = const [];
+      ref.read(pksPointFeaturesProvider.notifier).state = const [];
+      ref.read(importacionAsyncProvider.notifier).reset();
+
+      try {
+        final repo = ref.read(localArchivosRepositoryProvider);
+        await repo.deleteAll();
+      } catch (_) {}
+
+      ref.invalidate(prediosListProvider);
+      ref.invalidate(prediosMapaProvider);
+      if (mounted) {
+        _mostrarSnackBar(
+          eliminadosGestion > 0
+              ? 'Archivos eliminados y $eliminadosGestion predio(s) removido(s) de Gestión.'
+              : 'Archivos eliminados de Gestión y Mapa.',
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _eliminandoTodos = false);
     }
   }
 
@@ -739,8 +758,17 @@ class _CargaArchivoScreenState extends ConsumerState<CargaArchivoScreen> {
         ref.read(localPrediosProvider.notifier).removeByClaves(claves);
 
     try {
-      final predios = await ref.read(prediosListProvider.future);
+      // Se consulta el repositorio directo (sin los filtros de proyecto/
+      // búsqueda activos en la UI de Gestión) para no dejar sin eliminar
+      // predios del archivo que caen fuera del filtro seleccionado en ese
+      // momento.
       final repo = ref.read(prediosRepositoryProvider);
+      final canAccessAllProjects = ref.read(canAccessAllProjectsProvider);
+      final allowedProjects = ref.read(currentUserAssignedProjectsProvider);
+      final predios = await repo.getPredios(
+        proyectosPermitidos: canAccessAllProjects ? null : allowedProjects,
+        limit: 100000,
+      );
       final toDelete = predios.where((p) {
         final clave = p.claveCatastral.trim().toUpperCase();
         return !p.id.startsWith('local-') && claves.contains(clave);
@@ -2380,31 +2408,42 @@ class _CargaArchivoScreenState extends ConsumerState<CargaArchivoScreen> {
                         ),
                         const Spacer(),
                         TextButton.icon(
-                          onPressed: () => showDialog(
-                            context: context,
-                            builder: (ctx) => AlertDialog(
-                              title: const Text('Eliminar todos'),
-                              content: const Text(
-                                '¿Eliminar todos los archivos importados? Se borrarán también de la base de datos.',
-                              ),
-                              actions: [
-                                TextButton(
-                                  onPressed: () => Navigator.pop(ctx),
-                                  child: const Text('Cancelar'),
-                                ),
-                                TextButton(
-                                  onPressed: () {
-                                    Navigator.pop(ctx);
-                                    _eliminarTodos(importedFiles);
-                                  },
-                                  child: const Text('Eliminar todos',
-                                      style: TextStyle(color: AppColors.danger)),
-                                ),
-                              ],
-                            ),
+                          onPressed: (_eliminandoTodos || _eliminandoFileId != null)
+                              ? null
+                              : () => showDialog(
+                                    context: context,
+                                    builder: (ctx) => AlertDialog(
+                                      title: const Text('Eliminar todos'),
+                                      content: const Text(
+                                        '¿Eliminar todos los archivos importados? Se borrarán también de la base de datos.',
+                                      ),
+                                      actions: [
+                                        TextButton(
+                                          onPressed: () => Navigator.pop(ctx),
+                                          child: const Text('Cancelar'),
+                                        ),
+                                        TextButton(
+                                          onPressed: () {
+                                            Navigator.pop(ctx);
+                                            _eliminarTodos(importedFiles);
+                                          },
+                                          child: const Text('Eliminar todos',
+                                              style: TextStyle(color: AppColors.danger)),
+                                        ),
+                                      ],
+                                    ),
+                                  ),
+                          icon: _eliminandoTodos
+                              ? const SizedBox(
+                                  width: 14,
+                                  height: 14,
+                                  child: CircularProgressIndicator(strokeWidth: 2),
+                                )
+                              : const Icon(Icons.delete_sweep_outlined, size: 16, color: AppColors.danger),
+                          label: Text(
+                            _eliminandoTodos ? 'Eliminando...' : 'Eliminar todos',
+                            style: const TextStyle(fontSize: 12, color: AppColors.danger),
                           ),
-                          icon: const Icon(Icons.delete_sweep_outlined, size: 16, color: AppColors.danger),
-                          label: const Text('Eliminar todos', style: TextStyle(fontSize: 12, color: AppColors.danger)),
                           style: TextButton.styleFrom(padding: const EdgeInsets.symmetric(horizontal: 8)),
                         ),
                       ],
@@ -2525,6 +2564,7 @@ class _CargaArchivoScreenState extends ConsumerState<CargaArchivoScreen> {
     final statusLabel = file.guardadoEnBD ? 'Guardado en BD' : 'Solo en memoria';
 
     final busy = _loading || _sincronizando;
+    final eliminandoEste = _eliminandoFileId == file.id;
     return Stack(
       children: [
         ListTile(
@@ -2611,36 +2651,47 @@ class _CargaArchivoScreenState extends ConsumerState<CargaArchivoScreen> {
                 ),
               ),
               Tooltip(
-                message: 'Eliminar',
+                message: eliminandoEste ? 'Eliminando...' : 'Eliminar',
                 child: IconButton(
-                  icon: const Icon(Icons.delete_outline, size: 18,
-                      color: AppColors.danger),
+                  icon: eliminandoEste
+                      ? const SizedBox(
+                          width: 16,
+                          height: 16,
+                          child: CircularProgressIndicator(
+                            strokeWidth: 2,
+                            color: AppColors.danger,
+                          ),
+                        )
+                      : const Icon(Icons.delete_outline, size: 18,
+                          color: AppColors.danger),
                   padding: EdgeInsets.zero,
                   constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
-                  onPressed: () => showDialog(
-                    context: context,
-                    builder: (ctx) => AlertDialog(
-                      title: const Text('Eliminar archivo'),
-                      content: Text(
-                        '¿Eliminar "${file.name}"?'
-                        '${file.guardadoEnBD ? '\nSe borrará también de la base de datos.' : ''}',
-                      ),
-                      actions: [
-                        TextButton(
-                          onPressed: () => Navigator.pop(ctx),
-                          child: const Text('Cancelar'),
-                        ),
-                        TextButton(
-                          onPressed: () {
-                            _eliminarArchivo(file);
-                            Navigator.pop(ctx);
-                          },
-                          child: const Text('Eliminar',
-                              style: TextStyle(color: AppColors.danger)),
-                        ),
-                      ],
-                    ),
-                  ),
+                  onPressed: (_eliminandoFileId != null || _eliminandoTodos)
+                      ? null
+                      : () => showDialog(
+                            context: context,
+                            builder: (ctx) => AlertDialog(
+                              title: const Text('Eliminar archivo'),
+                              content: Text(
+                                '¿Eliminar "${file.name}"?'
+                                '${file.guardadoEnBD ? '\nSe borrará también de la base de datos.' : ''}',
+                              ),
+                              actions: [
+                                TextButton(
+                                  onPressed: () => Navigator.pop(ctx),
+                                  child: const Text('Cancelar'),
+                                ),
+                                TextButton(
+                                  onPressed: () {
+                                    Navigator.pop(ctx);
+                                    _eliminarArchivo(file);
+                                  },
+                                  child: const Text('Eliminar',
+                                      style: TextStyle(color: AppColors.danger)),
+                                ),
+                              ],
+                            ),
+                          ),
                 ),
               ),
             ],
