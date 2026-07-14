@@ -1,5 +1,4 @@
 import 'dart:convert';
-import 'dart:io';
 import 'dart:math' as math;
 import 'dart:typed_data';
 import 'dart:ui' as ui;
@@ -11,8 +10,6 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:http/http.dart' as http;
 import 'package:latlong2/latlong.dart';
-import 'package:path_provider/path_provider.dart';
-import 'package:share_plus/share_plus.dart';
 import '../../../core/constants/app_colors.dart';
 import '../../../shared/widgets/app_scaffold.dart';
 import '../../auth/providers/demo_provider.dart';
@@ -26,6 +23,7 @@ import '../../predios/providers/proyectos_provider.dart';
 import '../../propietarios/data/propietarios_repository.dart';
 import '../../propietarios/providers/propietarios_provider.dart';
 import '../../carga/utils/geojson_mapper.dart';
+import '../../carga/utils/file_download_io.dart';
 import '../../../core/utils/browser_download.dart';
 import '../providers/mapa_provider.dart';
 import 'package:screenshot/screenshot.dart';
@@ -2948,23 +2946,20 @@ class _MapaScreenState extends ConsumerState<MapaScreen> {
           // En web, descargar en el navegador
           await _downloadWeb(croppedBytes, fileName);
         } else {
-          // En móvil/desktop, guardar en directorio local
+          // getApplicationDocumentsDirectory() guarda dentro del contenedor
+          // sandbox de la app (invisible para el usuario en Finder); se usa
+          // Descargas real, igual que el resto de las exportaciones.
           try {
-            final directory = await getApplicationDocumentsDirectory();
-            final filePath = '${directory.path}/$fileName';
-            final file = File(filePath);
-            await file.writeAsBytes(croppedBytes);
-            
+            await downloadBytes(
+              croppedBytes,
+              fileName: fileName,
+              mimeType: 'image/png',
+            );
+
             if (!mounted) return;
-            
+
             ScaffoldMessenger.of(context).showSnackBar(
-              SnackBar(
-                content: Text('Captura guardada: $fileName'),
-                action: SnackBarAction(
-                  label: 'Compartir',
-                  onPressed: () => _compartirCaptura(filePath),
-                ),
-              ),
+              SnackBar(content: Text('Captura guardada en Descargas: $fileName')),
             );
           } catch (e) {
             debugPrint('Error al guardar captura: $e');
@@ -2988,21 +2983,6 @@ class _MapaScreenState extends ConsumerState<MapaScreen> {
       }
     }
   }
-  /// Comparte la captura de pantalla
-  Future<void> _compartirCaptura(String filePath) async {
-    try {
-      await Share.shareXFiles(
-        [XFile(filePath)],
-        text: 'Captura del mapa LDDV',
-      );
-    } catch (e) {
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Error al compartir: $e')),
-      );
-    }
-  }
-  
   /// Descarga la captura en el navegador web
   Future<void> _downloadWeb(Uint8List bytes, String fileName) async {
     try {

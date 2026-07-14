@@ -6,14 +6,12 @@ import 'package:go_router/go_router.dart';
 import 'package:intl/intl.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'package:excel/excel.dart' hide Border;
-import 'package:share_plus/share_plus.dart';
 import 'dart:async';
-import 'dart:io';
 import 'dart:math' as math;
-import 'package:path_provider/path_provider.dart';
 import '../../../shared/widgets/app_scaffold.dart';
 import '../../../core/constants/app_colors.dart';
 import '../../../core/utils/browser_download.dart';
+import '../../carga/utils/file_download_io.dart';
 import '../../mapa/providers/mapa_provider.dart';
 import '../../predios/data/predios_repository.dart';
 import '../../predios/models/predio.dart';
@@ -498,14 +496,15 @@ class _TablaScreenState extends ConsumerState<TablaScreen> {
           mimeType: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
         );
       } else {
-        // Para mobile/desktop, usar el método original
-        final dir = await getTemporaryDirectory();
-        final file = File('${dir.path}/$fileName');
-        await file.writeAsBytes(bytes);
-        
-        await Share.shareXFiles(
-          [XFile(file.path)],
-          text: 'Exportación de Gestión $_proyectoActual',
+        // En desktop, share_plus abre un popover de macOS que requiere un
+        // rect de anclaje (sharePositionOrigin); sin él no se muestra nada
+        // y el archivo se queda solo en el directorio temporal, dando la
+        // impresión de que la descarga no hizo nada. Se guarda directo en
+        // Descargas, igual que el resto de las exportaciones de la app.
+        await downloadBytes(
+          Uint8List.fromList(bytes),
+          fileName: fileName,
+          mimeType: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
         );
       }
       
