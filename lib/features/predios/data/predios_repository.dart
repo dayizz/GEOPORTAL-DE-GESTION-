@@ -261,6 +261,18 @@ class PrediosRepository {
     return _normalizePredioMap(doc, propietario: propietario);
   }
 
+  // Firestore no admite arrays anidados (ej. coordinates de GeoJSON:
+  // array de arrays de [lng, lat]); escribir un Map con esa forma directamente
+  // hace que el SDK nativo lance una excepción no capturable en Dart y aborte
+  // el proceso. Por eso se serializa a String antes de escribir; la lectura
+  // (_normalizePredioMap) ya sabe decodificar tanto String como Map.
+  void _encodeGeometryForWrite(Map<String, dynamic> payload) {
+    final geometry = payload['geometry'];
+    if (geometry is Map) {
+      payload['geometry'] = jsonEncode(geometry);
+    }
+  }
+
   Future<Predio> createPredio(Map<String, dynamic> data) async {
     final id = (data['id']?.toString().trim().isNotEmpty ?? false)
         ? data['id'].toString().trim()
@@ -271,6 +283,7 @@ class PrediosRepository {
       'created_at': data['created_at']?.toString() ?? _isoNow(),
       'updated_at': _isoNow(),
     }..remove('id');
+    _encodeGeometryForWrite(payload);
 
     await _predios.doc(id).set(payload, SetOptions(merge: true));
     final created = await getPredioById(id);
@@ -285,6 +298,7 @@ class PrediosRepository {
       ...data,
       'updated_at': _isoNow(),
     }..remove('id');
+    _encodeGeometryForWrite(payload);
 
     await _predios.doc(id).set(payload, SetOptions(merge: true));
     final updated = await getPredioById(id);
@@ -325,15 +339,15 @@ class PrediosRepository {
     required String idGestion,
     required Map<String, dynamic> geometry,
   }) async {
-    await _predios.doc(idGestion).set(
-      {
-        'geometry': geometry,
-        'id_poligono': idPoligono,
-        'poligono_insertado': true,
-        'updated_at': _isoNow(),
-      },
-      SetOptions(merge: true),
-    );
+    final payload = <String, dynamic>{
+      'geometry': geometry,
+      'id_poligono': idPoligono,
+      'poligono_insertado': true,
+      'updated_at': _isoNow(),
+    };
+    _encodeGeometryForWrite(payload);
+
+    await _predios.doc(idGestion).set(payload, SetOptions(merge: true));
 
     final updated = await getPredioById(idGestion);
     if (updated == null) {

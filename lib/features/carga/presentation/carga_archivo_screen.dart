@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 import 'dart:math' as math;
 import 'dart:typed_data';
@@ -61,6 +62,58 @@ class _CargaArchivoScreenState extends ConsumerState<CargaArchivoScreen> {
         duration: Duration(seconds: exito ? 5 : 8),
       ),
     );
+  }
+
+  // Se usa Overlay + Timer propio (en vez de ScaffoldMessenger.showSnackBar)
+  // porque este aviso se muestra justo antes de un context.go() de navegación:
+  // el Scaffold que aloja el SnackBar puede desmontarse a mitad de su
+  // animación y dejar el aviso visualmente "pegado" en pantalla sin que su
+  // temporizador de auto-cierre llegue a dispararse.
+  void _mostrarAvisoConAccion(
+    BuildContext context, {
+    required String mensaje,
+    required String accionLabel,
+    required VoidCallback onAccion,
+  }) {
+    final overlay = Overlay.of(context, rootOverlay: true);
+    late final OverlayEntry entry;
+    final timer = Timer(const Duration(seconds: 5), () => entry.remove());
+    entry = OverlayEntry(
+      builder: (context) => Positioned(
+        left: 16,
+        right: 16,
+        bottom: 24,
+        child: Material(
+          color: Colors.transparent,
+          child: Container(
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+            decoration: BoxDecoration(
+              color: const Color(0xFF323232),
+              borderRadius: BorderRadius.circular(8),
+            ),
+            child: Row(
+              children: [
+                Expanded(
+                  child: Text(mensaje, style: const TextStyle(color: Colors.white)),
+                ),
+                TextButton(
+                  onPressed: () {
+                    timer.cancel();
+                    entry.remove();
+                    onAccion();
+                  },
+                  child: Text(
+                    accionLabel,
+                    style: const TextStyle(color: Colors.lightBlueAccent),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+    overlay.insert(entry);
   }
 
   bool _yaCargoDesdeDB = false;
@@ -536,17 +589,12 @@ class _CargaArchivoScreenState extends ConsumerState<CargaArchivoScreen> {
 
         // Navegar a Gestión para que el usuario vea las filas inyectadas
         if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              content: Text(
+          _mostrarAvisoConAccion(
+            context,
+            mensaje:
                 '${resultado.creados} nuevo(s) + ${resultado.encontrados} actualizado(s) en Gestión',
-              ),
-              action: SnackBarAction(
-                label: 'Ver Mapa',
-                onPressed: () => context.go('/mapa'),
-              ),
-              duration: const Duration(seconds: 6),
-            ),
+            accionLabel: 'Ver Mapa',
+            onAccion: () => context.go('/mapa'),
           );
           context.go('/tabla');
         }
