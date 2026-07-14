@@ -1,9 +1,9 @@
 import 'dart:convert';
-import 'dart:html' as html;
 import 'dart:io';
 import 'dart:math' as math;
 import 'dart:typed_data';
 import 'dart:ui' as ui;
+import 'package:flutter/foundation.dart';
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_map/flutter_map.dart';
@@ -26,6 +26,7 @@ import '../../predios/providers/proyectos_provider.dart';
 import '../../propietarios/data/propietarios_repository.dart';
 import '../../propietarios/providers/propietarios_provider.dart';
 import '../../carga/utils/geojson_mapper.dart';
+import '../../../core/utils/browser_download.dart';
 import '../providers/mapa_provider.dart';
 import 'package:screenshot/screenshot.dart';
 import '../utils/screenshot_crop_controller.dart';
@@ -2941,11 +2942,11 @@ class _MapaScreenState extends ConsumerState<MapaScreen> {
         final fileName = 'mapa_lddv_$timestamp.png';
         
         // Detectar si es web
-        final isWeb = identical(0, 0.0);
+        final isWeb = kIsWeb;
         
         if (isWeb) {
-          // En web, usar download de dart:html
-          _downloadWeb(croppedBytes, fileName);
+          // En web, descargar en el navegador
+          await _downloadWeb(croppedBytes, fileName);
         } else {
           // En móvil/desktop, guardar en directorio local
           try {
@@ -3003,27 +3004,13 @@ class _MapaScreenState extends ConsumerState<MapaScreen> {
   }
   
   /// Descarga la captura en el navegador web
-  void _downloadWeb(Uint8List bytes, String fileName) {
+  Future<void> _downloadWeb(Uint8List bytes, String fileName) async {
     try {
-      // Crear un Blob con la imagen usando dart:html
-      final blob = html.Blob([bytes], 'image/png');
-      final url = html.Url.createObjectUrlFromBlob(blob);
-      
-      // Crear un elemento <a> temporal para descargar
-      final anchor = html.document.createElement('a') as html.AnchorElement;
-      anchor.href = url;
-      anchor.download = fileName;
-      anchor.style.display = 'none';
-      html.document.body?.append(anchor);
-      
-      // Hacer clic y luego remover
-      anchor.click();
-      html.document.body?.children.remove(anchor);
-      
-      // Liberar la URL después de un momento
-      Future.delayed(const Duration(milliseconds: 100), () {
-        html.Url.revokeObjectUrl(url);
-      });
+      await downloadBytesForBrowser(
+        bytes,
+        fileName: fileName,
+        mimeType: 'image/png',
+      );
       
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(

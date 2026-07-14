@@ -1,8 +1,9 @@
 # BUG #5: Lost Update — Race Condition en Escritura Concurrente de Predios
 
 **Severidad**: 🔴 ALTA — Pérdida de datos  
-**Archivo**: `backend/app/main.py` líneas 665-698  
+**Archivo**: `geoportal-lddv/backend/app/main.py` líneas 665-698  
 **Tipo**: Race condition / Lost update  
+**Status**: ✅ FIJO — File locking implementado  
 
 ---
 

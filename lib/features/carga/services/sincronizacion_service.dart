@@ -1,3 +1,5 @@
+import 'dart:convert';
+
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../predios/data/predios_repository.dart';
 import '../../propietarios/data/propietarios_repository.dart';
@@ -200,6 +202,12 @@ class SincronizacionService {
       'nombre del estado', 'NOMBRE DEL ESTADO',
       'nom_estado', 'NOM_ESTADO',
       'edo', 'EDO',
+      'nom_ent', 'NOM_ENT',
+      'nombre_ent', 'NOMBRE_ENT',
+      'nom_edo', 'NOM_EDO',
+      'entidad_nombre', 'ENTIDAD_NOMBRE',
+      'estado_nombre', 'ESTADO_NOMBRE',
+      'cve_ent', 'CVE_ENT',
     ]);
     String? municipio = _pickFlexible(props, [
       'municipio', 'MUNICIPIO', 'mun', 'MUN',
@@ -209,6 +217,10 @@ class SincronizacionService {
       'nombre del municipio', 'NOMBRE DEL MUNICIPIO',
       'nom_municipio', 'NOM_MUNICIPIO',
       'mpio', 'MPIO', 'muni', 'MUNI',
+      'nom_mun', 'NOM_MUN',
+      'cve_mun', 'CVE_MUN',
+      'municipio_nombre', 'MUNICIPIO_NOMBRE',
+      'nom_loc', 'NOM_LOC',
     ]);
 
     if (estado != null && municipio != null) {
@@ -483,6 +495,48 @@ class SincronizacionService {
     return Duration(milliseconds: ms);
   }
 
+  bool _containsNestedArray(dynamic value) {
+    if (value is List) {
+      for (final item in value) {
+        if (item is List) return true;
+        if (_containsNestedArray(item)) return true;
+      }
+    } else if (value is Map) {
+      for (final item in value.values) {
+        if (_containsNestedArray(item)) return true;
+      }
+    }
+    return false;
+  }
+
+  dynamic _sanitizeForFirestore(dynamic value) {
+    if (value == null || value is num || value is bool || value is String) {
+      return value;
+    }
+
+    if (value is List) {
+      // Firestore no soporta arrays anidados.
+      if (_containsNestedArray(value)) {
+        return jsonEncode(value);
+      }
+      return value.map(_sanitizeForFirestore).toList(growable: false);
+    }
+
+    if (value is Map) {
+      // Si hay arrays anidados dentro del mapa, serializar completo a JSON.
+      if (_containsNestedArray(value)) {
+        return jsonEncode(value);
+      }
+      final out = <String, dynamic>{};
+      for (final entry in value.entries) {
+        out[entry.key.toString()] = _sanitizeForFirestore(entry.value);
+      }
+      return out;
+    }
+
+    return value.toString();
+  }
+
   /// Extrae todos los datos disponibles de las properties para crear/actualizar
   /// un predio en la BD, mapeando los alias más comunes de archivos GeoJSON.
   Map<String, dynamic> _buildNuevoPredioData(
@@ -564,7 +618,7 @@ class SincronizacionService {
         'tramo', 'TRAMO', 'tramo_vial', 'seccion',
         'frente', 'FRENTE', 'segmento', 'SEGMENTO',
         't_f_s', 'T_F_S', 'tipofs', 'TIPO_FS',
-      ]) ?? '',
+      ]) ?? 'S/T',
       'tipo_propiedad': _resolveTipoPropiedad(props),
       'estructura': _pickFlexible(props, [
         'estructura', 'ESTRUCTURA',
@@ -622,7 +676,7 @@ class SincronizacionService {
       ),
 
       // ── Geometría ────────────────────────────────────────────────────────
-      'geometry': geometry,
+      'geometry': geometry == null ? null : jsonEncode(geometry),
       'poligono_insertado': geometry != null,
 
       // ── Gestión (estado inicial) ─────────────────────────────────────────
@@ -653,9 +707,10 @@ class SincronizacionService {
       for (final entry in propsOriginal.entries) {
         final key = entry.key;
         if (!data.containsKey(key) && entry.value != null) {
-          final valueStr = entry.value.toString().trim();
+          final sanitizedValue = _sanitizeForFirestore(entry.value);
+          final valueStr = sanitizedValue.toString().trim();
           if (valueStr.isNotEmpty && valueStr.toLowerCase() != 'null') {
-            data[key] = entry.value;
+            data[key] = sanitizedValue;
           }
         }
       }
@@ -1168,7 +1223,7 @@ class SincronizacionService {
 
         final minData = <String, dynamic>{
           'clave_catastral': clave,
-          'tramo': '',
+          'tramo': 'S/T',
           'tipo_propiedad': tipoPropiedad,
           if (_resolveProyecto(props) case final proyecto?) 'proyecto': proyecto,
           if (geometry != null) 'geometry': geometry,

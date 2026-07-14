@@ -124,6 +124,11 @@ class GeoJsonMapper {
       'nom_municipio', 'NOM_MUNICIPIO',
       'nombre_municipio', 'NOMBRE_MUNICIPIO',
       'nombre del municipio', 'NOMBRE DEL MUNICIPIO',
+      'nom_mun', 'NOM_MUN',
+      'municipio_nombre', 'MUNICIPIO_NOMBRE',
+      'cve_mun', 'CVE_MUN',
+      'nom_loc', 'NOM_LOC',
+      'localidad_nombre', 'LOCALIDAD_NOMBRE',
     ],
     'estado': [
       'estado', 'ESTADO',
@@ -135,6 +140,12 @@ class GeoJsonMapper {
       'nom_estado', 'NOM_ESTADO',
       'nombre_estado', 'NOMBRE_ESTADO',
       'nombre del estado', 'NOMBRE DEL ESTADO',
+      'nom_ent', 'NOM_ENT',
+      'cve_ent', 'CVE_ENT',
+      'entidad_nombre', 'ENTIDAD_NOMBRE',
+      'nom_edo', 'NOM_EDO',
+      'nombre_ent', 'NOMBRE_ENT',
+      'estado_nombre', 'ESTADO_NOMBRE',
     ],
     // Status de liberación (COP)
     'cop': [

@@ -11,9 +11,9 @@ import 'dart:async';
 import 'dart:io';
 import 'dart:math' as math;
 import 'package:path_provider/path_provider.dart';
-import 'dart:html' as html;
 import '../../../shared/widgets/app_scaffold.dart';
 import '../../../core/constants/app_colors.dart';
+import '../../../core/utils/browser_download.dart';
 import '../../mapa/providers/mapa_provider.dart';
 import '../../predios/data/predios_repository.dart';
 import '../../predios/models/predio.dart';
@@ -492,13 +492,11 @@ class _TablaScreenState extends ConsumerState<TablaScreen> {
       
       // Para web, usar una solución diferente
       if (kIsWeb) {
-        // En web, crear un blob y descargar directamente usando dart:html
-        final blob = html.Blob([bytes], 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
-        final url = html.Url.createObjectUrlFromBlob(blob);
-        html.AnchorElement(href: url)
-          ..setAttribute('download', fileName)
-          ..click();
-        html.Url.revokeObjectUrl(url);
+        await downloadBytesForBrowser(
+          Uint8List.fromList(bytes),
+          fileName: fileName,
+          mimeType: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+        );
       } else {
         // Para mobile/desktop, usar el método original
         final dir = await getTemporaryDirectory();
@@ -955,20 +953,6 @@ class _TablaScreenState extends ConsumerState<TablaScreen> {
     String? error;
 
     Future<void> pasteFromClipboard(StateSetter setStateDialog) async {
-      if (kIsWeb) {
-        try {
-          final webClip = await html.window.navigator.clipboard?.readText() ?? '';
-          final text = webClip.trim();
-          if (text.isNotEmpty) {
-            _insertTextInController(ctrl, text);
-            setStateDialog(() {
-              error = null;
-            });
-            return;
-          }
-        } catch (_) {}
-      }
-
       final data = await Clipboard.getData(Clipboard.kTextPlain);
       final clip = data?.text?.trim() ?? '';
       if (clip.isEmpty) return;

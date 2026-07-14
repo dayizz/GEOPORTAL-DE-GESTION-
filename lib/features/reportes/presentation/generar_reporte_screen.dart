@@ -10,9 +10,9 @@ import 'package:intl/intl.dart';
 import 'dart:io';
 import 'package:path_provider/path_provider.dart';
 import 'package:flutter/services.dart' show rootBundle;
-import 'dart:html' as html show Blob, Url, AnchorElement, document;
 import '../../../shared/widgets/app_scaffold.dart';
 import '../../../core/constants/app_colors.dart';
+import '../../../core/utils/browser_download.dart';
 import '../../predios/providers/predios_provider.dart';
 import '../../predios/models/predio.dart';
 
@@ -652,15 +652,11 @@ class _GenerarReporteScreenState extends ConsumerState<GenerarReporteScreen> {
       final nombreArchivo = 'REPORTE_${_numeroReporte}_${_proyectoActual}_$fechaArchivo.pdf';
 
       if (kIsWeb) {
-        final blob = html.Blob(<dynamic>[_previewPdfBytes!], 'application/pdf');
-        final url = html.Url.createObjectUrlFromBlob(blob);
-        final anchor = html.AnchorElement(href: url)
-          ..setAttribute('download', nombreArchivo)
-          ..style.display = 'none';
-        html.document.body!.children.add(anchor);
-        anchor.click();
-        anchor.remove();
-        html.Url.revokeObjectUrl(url);
+        await downloadBytesForBrowser(
+          _previewPdfBytes!,
+          fileName: nombreArchivo,
+          mimeType: 'application/pdf',
+        );
 
         if (mounted) {
           setState(_avanzarConsecutivoProyectoActual);

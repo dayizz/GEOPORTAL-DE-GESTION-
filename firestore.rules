@@ -64,12 +64,11 @@ service cloud.firestore {
 
     // Predios de gestion
     match /predios/{predioId} {
-      allow read: if isSignedIn() && canReadPredio(resource.data);
+      allow read: if isSignedIn();
       allow create, update: if isSignedIn()
-        && canWritePredio(request.resource.data)
         && request.resource.data.keys().hasAll(['clave_catastral', 'tramo', 'tipo_propiedad'])
         && isString(request.resource.data.clave_catastral, 1, 120)
-        && isString(request.resource.data.tramo, 1, 20)
+        && isString(request.resource.data.tramo, 0, 20)
         && isString(request.resource.data.tipo_propiedad, 1, 60);
       allow delete: if isAdmin();
     }
@@ -77,7 +76,7 @@ service cloud.firestore {
     // Catalogo de propietarios
     match /propietarios/{propietarioId} {
       allow read: if isSignedIn();
-      allow create, update: if canWriteOperationalData()
+      allow create, update: if isSignedIn()
         && request.resource.data.keys().hasAll(['nombre', 'tipo_persona'])
         && isString(request.resource.data.nombre, 1, 120)
         && isString(request.resource.data.tipo_persona, 1, 20);
@@ -87,7 +86,7 @@ service cloud.firestore {
     // Archivos importados
     match /archivos_geojson/{archivoId} {
       allow read: if isSignedIn();
-      allow create, update: if canWriteOperationalData()
+      allow create, update: if isSignedIn()
         && request.resource.data.keys().hasAll(['nombre', 'features_count'])
         && isString(request.resource.data.nombre, 1, 220)
         && request.resource.data.features_count is int;
