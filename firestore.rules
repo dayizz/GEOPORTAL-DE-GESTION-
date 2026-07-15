@@ -13,9 +13,8 @@ service cloud.firestore {
       return request.auth.uid in ['cZg4LhniabSxLQuosExJrFOJQWw2'];
     }
 
-    function isAdmin() {
-      return isSignedIn()
-        && (hasAdminClaim() || isBootstrapAdminUid());
+    function hasUserProfile() {
+      return exists(/databases/$(database)/documents/usuarios_sistema/$(request.auth.uid));
     }
 
     function userProfile() {
@@ -24,6 +23,15 @@ service cloud.firestore {
 
     function userRole() {
       return userProfile().data.perfil;
+    }
+
+    // No se usa userRole() directo: el perfil aun no existe durante el
+    // self-registro (allow create de la propia cuenta), y get() sobre un
+    // documento inexistente falla la evaluacion de la regla completa.
+    function isAdmin() {
+      return isSignedIn()
+        && (hasAdminClaim() || isBootstrapAdminUid()
+            || (hasUserProfile() && userRole() == 'Administrador'));
     }
 
     function userProjects() {
