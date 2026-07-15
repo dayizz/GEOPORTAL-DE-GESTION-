@@ -44,6 +44,10 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
   Future<void> _submit() async {
     if (!_formKey.currentState!.validate()) return;
     setState(() => _loading = true);
+    final isRegisterAttempt = _isRegister && !localOnlyAuthMode;
+    if (isRegisterAttempt) {
+      ref.read(registrationInProgressProvider.notifier).state = true;
+    }
 
     try {
       final email = _emailCtrl.text.trim().toLowerCase();
@@ -87,10 +91,19 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
           approvalCode: _approvalCodeCtrl.text,
         );
         if (mounted) {
+          setState(() {
+            _isRegister = false;
+            _passCtrl.clear();
+            _approvalCodeCtrl.clear();
+          });
           ScaffoldMessenger.of(context).showSnackBar(
             const SnackBar(
-              content: Text('Registro exitoso. Revisa tu correo para confirmar.'),
+              content: Text(
+                'Registro exitoso. Te enviamos un correo para confirmar tu cuenta. '
+                'Ahora inicia sesión con tu correo y contraseña.',
+              ),
               backgroundColor: AppColors.secondary,
+              duration: Duration(seconds: 6),
             ),
           );
         }
@@ -112,6 +125,9 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
         );
       }
     } finally {
+      if (isRegisterAttempt) {
+        ref.read(registrationInProgressProvider.notifier).state = false;
+      }
       if (mounted) setState(() => _loading = false);
     }
   }

@@ -214,6 +214,12 @@ final authRepositoryProvider = Provider<AuthRepository>(
   (ref) => AuthRepository(FirebaseAuth.instance),
 );
 
+/// Mientras un registro está en curso, Firebase autentica automáticamente
+/// la cuenta recién creada (antes de validar el código de aprobación). El
+/// router debe ignorar esa sesión transitoria para no navegar al usuario
+/// dentro de la app a mitad del flujo de registro.
+final registrationInProgressProvider = StateProvider<bool>((ref) => false);
+
 class AuthRepository {
   final FirebaseAuth _auth;
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
@@ -422,6 +428,12 @@ class AuthRepository {
       throw Exception('No se pudo crear la cuenta de usuario.');
     }
 
+    try {
+      await user.sendEmailVerification();
+    } catch (_) {
+      // El envío del correo de verificación no debe bloquear el registro.
+    }
+
     // PASO 2: Validar y consumir el código ya autenticado. Si algo falla
     // (código inválido/usado/vencido, o el consumo mismo), se borra la
     // cuenta recién creada para no dejar usuarios "fantasma" sin código
@@ -464,9 +476,16 @@ class AuthRepository {
         preferredName: email.split('@').first,
       );
     } catch (e) {
-      // Si perfil falla, usuario puede intentar login después (Estado útil para recuperación)
+      // Si perfil falla, usuario puede intentar login después (se autocompletará
+      // el perfil en ese momento). Cerramos sesión para no dejarlo autenticado
+      // a mitad de un flujo que el router podría tomar como sesión válida.
+      await _auth.signOut();
       rethrow;
     }
+
+    // Registro completo: se cierra la sesión automática que Firebase abrió
+    // al crear la cuenta para que el usuario inicie sesión explícitamente.
+    await _auth.signOut();
   }
 
   Future<void> signOut() async {

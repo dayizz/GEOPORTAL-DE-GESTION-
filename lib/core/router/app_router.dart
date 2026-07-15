@@ -26,13 +26,18 @@ final routerProvider = Provider<GoRouter>((ref) {
   final currentIsAdminAsync = ref.watch(currentUserIsAdminProvider);
   final currentPerfil = ref.watch(currentUserPerfilProvider);
   final currentProfileAsync = ref.watch(currentUserProfileProvider);
+  final registrationInProgress = ref.watch(registrationInProgressProvider);
 
   return GoRouter(
     initialLocation: '/mapa',
     redirect: (context, state) {
       final user = FirebaseAuth.instance.currentUser;
       final canUseLocalSession = localOnlyAuthMode && localSession;
-      final isLoggedIn = user != null || canUseLocalSession;
+      // Mientras un registro está en curso, Firebase ya autenticó la cuenta
+      // recién creada aunque el código de aprobación aún no se validó — no
+      // tratar esa sesión transitoria como un login válido.
+      final isLoggedIn =
+          !registrationInProgress && (user != null || canUseLocalSession);
       final authRedirect = resolveAuthRedirect(
         isLoggedIn: isLoggedIn,
         matchedLocation: state.matchedLocation,
