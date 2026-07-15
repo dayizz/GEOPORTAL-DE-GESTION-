@@ -230,7 +230,12 @@ class AuthRepository {
   }
 
   Future<void> ensureUserProfileExists(User user, {String? preferredName}) async {
-    final email = user.email?.trim().toLowerCase() ?? '';
+    // No se normaliza a minúsculas: las reglas de Firestore exigen que
+    // 'correo' coincida exactamente (==) con request.auth.token.email, que
+    // conserva las mayúsculas originales del correo con el que se creó la
+    // cuenta. Forzar minúsculas aquí hacía que la escritura del perfil
+    // fallara por permisos para cualquier correo con mayúsculas.
+    final email = user.email?.trim() ?? '';
     final docRef = _usuariosSistema.doc(user.uid);
     final snapshot = await docRef.get();
 
@@ -249,9 +254,13 @@ class AuthRepository {
       return;
     }
 
+    // No se reenvía 'correo': la regla de auto-actualización exige que se
+    // mantenga igual al valor ya guardado (request.resource.data.correo ==
+    // resource.data.correo), y cuentas creadas antes de este fix pueden
+    // tenerlo guardado en minúsculas — reenviarlo con mayúsculas rompería
+    // el login de esas cuentas por permisos.
     await docRef.set({
       'uid': user.uid,
-      'correo': email,
       'updated_at': FieldValue.serverTimestamp(),
     }, SetOptions(merge: true));
   }
@@ -320,7 +329,9 @@ class AuthRepository {
 
   Future<String> generateApprovalCode({Duration ttl = const Duration(hours: 72)}) async {
     final user = _auth.currentUser;
-    final email = user?.email?.trim().toLowerCase();
+    // Debe coincidir exactamente con request.auth.token.email (ver nota en
+    // ensureUserProfileExists): no forzar minúsculas aquí.
+    final email = user?.email?.trim();
 
     final canGenerate = await _isAdminUser(user);
     if (!canGenerate) {
@@ -385,22 +396,11 @@ class AuthRepository {
       throw Exception('Ingresa un codigo de aprobacion valido.');
     }
 
-    // PASO 1: Validar y reservar código ANTES de crear usuario
-    // Esto previene usuarios ghost si la transacción falla más adelante
-    final codeDoc = await _findApprovalCodeDoc(normalizedCode);
-    final codeData = codeDoc.data() ?? <String, dynamic>{};
-
-    if (codeData['active'] != true || codeData['used_at'] != null) {
-      throw Exception('El codigo de aprobacion no esta disponible.');
-    }
-
-    final expiresRaw = codeData['expires_at'];
-    final expiresAt = expiresRaw is Timestamp ? expiresRaw.toDate() : null;
-    if (expiresAt != null && expiresAt.isBefore(DateTime.now())) {
-      throw Exception('El codigo de aprobacion esta vencido.');
-    }
-
-    // PASO 2: Crear usuario (código ya validado)
+    // PASO 1: Crear usuario primero. Leer user_approval_codes requiere
+    // isSignedIn() según las reglas de Firestore, y antes de crear la
+    // cuenta nadie está autenticado — validar el código antes de crear el
+    // usuario siempre fallaba con permission-denied. La cuenta debe existir
+    // (y el usuario quedar autenticado) antes de poder leer el código.
     late UserCredential created;
     try {
       created = await _auth.createUserWithEmailAndPassword(
@@ -408,31 +408,53 @@ class AuthRepository {
         password: password,
       );
     } catch (e) {
-      // Si crear usuario falla, código permanece disponible (sin cleanup)
       rethrow;
     }
 
-    final uid = created.user?.uid;
-    if (uid == null) {
+    final user = created.user;
+    if (user == null) {
       throw Exception('No se pudo crear la cuenta de usuario.');
     }
 
-    // PASO 3: Consumir código con usuario ya existente
+    // PASO 2: Validar y consumir el código ya autenticado. Si algo falla
+    // (código inválido/usado/vencido, o el consumo mismo), se borra la
+    // cuenta recién creada para no dejar usuarios "fantasma" sin código
+    // válido asociado.
     try {
+      final codeDoc = await _findApprovalCodeDoc(normalizedCode);
+      final codeData = codeDoc.data() ?? <String, dynamic>{};
+
+      if (codeData['active'] != true || codeData['used_at'] != null) {
+        throw Exception('El codigo de aprobacion no esta disponible.');
+      }
+
+      final expiresRaw = codeData['expires_at'];
+      final expiresAt = expiresRaw is Timestamp ? expiresRaw.toDate() : null;
+      if (expiresAt != null && expiresAt.isBefore(DateTime.now())) {
+        throw Exception('El codigo de aprobacion esta vencido.');
+      }
+
+      // Se usa user.email (no el 'email' del formulario ni una versión en
+      // minúsculas) para que coincida exactamente con
+      // request.auth.token.email en las reglas de Firestore.
       await _consumeApprovalCode(
         code: normalizedCode,
-        usedByUid: uid,
-        usedByEmail: email.trim().toLowerCase(),
+        usedByUid: user.uid,
+        usedByEmail: user.email?.trim() ?? email.trim(),
       );
     } catch (e) {
-      // Si consumo falla, usuario está en estado coherente (existe, puede login)
+      try {
+        await user.delete();
+      } catch (_) {
+        await _auth.signOut();
+      }
       rethrow;
     }
 
-    // PASO 4: Crear perfil (usuario + código ya registrados)
+    // PASO 3: Crear perfil (usuario + código ya registrados)
     try {
       await ensureUserProfileExists(
-        created.user!,
+        user,
         preferredName: email.split('@').first,
       );
     } catch (e) {
