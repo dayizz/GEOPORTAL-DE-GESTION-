@@ -76,6 +76,8 @@ bool canAccessCarga(String? perfil) => canManageOperationalData(perfil);
 
 bool canAccessProyectosCatalogo(String? perfil) => canManageOperationalData(perfil);
 
+bool canAccessReportes(String? perfil) => canManageOperationalData(perfil);
+
 bool canAccessRouteByPerfil(String route, String? perfil) {
   if (route == '/estructura' || route.startsWith('/estructura/')) {
     return canViewEstructura(perfil);
@@ -83,6 +85,10 @@ bool canAccessRouteByPerfil(String route, String? perfil) {
 
   if (route == '/carga' || route.startsWith('/carga/')) {
     return canAccessCarga(perfil);
+  }
+
+  if (route == '/reportes' || route.startsWith('/reportes/')) {
+    return canAccessReportes(perfil);
   }
 
   if (route == '/proyectos' || route.startsWith('/proyectos/')) {

@@ -86,15 +86,15 @@ class AppScaffold extends ConsumerWidget {
     final isWide = MediaQuery.of(context).size.width > 768;
     final perfil = ref.watch(currentUserPerfilProvider);
 
+    final visibleItems =
+        _navItems.where((item) => item.isVisible(perfil)).toList(growable: false);
+    final currentRoute = _navItems[currentIndex].route;
+    final rawSelectedIndex =
+        visibleItems.indexWhere((item) => item.route == currentRoute);
+    final selectedIndex = rawSelectedIndex < 0 ? 0 : rawSelectedIndex;
+
     void onTapItem(int i) {
-      final item = _navItems[i];
-      if (!item.isVisible(perfil)) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('No tienes permiso para acceder a esta seccion.')),
-        );
-        return;
-      }
-      context.go(item.route);
+      context.go(visibleItems[i].route);
     }
 
     if (isWide) {
@@ -108,7 +108,7 @@ class AppScaffold extends ConsumerWidget {
               SizedBox(
                 width: _desktopRailWidth,
                 child: NavigationRail(
-                  selectedIndex: currentIndex,
+                  selectedIndex: selectedIndex,
                   onDestinationSelected: onTapItem,
                   labelType: NavigationRailLabelType.all,
                   leading: Padding(
@@ -126,7 +126,7 @@ class AppScaffold extends ConsumerWidget {
                       ],
                     ),
                   ),
-                  destinations: _navItems
+                  destinations: visibleItems
                       .map((item) => NavigationRailDestination(
                             icon: Icon(item.icon),
                             selectedIcon: Icon(
@@ -135,12 +135,7 @@ class AppScaffold extends ConsumerWidget {
                             ),
                             label: Text(
                               item.label,
-                              style: TextStyle(
-                                fontSize: 11,
-                                color: item.isVisible(perfil)
-                                    ? null
-                                    : Colors.grey,
-                              ),
+                              style: const TextStyle(fontSize: 11),
                             ),
                           ))
                       .toList(),
@@ -162,10 +157,10 @@ class AppScaffold extends ConsumerWidget {
       appBar: AppBar(title: Text(title), actions: actions),
       body: child,
       bottomNavigationBar: NavigationBar(
-        selectedIndex: currentIndex,
+        selectedIndex: selectedIndex,
         onDestinationSelected: onTapItem,
         labelBehavior: NavigationDestinationLabelBehavior.onlyShowSelected,
-        destinations: _navItems
+        destinations: visibleItems
             .map((item) => NavigationDestination(
                   icon: Icon(item.icon),
                   selectedIcon: Icon(item.icon, color: AppColors.primary),

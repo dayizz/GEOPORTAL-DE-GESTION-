@@ -5,6 +5,7 @@ import '../../../features/predios/providers/predios_provider.dart';
 import '../../../features/predios/models/predio.dart';
 import '../../../core/constants/app_colors.dart';
 import '../../../shared/widgets/app_scaffold.dart';
+import '../../auth/providers/auth_provider.dart';
 import 'package:intl/intl.dart';
 
 class BalanceScreen extends ConsumerStatefulWidget {
@@ -104,6 +105,22 @@ class _BalanceScreenState extends ConsumerState<BalanceScreen> {
   Widget build(BuildContext context) {
     final prediosAsync = ref.watch(prediosMapaProvider);
     final fmtInt = NumberFormat('#,##0', 'es_MX');
+    final canAllProjects = ref.watch(canAccessAllProjectsProvider);
+    final proyectosAsignados = ref.watch(currentUserAssignedProjectsProvider);
+    final sinProyectoAsignado = !canAllProjects && proyectosAsignados.isEmpty;
+
+    if (sinProyectoAsignado) {
+      return AppScaffold(
+        currentIndex: 1,
+        title: 'Balance',
+        child: const Center(
+          child: Text(
+            'Sin proyecto asignado',
+            style: TextStyle(color: Colors.grey, fontSize: 16),
+          ),
+        ),
+      );
+    }
 
     return AppScaffold(
       currentIndex: 1,

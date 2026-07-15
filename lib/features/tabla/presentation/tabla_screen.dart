@@ -19,6 +19,7 @@ import '../../predios/providers/local_predios_provider.dart';
 import '../../predios/providers/predios_provider.dart';
 import '../../propietarios/providers/local_propietarios_provider.dart';
 import '../../propietarios/providers/propietarios_provider.dart';
+import '../../auth/providers/auth_provider.dart';
 
 class TablaScreen extends ConsumerStatefulWidget {
   const TablaScreen({super.key});
@@ -266,8 +267,18 @@ class _TablaScreenState extends ConsumerState<TablaScreen> {
   @override
   Widget build(BuildContext context) {
     final prediosAsync = ref.watch(prediosListProvider);
+    final canAllProjects = ref.watch(canAccessAllProjectsProvider);
+    final proyectosAsignados = ref.watch(currentUserAssignedProjectsProvider);
+    final sinProyectoAsignado = !canAllProjects && proyectosAsignados.isEmpty;
     Widget content;
-    if (prediosAsync.isLoading) {
+    if (sinProyectoAsignado) {
+      content = const Center(
+        child: Text(
+          'Sin proyecto asignado',
+          style: TextStyle(color: AppColors.textSecondary, fontSize: 16),
+        ),
+      );
+    } else if (prediosAsync.isLoading) {
       content = const Center(child: CircularProgressIndicator());
     } else if (prediosAsync.hasError) {
       content = Center(
