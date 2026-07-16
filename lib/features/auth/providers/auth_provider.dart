@@ -339,7 +339,7 @@ class AuthRepository {
     });
   }
 
-  Future<String> generateApprovalCode({Duration ttl = const Duration(hours: 72)}) async {
+  Future<String> generateApprovalCode({Duration ttl = const Duration(minutes: 1)}) async {
     final user = _auth.currentUser;
     // Debe coincidir exactamente con request.auth.token.email (ver nota en
     // ensureUserProfileExists): no forzar minúsculas aquí.

@@ -492,7 +492,7 @@ class _CuentasUsuarioTabState extends ConsumerState<_CuentasUsuarioTab> {
             const SizedBox(height: 8),
             const Text(
               'Genera un codigo de aprobacion para habilitar el registro de un nuevo usuario. '
-              'Cada codigo se puede usar una sola vez y vence automaticamente.',
+              'Cada codigo se puede usar una sola vez y vence 1 minuto despues de generarse.',
               style: TextStyle(fontSize: 13, color: AppColors.textSecondary),
             ),
             const SizedBox(height: 12),
@@ -516,13 +516,24 @@ class _CuentasUsuarioTabState extends ConsumerState<_CuentasUsuarioTab> {
         builder: (ctx) {
           return AlertDialog(
             title: const Text('Codigo generado'),
-            content: SelectableText(
-              code,
-              style: const TextStyle(
-                fontSize: 22,
-                fontWeight: FontWeight.w700,
-                letterSpacing: 1.5,
-              ),
+            content: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                SelectableText(
+                  code,
+                  style: const TextStyle(
+                    fontSize: 22,
+                    fontWeight: FontWeight.w700,
+                    letterSpacing: 1.5,
+                  ),
+                ),
+                const SizedBox(height: 8),
+                const Text(
+                  'Vence en 1 minuto. Comparte y usa el codigo de inmediato.',
+                  style: TextStyle(fontSize: 12, color: AppColors.danger),
+                ),
+              ],
             ),
             actions: [
               TextButton(

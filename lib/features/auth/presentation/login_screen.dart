@@ -90,22 +90,35 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
           _passCtrl.text,
           approvalCode: _approvalCodeCtrl.text,
         );
+        // La cuenta se crea sin dejar sesión abierta (signUpWithEmail cierra
+        // la sesión transitoria que Firebase abre al crearla). El usuario
+        // debe confirmar este aviso antes de pasar a iniciar sesión.
         if (mounted) {
-          setState(() {
-            _isRegister = false;
-            _passCtrl.clear();
-            _approvalCodeCtrl.clear();
-          });
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(
-              content: Text(
-                'Registro exitoso. Te enviamos un correo para confirmar tu cuenta. '
-                'Ahora inicia sesión con tu correo y contraseña.',
+          await showDialog<void>(
+            context: context,
+            barrierDismissible: false,
+            builder: (ctx) => AlertDialog(
+              title: const Text('Registro exitoso'),
+              content: const Text(
+                'Tu cuenta fue creada correctamente. Te enviamos un correo '
+                'para confirmarla. Aún no iniciaste sesión: hazlo con tu '
+                'correo y contraseña para acceder.',
               ),
-              backgroundColor: AppColors.secondary,
-              duration: Duration(seconds: 6),
+              actions: [
+                ElevatedButton(
+                  onPressed: () => Navigator.of(ctx).pop(),
+                  child: const Text('Ir a iniciar sesión'),
+                ),
+              ],
             ),
           );
+          if (mounted) {
+            setState(() {
+              _isRegister = false;
+              _passCtrl.clear();
+              _approvalCodeCtrl.clear();
+            });
+          }
         }
       } else {
         await auth.signInWithEmail(_emailCtrl.text.trim(), _passCtrl.text);

@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:firebase_auth/firebase_auth.dart';
@@ -19,23 +20,41 @@ import '../../features/perfil/presentation/perfil_screen.dart';
 import '../../features/estructura/presentation/estructura_screen.dart';
 import 'router_redirect_logic.dart';
 
+/// Notifica a GoRouter que debe reevaluar `redirect` sin recrear el router.
+///
+/// `routerProvider` solía usar `ref.watch` sobre los providers de auth, lo
+/// que reconstruía por completo el `GoRouter` (y ese `GoRouter` nuevo vuelve
+/// a `initialLocation`, perdiendo la ruta real del usuario) cada vez que
+/// cambiaba la sesión. Firebase autentica la cuenta apenas se crea, antes de
+/// validar el código de aprobación, así que esa reconstrucción sacaba al
+/// usuario de `/login` a mitad del registro. Con un `GoRouter` estable +
+/// `refreshListenable`, `redirect` se reevalúa in-place sobre la ubicación
+/// real, sin tirar el router.
+class _RouterRefreshNotifier extends ChangeNotifier {
+  void refresh() => notifyListeners();
+}
+
 final routerProvider = Provider<GoRouter>((ref) {
-  // Observar cambios de auth para refrescar el redirect
-  ref.watch(authStateProvider);
-  final localSession = ref.watch(localAuthSessionProvider);
-  final currentIsAdminAsync = ref.watch(currentUserIsAdminProvider);
-  final currentPerfil = ref.watch(currentUserPerfilProvider);
-  final currentProfileAsync = ref.watch(currentUserProfileProvider);
-  final registrationInProgress = ref.watch(registrationInProgressProvider);
+  final refreshNotifier = _RouterRefreshNotifier();
+  ref.onDispose(refreshNotifier.dispose);
+
+  ref.listen(authStateProvider, (_, __) => refreshNotifier.refresh());
+  ref.listen(localAuthSessionProvider, (_, __) => refreshNotifier.refresh());
+  ref.listen(currentUserIsAdminProvider, (_, __) => refreshNotifier.refresh());
+  ref.listen(currentUserPerfilProvider, (_, __) => refreshNotifier.refresh());
+  ref.listen(currentUserProfileProvider, (_, __) => refreshNotifier.refresh());
+  ref.listen(registrationInProgressProvider, (_, __) => refreshNotifier.refresh());
 
   return GoRouter(
     initialLocation: '/mapa',
+    refreshListenable: refreshNotifier,
     redirect: (context, state) {
       final user = FirebaseAuth.instance.currentUser;
-      final canUseLocalSession = localOnlyAuthMode && localSession;
+      final canUseLocalSession = localOnlyAuthMode && ref.read(localAuthSessionProvider);
       // Mientras un registro está en curso, Firebase ya autenticó la cuenta
       // recién creada aunque el código de aprobación aún no se validó — no
       // tratar esa sesión transitoria como un login válido.
+      final registrationInProgress = ref.read(registrationInProgressProvider);
       final isLoggedIn =
           !registrationInProgress && (user != null || canUseLocalSession);
       final authRedirect = resolveAuthRedirect(
@@ -48,6 +67,7 @@ final routerProvider = Provider<GoRouter>((ref) {
         return authRedirect;
       }
 
+      final currentIsAdminAsync = ref.read(currentUserIsAdminProvider);
       if (currentIsAdminAsync.isLoading) {
         return null;
       }
@@ -57,6 +77,8 @@ final routerProvider = Provider<GoRouter>((ref) {
         return null;
       }
 
+      final currentProfileAsync = ref.read(currentUserProfileProvider);
+      final currentPerfil = ref.read(currentUserPerfilProvider);
       if (!currentProfileAsync.isLoading &&
           !canAccessRouteByPerfil(state.matchedLocation, currentPerfil)) {
         return '/mapa';
