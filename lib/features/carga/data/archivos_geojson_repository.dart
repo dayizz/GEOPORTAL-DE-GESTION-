@@ -80,8 +80,13 @@ class ArchivosGeoJsonRepository {
     return kept;
   }
 
-  Future<List<Map<String, dynamic>>> getArchivos() async {
-    final snap = await _archivos.get();
+  /// [createdByUid]: si se especifica, solo devuelve archivos importados por
+  /// ese usuario (usado para el perfil Gestor). Null = todos (Administrador).
+  Future<List<Map<String, dynamic>>> getArchivos({String? createdByUid}) async {
+    final query = createdByUid == null
+        ? _archivos
+        : _archivos.where('created_by_uid', isEqualTo: createdByUid);
+    final snap = await query.get();
 
     final normalized = snap.docs.map((doc) {
       final row = Map<String, dynamic>.from(doc.data());
@@ -95,6 +100,8 @@ class ArchivosGeoJsonRepository {
         'encontrados': _toInt(row['encontrados']),
         'creados': _toInt(row['creados']),
         'errores': _toInt(row['errores']),
+        'created_by_uid': row['created_by_uid']?.toString(),
+        'created_by_email': row['created_by_email']?.toString(),
         'created_at': _toIso(row['created_at'], fallback: now),
         'updated_at': row['updated_at'] == null
             ? null
@@ -119,6 +126,8 @@ class ArchivosGeoJsonRepository {
     int encontrados = 0,
     int creados = 0,
     int errores = 0,
+    String? createdByUid,
+    String? createdByEmail,
   }) async {
     final now = DateTime.now().toIso8601String();
     final id = _uuid.v4();
@@ -134,6 +143,8 @@ class ArchivosGeoJsonRepository {
       'encontrados': encontrados,
       'creados': creados,
       'errores': errores,
+      'created_by_uid': createdByUid,
+      'created_by_email': createdByEmail,
       'created_at': now,
       'updated_at': now,
     };
@@ -144,5 +155,20 @@ class ArchivosGeoJsonRepository {
 
   Future<void> deleteArchivo(String id) async {
     await _archivos.doc(id).delete();
+  }
+
+  /// [createdByUid]: si se especifica, solo borra los archivos de ese
+  /// usuario (Gestor). Null = borra todos (Administrador).
+  Future<void> deleteAll({String? createdByUid}) async {
+    final query = createdByUid == null
+        ? _archivos
+        : _archivos.where('created_by_uid', isEqualTo: createdByUid);
+    final snap = await query.get();
+    if (snap.docs.isEmpty) return;
+    final batch = _firestore.batch();
+    for (final doc in snap.docs) {
+      batch.delete(doc.reference);
+    }
+    await batch.commit();
   }
 }

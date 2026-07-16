@@ -4,6 +4,7 @@ import 'dart:math' as math;
 import 'dart:typed_data';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:go_router/go_router.dart';
 import 'package:share_plus/share_plus.dart';
@@ -20,7 +21,7 @@ import '../../predios/models/propietario.dart';
 import '../../propietarios/providers/propietarios_provider.dart';
 import '../../propietarios/providers/local_propietarios_provider.dart';
 import '../../mapa/providers/mapa_state_cleanup.dart';
-import '../data/local_archivos_repository.dart';
+import '../data/archivos_geojson_repository.dart';
 import '../providers/carga_provider.dart';
 import '../services/geojson_background_parser.dart';
 import '../services/sincronizacion_service.dart';
@@ -137,10 +138,24 @@ class _CargaArchivoScreenState extends ConsumerState<CargaArchivoScreen> {
     _cargarArchivosDesdeBD();
   }
 
+  /// Administrador ve los archivos de todos; Gestor solo ve los que él importó.
+  bool _isAdminUser() {
+    final perfil = ref.read(currentUserPerfilProvider);
+    final user = ref.read(currentUserProvider) ?? FirebaseAuth.instance.currentUser;
+    return isPerfilAdministrador(perfil) || isAdminApproverUser(user);
+  }
+
+  String? get _currentUid =>
+      (ref.read(currentUserProvider) ?? FirebaseAuth.instance.currentUser)?.uid;
+  String? get _currentUserEmail =>
+      (ref.read(currentUserProvider) ?? FirebaseAuth.instance.currentUser)?.email;
+
   Future<void> _cargarArchivosDesdeBD() async {
     try {
-      final repo = ref.read(localArchivosRepositoryProvider);
-      final rawList = await repo.getArchivos();
+      final repo = ref.read(archivosGeoJsonRepositoryProvider);
+      final rawList = await repo.getArchivos(
+        createdByUid: _isAdminUser() ? null : _currentUid,
+      );
       final bdFiles = rawList
           .map((m) {
             try {
@@ -498,7 +513,7 @@ class _CargaArchivoScreenState extends ConsumerState<CargaArchivoScreen> {
       // Guardar archivo en la BD
       String? bdId;
         try {
-          final archivosRepo = ref.read(localArchivosRepositoryProvider);
+          final archivosRepo = ref.read(archivosGeoJsonRepositoryProvider);
           final saved = await archivosRepo.saveArchivo(
             nombre: nombre,
             features: resultado.features,
@@ -506,6 +521,8 @@ class _CargaArchivoScreenState extends ConsumerState<CargaArchivoScreen> {
             encontrados: resultado.encontrados,
             creados: resultado.creados,
             errores: resultado.errores,
+            createdByUid: _currentUid,
+            createdByEmail: _currentUserEmail,
           );
           bdId = saved['id'] as String?;
         } catch (_) {
@@ -566,6 +583,8 @@ class _CargaArchivoScreenState extends ConsumerState<CargaArchivoScreen> {
         encontrados: resultado.encontrados,
         creados: resultado.creados,
         errores: resultado.errores,
+        createdByUid: _currentUid,
+        createdByEmail: _currentUserEmail,
       );
 
       ref.read(importedFeaturesProvider.notifier).state = resultado.features;
@@ -693,7 +712,7 @@ class _CargaArchivoScreenState extends ConsumerState<CargaArchivoScreen> {
 
       if (file.guardadoEnBD && file.bdId != null) {
         try {
-          final repo = ref.read(localArchivosRepositoryProvider);
+          final repo = ref.read(archivosGeoJsonRepositoryProvider);
           await repo.deleteArchivo(file.bdId!);
         } catch (_) {
           // Error silencioso: el archivo ya fue quitado de la UI.
@@ -731,8 +750,8 @@ class _CargaArchivoScreenState extends ConsumerState<CargaArchivoScreen> {
       ref.read(importacionAsyncProvider.notifier).reset();
 
       try {
-        final repo = ref.read(localArchivosRepositoryProvider);
-        await repo.deleteAll();
+        final repo = ref.read(archivosGeoJsonRepositoryProvider);
+        await repo.deleteAll(createdByUid: _isAdminUser() ? null : _currentUid);
       } catch (_) {}
 
       ref.invalidate(prediosListProvider);
@@ -831,7 +850,7 @@ class _CargaArchivoScreenState extends ConsumerState<CargaArchivoScreen> {
       if (_archivoSeleccionado != null) {
         String? bdId;
         try {
-          final archivosRepo = ref.read(localArchivosRepositoryProvider);
+          final archivosRepo = ref.read(archivosGeoJsonRepositoryProvider);
           final saved = await archivosRepo.saveArchivo(
             nombre: _archivoSeleccionado!.name,
             features: const [],
@@ -840,6 +859,8 @@ class _CargaArchivoScreenState extends ConsumerState<CargaArchivoScreen> {
             encontrados: resultado.actualizados,
             creados: resultado.creados,
             errores: resultado.errores,
+            createdByUid: _currentUid,
+            createdByEmail: _currentUserEmail,
           );
           bdId = saved['id'] as String?;
         } catch (_) {
@@ -855,6 +876,8 @@ class _CargaArchivoScreenState extends ConsumerState<CargaArchivoScreen> {
           encontrados: resultado.actualizados,
           errores: resultado.errores,
           rowCount: resultado.procesados,
+          createdByUid: _currentUid,
+          createdByEmail: _currentUserEmail,
         );
       }
 
@@ -1051,7 +1074,7 @@ class _CargaArchivoScreenState extends ConsumerState<CargaArchivoScreen> {
       if (_archivoSeleccionado != null) {
         String? bdId;
         try {
-          final archivosRepo = ref.read(localArchivosRepositoryProvider);
+          final archivosRepo = ref.read(archivosGeoJsonRepositoryProvider);
           final saved = await archivosRepo.saveArchivo(
             nombre: _archivoSeleccionado!.name,
             features: const [],
@@ -1060,6 +1083,8 @@ class _CargaArchivoScreenState extends ConsumerState<CargaArchivoScreen> {
             encontrados: actualizados,
             creados: creados,
             errores: errores,
+            createdByUid: _currentUid,
+            createdByEmail: _currentUserEmail,
           );
           bdId = saved['id'] as String?;
         } catch (_) {
@@ -1075,6 +1100,8 @@ class _CargaArchivoScreenState extends ConsumerState<CargaArchivoScreen> {
           encontrados: actualizados,
           errores: errores,
           rowCount: procesados,
+          createdByUid: _currentUid,
+          createdByEmail: _currentUserEmail,
         );
       }
 
@@ -1190,7 +1217,7 @@ class _CargaArchivoScreenState extends ConsumerState<CargaArchivoScreen> {
     try {
       String? bdId;
       try {
-        final archivosRepo = ref.read(localArchivosRepositoryProvider);
+        final archivosRepo = ref.read(archivosGeoJsonRepositoryProvider);
         final saved = await archivosRepo.saveArchivo(
           nombre: nombre,
           features: normalizedFeatures,
@@ -1198,6 +1225,8 @@ class _CargaArchivoScreenState extends ConsumerState<CargaArchivoScreen> {
           encontrados: 0,
           creados: 0,
           errores: 0,
+          createdByUid: _currentUid,
+          createdByEmail: _currentUserEmail,
         );
         bdId = saved['id'] as String?;
       } catch (_) {
@@ -1213,6 +1242,8 @@ class _CargaArchivoScreenState extends ConsumerState<CargaArchivoScreen> {
         encontrados: 0,
         creados: 0,
         errores: 0,
+        createdByUid: _currentUid,
+        createdByEmail: _currentUserEmail,
       );
 
       ref.read(pksPointFeaturesProvider.notifier).state = normalizedFeatures;
@@ -1249,7 +1280,7 @@ class _CargaArchivoScreenState extends ConsumerState<CargaArchivoScreen> {
     try {
       String? bdId;
       try {
-        final archivosRepo = ref.read(localArchivosRepositoryProvider);
+        final archivosRepo = ref.read(archivosGeoJsonRepositoryProvider);
         final saved = await archivosRepo.saveArchivo(
           nombre: nombre,
           features: normalizedFeatures,
@@ -1257,6 +1288,8 @@ class _CargaArchivoScreenState extends ConsumerState<CargaArchivoScreen> {
           encontrados: 0,
           creados: 0,
           errores: 0,
+          createdByUid: _currentUid,
+          createdByEmail: _currentUserEmail,
         );
         bdId = saved['id'] as String?;
       } catch (_) {
@@ -1272,6 +1305,8 @@ class _CargaArchivoScreenState extends ConsumerState<CargaArchivoScreen> {
         encontrados: 0,
         creados: 0,
         errores: 0,
+        createdByUid: _currentUid,
+        createdByEmail: _currentUserEmail,
       );
 
       // ENVOLVENTE se renderiza solo en mapa; no pasa por Gestión.
@@ -2612,7 +2647,8 @@ class _CargaArchivoScreenState extends ConsumerState<CargaArchivoScreen> {
                 ],
               ),
               Text(
-                '${file.featureCount} features · ${file.formattedDate}',
+                '${file.featureCount} features · ${file.formattedDate}'
+                '${file.createdByEmail != null && _isAdminUser() ? " · ${file.createdByEmail}" : ""}',
                 style:
                     const TextStyle(fontSize: 11, color: AppColors.textLight),
               ),

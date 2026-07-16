@@ -463,9 +463,9 @@ class _CuentasUsuarioTabState extends ConsumerState<_CuentasUsuarioTab> {
             Expanded(
               child: Text(
                 'Perfil activo: $perfil. '
-                'Administrador: gestiona usuarios, proyectos y codigos. '
-                'Gestor: consulta estructura. '
-                'Operativo: sin acceso a estructura.',
+                'Administrador: gestiona usuarios y proyectos '
+                'Gestor: gestiona proyectos y sube informacion '
+                'Operativo: consulta informacion y actualiza datos',
                 style: const TextStyle(fontSize: 13),
               ),
             ),
@@ -719,31 +719,55 @@ class _CuentasUsuarioTabState extends ConsumerState<_CuentasUsuarioTab> {
     );
   }
 
-  Future<void> _saveUsuario(BuildContext context, WidgetRef ref, Usuario usuario) async {
+  Future<bool> _saveUsuario(BuildContext context, WidgetRef ref, Usuario usuario) async {
     final collection = ref.read(usuariosCollectionProvider);
-    await collection.doc(usuario.id).set({
-      'uid': usuario.id,
-      'nombre': usuario.nombre.trim(),
-      'correo': usuario.correo.trim().toLowerCase(),
-      'perfil': usuario.perfil,
-      'proyectos': usuario.proyectos,
-      'created_at': Timestamp.fromDate(usuario.createdAt),
-      'updated_at': FieldValue.serverTimestamp(),
-    }, SetOptions(merge: true));
-    if (context.mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Usuario guardado')),
-      );
+    try {
+      await collection.doc(usuario.id).set({
+        'uid': usuario.id,
+        'nombre': usuario.nombre.trim(),
+        'correo': usuario.correo.trim().toLowerCase(),
+        'perfil': usuario.perfil,
+        'proyectos': usuario.proyectos,
+        'created_at': Timestamp.fromDate(usuario.createdAt),
+        'updated_at': FieldValue.serverTimestamp(),
+      }, SetOptions(merge: true));
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Usuario guardado')),
+        );
+      }
+      return true;
+    } catch (e) {
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('No fue posible guardar el usuario: $e'),
+            backgroundColor: AppColors.danger,
+          ),
+        );
+      }
+      return false;
     }
   }
 
   Future<void> _deleteUsuario(BuildContext context, WidgetRef ref, String id) async {
     final collection = ref.read(usuariosCollectionProvider);
-    await collection.doc(id).delete();
-    if (context.mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Usuario eliminado')),
-      );
+    try {
+      await collection.doc(id).delete();
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Usuario eliminado')),
+        );
+      }
+    } catch (e) {
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('No fue posible eliminar el usuario: $e'),
+            backgroundColor: AppColors.danger,
+          ),
+        );
+      }
     }
   }
 
@@ -855,8 +879,8 @@ class _CuentasUsuarioTabState extends ConsumerState<_CuentasUsuarioTab> {
                     proyectos: proyectosSeleccionados,
                     createdAt: DateTime.now(),
                   );
-                  await _saveUsuario(context, ref, usuario);
-                  if (!context.mounted) return;
+                  final ok = await _saveUsuario(context, ref, usuario);
+                  if (!context.mounted || !ok) return;
                   Navigator.pop(context);
                 }
               },
@@ -974,8 +998,8 @@ class _CuentasUsuarioTabState extends ConsumerState<_CuentasUsuarioTab> {
                     perfil: perfilSeleccionado,
                     proyectos: proyectosSeleccionados,
                   );
-                  await _saveUsuario(context, ref, usuarioActualizado);
-                  if (!context.mounted) return;
+                  final ok = await _saveUsuario(context, ref, usuarioActualizado);
+                  if (!context.mounted || !ok) return;
                   Navigator.pop(context);
                 }
               },

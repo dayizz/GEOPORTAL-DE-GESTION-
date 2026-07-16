@@ -20,6 +20,10 @@ class ImportedFile {
   final int creados;
   final int errores;
 
+  /// UID/correo de quien importó el archivo (null = registro previo sin dueño).
+  final String? createdByUid;
+  final String? createdByEmail;
+
   ImportedFile({
     required this.id,
     required this.name,
@@ -32,6 +36,8 @@ class ImportedFile {
     this.encontrados = 0,
     this.creados = 0,
     this.errores = 0,
+    this.createdByUid,
+    this.createdByEmail,
   });
 
   ImportedFile copyWith({
@@ -42,6 +48,8 @@ class ImportedFile {
     int? creados,
     int? errores,
     List<Map<String, dynamic>>? features,
+    String? createdByUid,
+    String? createdByEmail,
   }) {
     return ImportedFile(
       id: id,
@@ -55,6 +63,8 @@ class ImportedFile {
       encontrados: encontrados ?? this.encontrados,
       creados: creados ?? this.creados,
       errores: errores ?? this.errores,
+      createdByUid: createdByUid ?? this.createdByUid,
+      createdByEmail: createdByEmail ?? this.createdByEmail,
     );
   }
 
@@ -87,6 +97,12 @@ class ImportedFile {
       encontrados: (map['encontrados'] as num?)?.toInt() ?? 0,
       creados: (map['creados'] as num?)?.toInt() ?? 0,
       errores: (map['errores'] as num?)?.toInt() ?? 0,
+      createdByUid: (map['created_by_uid'] as String?)?.trim().isEmpty ?? true
+          ? null
+          : map['created_by_uid'] as String?,
+      createdByEmail: (map['created_by_email'] as String?)?.trim().isEmpty ?? true
+          ? null
+          : map['created_by_email'] as String?,
     );
   }
 
@@ -117,6 +133,8 @@ class CargaNotifier extends StateNotifier<List<ImportedFile>> {
     int creados = 0,
     int errores = 0,
     int? rowCount,
+    String? createdByUid,
+    String? createdByEmail,
   }) {
     final id = bdId ?? DateTime.now().millisecondsSinceEpoch.toString();
     final file = ImportedFile(
@@ -131,6 +149,8 @@ class CargaNotifier extends StateNotifier<List<ImportedFile>> {
       encontrados: encontrados,
       creados: creados,
       errores: errores,
+      createdByUid: createdByUid,
+      createdByEmail: createdByEmail,
     );
     state = [file, ...state];
   }
