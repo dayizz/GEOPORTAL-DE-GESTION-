@@ -270,6 +270,16 @@ class _TablaScreenState extends ConsumerState<TablaScreen> {
     final canAllProjects = ref.watch(canAccessAllProjectsProvider);
     final proyectosAsignados = ref.watch(currentUserAssignedProjectsProvider);
     final sinProyectoAsignado = !canAllProjects && proyectosAsignados.isEmpty;
+    final proyectosDisponibles = canAllProjects
+        ? _proyectos
+        : _proyectos.where(proyectosAsignados.contains).toList(growable: false);
+    if (!sinProyectoAsignado && !proyectosDisponibles.contains(_proyectoActual)) {
+      final fallback = proyectosDisponibles.first;
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (!mounted) return;
+        setState(() => _proyectoActual = fallback);
+      });
+    }
     Widget content;
     if (sinProyectoAsignado) {
       content = const Center(
@@ -305,7 +315,7 @@ class _TablaScreenState extends ConsumerState<TablaScreen> {
       if (prediosList.isEmpty) {
         content = Column(
           children: [
-            _buildTopBar(0, const []),
+            _buildTopBar(0, const [], proyectosDisponibles),
             const Divider(height: 1),
             const Expanded(
               child: Center(
@@ -373,7 +383,7 @@ class _TablaScreenState extends ConsumerState<TablaScreen> {
 
         content = Column(
           children: [
-            _buildTopBar(filtered.length, allPredios),
+            _buildTopBar(filtered.length, allPredios, proyectosDisponibles),
             const Divider(height: 1),
             if (totalPages > 1)
               Padding(
@@ -545,7 +555,10 @@ class _TablaScreenState extends ConsumerState<TablaScreen> {
     }
   }
 
-  Widget _buildTopBar(int visible, List<Predio> allPredios) {
+  Widget _buildTopBar(int visible, List<Predio> allPredios, List<String> proyectosDisponibles) {
+    final proyectoDropdownValue = proyectosDisponibles.contains(_proyectoActual)
+        ? _proyectoActual
+        : proyectosDisponibles.first;
     return Padding(
       padding: const EdgeInsets.fromLTRB(12, 8, 12, 8),
       child: Column(
@@ -571,7 +584,7 @@ class _TablaScreenState extends ConsumerState<TablaScreen> {
                   padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 2),
                   child: DropdownButtonHideUnderline(
                     child: DropdownButton<String>(
-                      value: _proyectoActual,
+                      value: proyectoDropdownValue,
                       isDense: true,
                       icon: const Icon(Icons.keyboard_arrow_down_rounded, size: 20),
                       style: const TextStyle(
@@ -581,7 +594,7 @@ class _TablaScreenState extends ConsumerState<TablaScreen> {
                       ),
                       dropdownColor: Colors.white,
                       borderRadius: BorderRadius.circular(10),
-                      items: _proyectos.map((proyecto) {
+                      items: proyectosDisponibles.map((proyecto) {
                         final count = _conteoProyecto(allPredios, proyecto);
                         return DropdownMenuItem<String>(
                           value: proyecto,

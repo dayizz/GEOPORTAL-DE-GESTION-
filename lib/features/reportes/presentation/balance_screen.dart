@@ -122,9 +122,22 @@ class _BalanceScreenState extends ConsumerState<BalanceScreen> {
       );
     }
 
+    final proyectosDisponibles = canAllProjects
+        ? _proyectos
+        : _proyectos.where(proyectosAsignados.contains).toList(growable: false);
+    final proyectoActivo = proyectosDisponibles.contains(_proyectoActual)
+        ? _proyectoActual
+        : proyectosDisponibles.first;
+    if (proyectoActivo != _proyectoActual) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (!mounted) return;
+        setState(() => _proyectoActual = proyectoActivo);
+      });
+    }
+
     return AppScaffold(
       currentIndex: 1,
-      title: 'Balance  •  $_proyectoActual',
+      title: 'Balance  •  $proyectoActivo',
       child: prediosAsync.when(
         loading: () => const Center(child: CircularProgressIndicator()),
         error: (e, _) => Center(
@@ -144,7 +157,7 @@ class _BalanceScreenState extends ConsumerState<BalanceScreen> {
         ),
         data: (predios) {
           final proyectoPredios = predios
-              .where((predator) => _predioProyecto(predator) == _proyectoActual)
+              .where((predator) => _predioProyecto(predator) == proyectoActivo)
               .toList();
           
           // Extraer segmentos únicos del proyecto
@@ -230,11 +243,11 @@ class _BalanceScreenState extends ConsumerState<BalanceScreen> {
                             color: Colors.white,
                           ),
                           child: DropdownButton<String>(
-                            value: _proyectoActual,
+                            value: proyectoActivo,
                             isDense: true,
                             icon: const Icon(Icons.keyboard_arrow_down_rounded, size: 18, color: Color(0xFF9A9A9A)),
                             style: const TextStyle(fontSize: 14, color: Colors.black87, fontWeight: FontWeight.w600),
-                            items: _proyectos
+                            items: proyectosDisponibles
                                 .map((p) => DropdownMenuItem(value: p, child: Text(p)))
                                 .toList(),
                             onChanged: (v) {
