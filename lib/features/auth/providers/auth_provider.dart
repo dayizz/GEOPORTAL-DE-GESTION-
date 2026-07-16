@@ -428,12 +428,6 @@ class AuthRepository {
       throw Exception('No se pudo crear la cuenta de usuario.');
     }
 
-    try {
-      await user.sendEmailVerification();
-    } catch (_) {
-      // El envío del correo de verificación no debe bloquear el registro.
-    }
-
     // PASO 2: Validar y consumir el código ya autenticado. Si algo falla
     // (código inválido/usado/vencido, o el consumo mismo), se borra la
     // cuenta recién creada para no dejar usuarios "fantasma" sin código

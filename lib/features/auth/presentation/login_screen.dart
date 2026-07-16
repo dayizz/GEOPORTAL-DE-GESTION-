@@ -100,9 +100,8 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
             builder: (ctx) => AlertDialog(
               title: const Text('Registro exitoso'),
               content: const Text(
-                'Tu cuenta fue creada correctamente. Te enviamos un correo '
-                'para confirmarla. Aún no iniciaste sesión: hazlo con tu '
-                'correo y contraseña para acceder.',
+                'Tu cuenta fue creada correctamente. Aún no iniciaste '
+                'sesión: hazlo con tu correo y contraseña para acceder.',
               ),
               actions: [
                 ElevatedButton(
