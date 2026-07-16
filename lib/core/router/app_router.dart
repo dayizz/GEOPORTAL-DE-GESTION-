@@ -31,7 +31,24 @@ import 'router_redirect_logic.dart';
 /// `refreshListenable`, `redirect` se reevalúa in-place sobre la ubicación
 /// real, sin tirar el router.
 class _RouterRefreshNotifier extends ChangeNotifier {
-  void refresh() => notifyListeners();
+  bool _disposed = false;
+
+  @override
+  void dispose() {
+    _disposed = true;
+    super.dispose();
+  }
+
+  // `ref.listen` puede disparar refresh() de forma síncrona mientras
+  // Riverpod todavía está iterando sus propios listeners internos
+  // (p. ej. al autenticarse durante el registro). Notificar en el mismo
+  // stack causaba "Concurrent modification during iteration". Diferir a
+  // un microtask deja que ese ciclo termine antes de reevaluar el redirect.
+  void refresh() {
+    Future.microtask(() {
+      if (!_disposed) notifyListeners();
+    });
+  }
 }
 
 final routerProvider = Provider<GoRouter>((ref) {
