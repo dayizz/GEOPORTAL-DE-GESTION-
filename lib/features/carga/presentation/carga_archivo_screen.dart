@@ -150,13 +150,22 @@ class _CargaArchivoScreenState extends ConsumerState<CargaArchivoScreen> {
   String? get _currentUserEmail =>
       (ref.read(currentUserProvider) ?? FirebaseAuth.instance.currentUser)?.email;
 
+  /// Administrador ve todo. Gestor ve los suyos + los que no tienen dueño
+  /// registrado (importados antes de asociar `created_by_uid`), para que
+  /// ningún archivo quede invisible/imborrable por falta de ese dato.
+  List<ImportedFile> _visibleFiles(List<ImportedFile> files) {
+    if (_isAdminUser()) return files;
+    final uid = _currentUid;
+    return files
+        .where((f) => f.createdByUid == null || f.createdByUid == uid)
+        .toList();
+  }
+
   Future<void> _cargarArchivosDesdeBD() async {
     try {
       final repo = ref.read(archivosGeoJsonRepositoryProvider);
-      final rawList = await repo.getArchivos(
-        createdByUid: _isAdminUser() ? null : _currentUid,
-      );
-      final bdFiles = rawList
+      final rawList = await repo.getArchivos();
+      final bdFiles = _visibleFiles(rawList
           .map((m) {
             try {
               return ImportedFile.fromBD(m);
@@ -165,7 +174,7 @@ class _CargaArchivoScreenState extends ConsumerState<CargaArchivoScreen> {
             }
           })
           .whereType<ImportedFile>()
-          .toList();
+          .toList());
       if (!mounted) return;
       ref.read(cargaProvider.notifier).initFromBD(bdFiles);
       if (bdFiles.isEmpty) {
@@ -751,7 +760,8 @@ class _CargaArchivoScreenState extends ConsumerState<CargaArchivoScreen> {
 
       try {
         final repo = ref.read(archivosGeoJsonRepositoryProvider);
-        await repo.deleteAll(createdByUid: _isAdminUser() ? null : _currentUid);
+        final ids = files.map((f) => f.bdId).whereType<String>().toList();
+        await repo.deleteAll(ids);
       } catch (_) {}
 
       ref.invalidate(prediosListProvider);

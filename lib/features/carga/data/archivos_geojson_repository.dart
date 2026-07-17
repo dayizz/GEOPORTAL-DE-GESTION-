@@ -80,13 +80,12 @@ class ArchivosGeoJsonRepository {
     return kept;
   }
 
-  /// [createdByUid]: si se especifica, solo devuelve archivos importados por
-  /// ese usuario (usado para el perfil Gestor). Null = todos (Administrador).
-  Future<List<Map<String, dynamic>>> getArchivos({String? createdByUid}) async {
-    final query = createdByUid == null
-        ? _archivos
-        : _archivos.where('created_by_uid', isEqualTo: createdByUid);
-    final snap = await query.get();
+  /// Devuelve todos los archivos; el filtrado por perfil (Gestor solo ve
+  /// los suyos + los que no tienen dueño registrado) se aplica en la UI,
+  /// ya que un archivo sin `created_by_uid` (importado antes de asociar
+  /// dueño) no debe quedar invisible/imborrable para nadie.
+  Future<List<Map<String, dynamic>>> getArchivos() async {
+    final snap = await _archivos.get();
 
     final normalized = snap.docs.map((doc) {
       final row = Map<String, dynamic>.from(doc.data());
@@ -157,17 +156,13 @@ class ArchivosGeoJsonRepository {
     await _archivos.doc(id).delete();
   }
 
-  /// [createdByUid]: si se especifica, solo borra los archivos de ese
-  /// usuario (Gestor). Null = borra todos (Administrador).
-  Future<void> deleteAll({String? createdByUid}) async {
-    final query = createdByUid == null
-        ? _archivos
-        : _archivos.where('created_by_uid', isEqualTo: createdByUid);
-    final snap = await query.get();
-    if (snap.docs.isEmpty) return;
+  /// Borra exactamente los archivos indicados por id (la UI ya resolvió
+  /// cuáles son visibles/borrables para el usuario actual).
+  Future<void> deleteAll(List<String> ids) async {
+    if (ids.isEmpty) return;
     final batch = _firestore.batch();
-    for (final doc in snap.docs) {
-      batch.delete(doc.reference);
+    for (final id in ids) {
+      batch.delete(_archivos.doc(id));
     }
     await batch.commit();
   }

@@ -102,7 +102,11 @@ service cloud.firestore {
             || request.resource.data.created_by_uid == null
             || request.resource.data.created_by_uid == request.auth.uid);
       allow delete: if isAdmin()
-        || (isGestor() && resource.data.created_by_uid == request.auth.uid);
+        || (isGestor() && (
+          resource.data.created_by_uid == request.auth.uid
+          || !('created_by_uid' in resource.data)
+          || resource.data.created_by_uid == null
+        ));
     }
 
     // Perfiles de usuarios del sistema para administración.
