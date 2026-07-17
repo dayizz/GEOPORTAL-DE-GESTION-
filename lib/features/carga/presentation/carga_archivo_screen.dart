@@ -176,11 +176,6 @@ class _CargaArchivoScreenState extends ConsumerState<CargaArchivoScreen> {
           .whereType<ImportedFile>()
           .toList();
       final bdFiles = _visibleFiles(parsed);
-      debugPrint(
-        '[archivos] uid=$_currentUid isAdmin=${_isAdminUser()} '
-        'raw=${parsed.length} visibles=${bdFiles.length} '
-        'raw_owners=${parsed.map((f) => '${f.name}:${f.createdByUid}').toList()}',
-      );
       if (!mounted) return;
       ref.read(cargaProvider.notifier).initFromBD(bdFiles);
       if (bdFiles.isEmpty) {
