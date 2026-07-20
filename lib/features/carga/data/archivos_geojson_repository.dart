@@ -101,6 +101,7 @@ class ArchivosGeoJsonRepository {
         'errores': _toInt(row['errores']),
         'created_by_uid': row['created_by_uid']?.toString(),
         'created_by_email': row['created_by_email']?.toString(),
+        'proyecto': row['proyecto']?.toString(),
         'created_at': _toIso(row['created_at'], fallback: now),
         'updated_at': row['updated_at'] == null
             ? null
@@ -127,6 +128,7 @@ class ArchivosGeoJsonRepository {
     int errores = 0,
     String? createdByUid,
     String? createdByEmail,
+    String? proyecto,
   }) async {
     final now = DateTime.now().toIso8601String();
     final id = _uuid.v4();
@@ -144,6 +146,7 @@ class ArchivosGeoJsonRepository {
       'errores': errores,
       'created_by_uid': createdByUid,
       'created_by_email': createdByEmail,
+      'proyecto': proyecto,
       'created_at': now,
       'updated_at': now,
     };

@@ -24,6 +24,10 @@ class ImportedFile {
   final String? createdByUid;
   final String? createdByEmail;
 
+  /// Proyecto declarado por el usuario en la encuesta previa de importación
+  /// (null = registro previo sin ese dato, se recurre a detección por features).
+  final String? proyecto;
+
   ImportedFile({
     required this.id,
     required this.name,
@@ -38,6 +42,7 @@ class ImportedFile {
     this.errores = 0,
     this.createdByUid,
     this.createdByEmail,
+    this.proyecto,
   });
 
   ImportedFile copyWith({
@@ -50,6 +55,7 @@ class ImportedFile {
     List<Map<String, dynamic>>? features,
     String? createdByUid,
     String? createdByEmail,
+    String? proyecto,
   }) {
     return ImportedFile(
       id: id,
@@ -65,6 +71,7 @@ class ImportedFile {
       errores: errores ?? this.errores,
       createdByUid: createdByUid ?? this.createdByUid,
       createdByEmail: createdByEmail ?? this.createdByEmail,
+      proyecto: proyecto ?? this.proyecto,
     );
   }
 
@@ -103,6 +110,9 @@ class ImportedFile {
       createdByEmail: (map['created_by_email'] as String?)?.trim().isEmpty ?? true
           ? null
           : map['created_by_email'] as String?,
+      proyecto: (map['proyecto'] as String?)?.trim().isEmpty ?? true
+          ? null
+          : map['proyecto'] as String?,
     );
   }
 
@@ -135,6 +145,7 @@ class CargaNotifier extends StateNotifier<List<ImportedFile>> {
     int? rowCount,
     String? createdByUid,
     String? createdByEmail,
+    String? proyecto,
   }) {
     final id = bdId ?? DateTime.now().millisecondsSinceEpoch.toString();
     final file = ImportedFile(
@@ -151,6 +162,7 @@ class CargaNotifier extends StateNotifier<List<ImportedFile>> {
       errores: errores,
       createdByUid: createdByUid,
       createdByEmail: createdByEmail,
+      proyecto: proyecto,
     );
     state = [file, ...state];
   }

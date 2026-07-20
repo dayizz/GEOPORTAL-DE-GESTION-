@@ -55,6 +55,7 @@ class _CargaArchivoScreenState extends ConsumerState<CargaArchivoScreen> {
   // Encuesta previa de importacion
   String? _tipoArchivoImportacion; // geojson | xlsx
   String? _contenidoGeoJsonImportacion; // predios | envolvente | pks
+  String? _proyectoImportacion; // TQI | TSNL | TAP | TQM
 
   void _mostrarSnackBar(String mensaje, {bool exito = true}) {
     if (!mounted) return;
@@ -153,7 +154,10 @@ class _CargaArchivoScreenState extends ConsumerState<CargaArchivoScreen> {
   /// Administrador ve todo. Gestor ve siempre lo suyo + los archivos sin
   /// dueño registrado (importados antes de asociar `created_by_uid`), y
   /// además cualquier archivo -aunque lo haya importado otro usuario- cuyo
-  /// proyecto detectado coincida con su(s) proyecto(s) asignado(s).
+  /// proyecto coincida con su(s) proyecto(s) asignado(s). El proyecto se
+  /// toma del declarado en la encuesta previa (`f.proyecto`); si el archivo
+  /// es de un import anterior a esa pregunta, se recurre a la detección
+  /// heurística por features como respaldo.
   List<ImportedFile> _visibleFiles(List<ImportedFile> files) {
     if (_isAdminUser()) return files;
     final uid = _currentUid;
@@ -162,8 +166,9 @@ class _CargaArchivoScreenState extends ConsumerState<CargaArchivoScreen> {
       final propio = f.createdByUid == null || f.createdByUid == uid;
       if (propio) return true;
       if (proyectosAsignados.isEmpty) return false;
-      final proyectoDetectado = GeoJsonMapper.detectarProyectoDesdeFeatures(f.features);
-      return proyectoDetectado != null && proyectosAsignados.contains(proyectoDetectado);
+      final proyectoArchivo =
+          f.proyecto ?? GeoJsonMapper.detectarProyectoDesdeFeatures(f.features);
+      return proyectoArchivo != null && proyectosAsignados.contains(proyectoArchivo);
     }).toList();
   }
 
@@ -262,6 +267,7 @@ class _CargaArchivoScreenState extends ConsumerState<CargaArchivoScreen> {
     setState(() {
       _tipoArchivoImportacion = encuesta.tipoArchivo;
       _contenidoGeoJsonImportacion = encuesta.contenidoGeoJson;
+      _proyectoImportacion = encuesta.proyecto;
       _archivoSeleccionado = file;
       _geoJsonData = null;
       _preview = [];
@@ -368,12 +374,22 @@ class _CargaArchivoScreenState extends ConsumerState<CargaArchivoScreen> {
     final initialTipo = _tipoArchivoImportacion ?? 'geojson';
     final initialContenido = _contenidoGeoJsonImportacion ?? 'predios';
 
+    const todosLosProyectos = ['TQI', 'TSNL', 'TAP', 'TQM'];
+    final proyectoOptions = _isAdminUser()
+        ? todosLosProyectos
+        : ref.read(currentUserAssignedProjectsProvider);
+    final initialProyecto =
+        _proyectoImportacion != null && proyectoOptions.contains(_proyectoImportacion)
+            ? _proyectoImportacion
+            : (proyectoOptions.isNotEmpty ? proyectoOptions.first : null);
+
     return showDialog<_ImportSurveyResult>(
       context: context,
       barrierDismissible: false,
       builder: (dialogContext) {
         var tipo = initialTipo;
         var contenido = initialContenido;
+        var proyecto = initialProyecto;
 
         return StatefulBuilder(
           builder: (context, setModalState) {
@@ -433,6 +449,32 @@ class _CargaArchivoScreenState extends ConsumerState<CargaArchivoScreen> {
                         },
                       ),
                     ],
+                    const SizedBox(height: 16),
+                    const Text(
+                      '3. Proyecto al que pertenece',
+                      style: TextStyle(fontWeight: FontWeight.w600),
+                    ),
+                    const SizedBox(height: 8),
+                    if (proyectoOptions.isEmpty)
+                      const Text(
+                        'Tu perfil no tiene proyecto asignado, no puedes importar archivos.',
+                        style: TextStyle(color: Colors.red),
+                      )
+                    else
+                      DropdownButtonFormField<String>(
+                        value: proyecto,
+                        decoration: const InputDecoration(
+                          border: OutlineInputBorder(),
+                          isDense: true,
+                        ),
+                        items: proyectoOptions
+                            .map((p) => DropdownMenuItem(value: p, child: Text(p)))
+                            .toList(),
+                        onChanged: (value) {
+                          if (value == null) return;
+                          setModalState(() => proyecto = value);
+                        },
+                      ),
                   ],
                 ),
               ),
@@ -442,14 +484,17 @@ class _CargaArchivoScreenState extends ConsumerState<CargaArchivoScreen> {
                   child: const Text('Cancelar'),
                 ),
                 ElevatedButton(
-                  onPressed: () {
-                    Navigator.of(dialogContext).pop(
-                      _ImportSurveyResult(
-                        tipoArchivo: tipo,
-                        contenidoGeoJson: tipo == 'geojson' ? contenido : null,
-                      ),
-                    );
-                  },
+                  onPressed: proyecto == null
+                      ? null
+                      : () {
+                          Navigator.of(dialogContext).pop(
+                            _ImportSurveyResult(
+                              tipoArchivo: tipo,
+                              contenidoGeoJson: tipo == 'geojson' ? contenido : null,
+                              proyecto: proyecto!,
+                            ),
+                          );
+                        },
                   child: const Text('Continuar'),
                 ),
               ],
@@ -539,6 +584,7 @@ class _CargaArchivoScreenState extends ConsumerState<CargaArchivoScreen> {
             errores: resultado.errores,
             createdByUid: _currentUid,
             createdByEmail: _currentUserEmail,
+            proyecto: _proyectoImportacion,
           );
           bdId = saved['id'] as String?;
         } catch (_) {
@@ -601,6 +647,7 @@ class _CargaArchivoScreenState extends ConsumerState<CargaArchivoScreen> {
         errores: resultado.errores,
         createdByUid: _currentUid,
         createdByEmail: _currentUserEmail,
+        proyecto: _proyectoImportacion,
       );
 
       ref.read(importedFeaturesProvider.notifier).state = resultado.features;
@@ -878,6 +925,7 @@ class _CargaArchivoScreenState extends ConsumerState<CargaArchivoScreen> {
             errores: resultado.errores,
             createdByUid: _currentUid,
             createdByEmail: _currentUserEmail,
+            proyecto: _proyectoImportacion,
           );
           bdId = saved['id'] as String?;
         } catch (_) {
@@ -895,6 +943,7 @@ class _CargaArchivoScreenState extends ConsumerState<CargaArchivoScreen> {
           rowCount: resultado.procesados,
           createdByUid: _currentUid,
           createdByEmail: _currentUserEmail,
+          proyecto: _proyectoImportacion,
         );
       }
 
@@ -1102,6 +1151,7 @@ class _CargaArchivoScreenState extends ConsumerState<CargaArchivoScreen> {
             errores: errores,
             createdByUid: _currentUid,
             createdByEmail: _currentUserEmail,
+            proyecto: _proyectoImportacion,
           );
           bdId = saved['id'] as String?;
         } catch (_) {
@@ -1119,6 +1169,7 @@ class _CargaArchivoScreenState extends ConsumerState<CargaArchivoScreen> {
           rowCount: procesados,
           createdByUid: _currentUid,
           createdByEmail: _currentUserEmail,
+          proyecto: _proyectoImportacion,
         );
       }
 
@@ -1244,6 +1295,7 @@ class _CargaArchivoScreenState extends ConsumerState<CargaArchivoScreen> {
           errores: 0,
           createdByUid: _currentUid,
           createdByEmail: _currentUserEmail,
+          proyecto: _proyectoImportacion,
         );
         bdId = saved['id'] as String?;
       } catch (_) {
@@ -1261,6 +1313,7 @@ class _CargaArchivoScreenState extends ConsumerState<CargaArchivoScreen> {
         errores: 0,
         createdByUid: _currentUid,
         createdByEmail: _currentUserEmail,
+        proyecto: _proyectoImportacion,
       );
 
       ref.read(pksPointFeaturesProvider.notifier).state = normalizedFeatures;
@@ -1307,6 +1360,7 @@ class _CargaArchivoScreenState extends ConsumerState<CargaArchivoScreen> {
           errores: 0,
           createdByUid: _currentUid,
           createdByEmail: _currentUserEmail,
+          proyecto: _proyectoImportacion,
         );
         bdId = saved['id'] as String?;
       } catch (_) {
@@ -1324,6 +1378,7 @@ class _CargaArchivoScreenState extends ConsumerState<CargaArchivoScreen> {
         errores: 0,
         createdByUid: _currentUid,
         createdByEmail: _currentUserEmail,
+        proyecto: _proyectoImportacion,
       );
 
       // ENVOLVENTE se renderiza solo en mapa; no pasa por Gestión.
@@ -2832,9 +2887,11 @@ class _CargaArchivoScreenState extends ConsumerState<CargaArchivoScreen> {
 class _ImportSurveyResult {
   final String tipoArchivo;
   final String? contenidoGeoJson;
+  final String proyecto;
 
   const _ImportSurveyResult({
     required this.tipoArchivo,
     this.contenidoGeoJson,
+    required this.proyecto,
   });
 }
