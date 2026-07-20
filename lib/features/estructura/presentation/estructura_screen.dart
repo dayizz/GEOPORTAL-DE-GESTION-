@@ -300,7 +300,7 @@ class _CuentasUsuarioTabState extends ConsumerState<_CuentasUsuarioTab> {
           child: Text(
             'Tu perfil no tiene acceso a Estructura.\n\n'
             'Administrador: gestion completa\n'
-            'Gestor de proyecto: consulta de estructura\n'
+            'Gestor de proyecto: sin acceso\n'
             'Operativo auxiliar: sin acceso',
             textAlign: TextAlign.center,
           ),

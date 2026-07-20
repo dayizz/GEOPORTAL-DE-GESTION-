@@ -66,8 +66,7 @@ bool isPerfilAdministrador(String? perfil) =>
 bool isPerfilGestor(String? perfil) =>
     normalizePerfil(perfil) == perfilGestorProyecto;
 
-bool canViewEstructura(String? perfil) =>
-    isPerfilAdministrador(perfil) || isPerfilGestor(perfil);
+bool canViewEstructura(String? perfil) => isPerfilAdministrador(perfil);
 
 bool canManageOperationalData(String? perfil) =>
     isPerfilAdministrador(perfil) || isPerfilGestor(perfil);

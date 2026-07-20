@@ -15,6 +15,7 @@ import '../../../core/constants/app_colors.dart';
 import '../../../core/utils/browser_download.dart';
 import '../../predios/providers/predios_provider.dart';
 import '../../predios/models/predio.dart';
+import '../../auth/providers/auth_provider.dart';
 
 // Variables para fuentes - se inicializan en el método de generación
 late pw.Font notoSansRegular;
@@ -714,17 +715,41 @@ class _GenerarReporteScreenState extends ConsumerState<GenerarReporteScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final canAllProjects = ref.watch(canAccessAllProjectsProvider);
+    final proyectosAsignados = ref.watch(currentUserAssignedProjectsProvider);
+    final proyectosDisponibles = canAllProjects
+        ? _proyectos
+        : _proyectos.where(proyectosAsignados.contains).toList(growable: false);
+
+    if (proyectosDisponibles.isEmpty) {
+      return const AppScaffold(
+        currentIndex: 4,
+        title: 'Generar Reporte',
+        child: Center(child: Text('Sin proyecto asignado')),
+      );
+    }
+
+    if (!proyectosDisponibles.contains(_proyectoActual)) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (!mounted) return;
+        setState(() {
+          _proyectoActual = proyectosDisponibles.first;
+          _segmentoSeleccionado = null;
+        });
+      });
+    }
+
     return AppScaffold(
       currentIndex: 4,
       title: 'Generar Reporte',
       child: _showPreview && _previewPdfBytes != null
-          ? _buildPreviewView()
-          : _buildFormView(),
+          ? _buildPreviewView(proyectosDisponibles)
+          : _buildFormView(proyectosDisponibles),
     );
   }
 
   /// Vista del formulario
-  Widget _buildFormView() {
+  Widget _buildFormView(List<String> proyectosDisponibles) {
     final prediosAsync = ref.watch(prediosListProvider);
     final predios = prediosAsync.asData?.value ?? <Predio>[];
     final prediosProyecto = predios.where((p) => _predioProyecto(p) == _proyectoActual).toList();
@@ -754,12 +779,14 @@ class _GenerarReporteScreenState extends ConsumerState<GenerarReporteScreen> {
                   ),
                   const SizedBox(height: 8),
                   DropdownButtonFormField<String>(
-                    value: _proyectoActual,
+                    value: proyectosDisponibles.contains(_proyectoActual)
+                        ? _proyectoActual
+                        : proyectosDisponibles.first,
                     decoration: const InputDecoration(
                       border: OutlineInputBorder(),
                       contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 8),
                     ),
-                    items: _proyectos.map((p) => DropdownMenuItem(
+                    items: proyectosDisponibles.map((p) => DropdownMenuItem(
                       value: p,
                       child: Text(p),
                     )).toList(),
@@ -1023,7 +1050,7 @@ class _GenerarReporteScreenState extends ConsumerState<GenerarReporteScreen> {
   }
 
   /// Vista de previsualización
-  Widget _buildPreviewView() {
+  Widget _buildPreviewView(List<String> proyectosDisponibles) {
     return Row(
       children: [
         // Panel izquierdo - formulario (reducido)
@@ -1050,12 +1077,14 @@ class _GenerarReporteScreenState extends ConsumerState<GenerarReporteScreen> {
                         ),
                         const SizedBox(height: 8),
                         DropdownButtonFormField<String>(
-                          value: _proyectoActual,
+                          value: proyectosDisponibles.contains(_proyectoActual)
+                              ? _proyectoActual
+                              : proyectosDisponibles.first,
                           decoration: const InputDecoration(
                             border: OutlineInputBorder(),
                             contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 8),
                           ),
-                          items: _proyectos.map((p) => DropdownMenuItem(
+                          items: proyectosDisponibles.map((p) => DropdownMenuItem(
                             value: p,
                             child: Text(p),
                           )).toList(),

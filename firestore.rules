@@ -111,7 +111,7 @@ service cloud.firestore {
 
     // Perfiles de usuarios del sistema para administración.
     match /usuarios_sistema/{uid} {
-      allow read: if isAdmin() || isGestor() || (isSignedIn() && request.auth.uid == uid);
+      allow read: if isAdmin() || (isSignedIn() && request.auth.uid == uid);
 
       allow create: if isSignedIn() && (
         isAdmin() || (

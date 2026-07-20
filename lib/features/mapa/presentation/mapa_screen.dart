@@ -13,6 +13,7 @@ import 'package:latlong2/latlong.dart';
 import '../../../core/constants/app_colors.dart';
 import '../../../shared/widgets/app_scaffold.dart';
 import '../../auth/providers/demo_provider.dart';
+import '../../auth/providers/auth_provider.dart';
 import '../../predios/models/predio.dart';
 import '../../predios/models/proyecto.dart';
 import '../../predios/data/predios_repository.dart';
@@ -2443,6 +2444,14 @@ class _MapaScreenState extends ConsumerState<MapaScreen> {
     final area = _detectedAreaM2 > 0 ? _detectedAreaM2 : _calculateAreaSquareMeters(_draftPoints);
     final predios = ref.watch(prediosMapaProvider).asData?.value ?? const <Predio>[];
     final prediosNoVinculados = _prediosSinPoligono(predios);
+    final canAllProjects = ref.watch(canAccessAllProjectsProvider);
+    final proyectosAsignados = ref.watch(currentUserAssignedProjectsProvider);
+    final proyectoOptions = canAllProjects
+        ? const ['Sin proyecto', 'TQI', 'TSNL', 'TQM', 'TAP']
+        : ['Sin proyecto', ...proyectosAsignados];
+    if (_proyecto != null && !proyectoOptions.contains(_proyecto)) {
+      _proyecto = null;
+    }
     return ConstrainedBox(
       constraints: const BoxConstraints(maxWidth: 400),
       child: Container(
@@ -2648,7 +2657,7 @@ class _MapaScreenState extends ConsumerState<MapaScreen> {
                     label: 'Proyecto',
                     value: _proyecto,
                     placeholder: 'Sin proyecto',
-                    options: const ['Sin proyecto', 'TQI', 'TSNL', 'TQM', 'TAP'],
+                    options: proyectoOptions,
                     onChanged: (v) => setState(() => _proyecto = v),
                   ),
                 ),
