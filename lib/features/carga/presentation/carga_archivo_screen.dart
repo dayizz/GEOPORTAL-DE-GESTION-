@@ -150,21 +150,20 @@ class _CargaArchivoScreenState extends ConsumerState<CargaArchivoScreen> {
   String? get _currentUserEmail =>
       (ref.read(currentUserProvider) ?? FirebaseAuth.instance.currentUser)?.email;
 
-  /// Administrador ve todo. Gestor ve los suyos + los que no tienen dueño
-  /// registrado (importados antes de asociar `created_by_uid`), acotado
-  /// además a su(s) proyecto(s) asignado(s) cuando el proyecto del archivo
-  /// se puede determinar a partir de sus features.
+  /// Administrador ve todo. Gestor ve siempre lo suyo + los archivos sin
+  /// dueño registrado (importados antes de asociar `created_by_uid`), y
+  /// además cualquier archivo -aunque lo haya importado otro usuario- cuyo
+  /// proyecto detectado coincida con su(s) proyecto(s) asignado(s).
   List<ImportedFile> _visibleFiles(List<ImportedFile> files) {
     if (_isAdminUser()) return files;
     final uid = _currentUid;
     final proyectosAsignados = ref.read(currentUserAssignedProjectsProvider);
     return files.where((f) {
       final propio = f.createdByUid == null || f.createdByUid == uid;
-      if (!propio) return false;
-      if (proyectosAsignados.isEmpty) return true;
+      if (propio) return true;
+      if (proyectosAsignados.isEmpty) return false;
       final proyectoDetectado = GeoJsonMapper.detectarProyectoDesdeFeatures(f.features);
-      if (proyectoDetectado == null) return true;
-      return proyectosAsignados.contains(proyectoDetectado);
+      return proyectoDetectado != null && proyectosAsignados.contains(proyectoDetectado);
     }).toList();
   }
 
