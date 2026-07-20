@@ -21,6 +21,14 @@ class PredioFormScreen extends ConsumerStatefulWidget {
 
 class _PredioFormScreenState extends ConsumerState<PredioFormScreen> {
   static const List<String> _tipoLiberacionOpciones = ['COP', 'DOT', 'AOP'];
+  static const List<String> _estructuraOpciones = [
+    'Estacion',
+    'Edificio auxiliar',
+    'Viaducto',
+    'DDV Troncal',
+    'Carretera',
+    'SICA',
+  ];
 
   final _formKey = GlobalKey<FormState>();
   bool _loading = false;
@@ -43,6 +51,7 @@ class _PredioFormScreenState extends ConsumerState<PredioFormScreen> {
   String _tramoTipo = 'TRAMO';
   String _tramoNumero = '1';
   String _tipoPropiedad = 'PRIVADA';
+  String? _estructura;
   bool _cop = false;
   bool _poligonoInsertado = false;
   bool _identificacion = false;
@@ -116,6 +125,7 @@ class _PredioFormScreenState extends ConsumerState<PredioFormScreen> {
         _propietarioNombreCtrl.text = predio.propietarioNombre ?? '';
         _setTramoFromValue(predio.tramo);
         _tipoPropiedad = predio.tipoPropiedad;
+        _estructura = _estructuraOpciones.contains(predio.estructura) ? predio.estructura : null;
         _cop = predio.cop;
         _poligonoInsertado = predio.poligonoInsertado;
         _identificacion = predio.identificacion;
@@ -195,6 +205,7 @@ class _PredioFormScreenState extends ConsumerState<PredioFormScreen> {
           claveCatastral: _claveCtrl.text.trim(),
           tramo: _tramo,
           tipoPropiedad: _tipoPropiedad,
+          estructura: _estructura,
           ejido: _ejidoCtrl.text.isEmpty ? null : _ejidoCtrl.text.trim(),
           estado: _estadoCtrl.text.isEmpty ? null : _estadoCtrl.text.trim(),
           municipio: _municipioCtrl.text.isEmpty ? null : _municipioCtrl.text.trim(),
@@ -225,6 +236,7 @@ class _PredioFormScreenState extends ConsumerState<PredioFormScreen> {
           claveCatastral: _claveCtrl.text.trim(),
           tramo: _tramo,
           tipoPropiedad: _tipoPropiedad,
+          estructura: _estructura,
           ejido: _ejidoCtrl.text.isEmpty ? null : _ejidoCtrl.text.trim(),
           estado: _estadoCtrl.text.isEmpty ? null : _estadoCtrl.text.trim(),
           municipio: _municipioCtrl.text.isEmpty ? null : _municipioCtrl.text.trim(),
@@ -254,6 +266,7 @@ class _PredioFormScreenState extends ConsumerState<PredioFormScreen> {
           'clave_catastral': _claveCtrl.text.trim(),
           'tramo': _tramo,
           'tipo_propiedad': _tipoPropiedad,
+          'estructura': _estructura,
           'ejido': _ejidoCtrl.text.isEmpty ? null : _ejidoCtrl.text.trim(),
           'estado': _estadoCtrl.text.isEmpty ? null : _estadoCtrl.text.trim(),
           'municipio': _municipioCtrl.text.isEmpty ? null : _municipioCtrl.text.trim(),
@@ -394,6 +407,15 @@ class _PredioFormScreenState extends ConsumerState<PredioFormScreen> {
                     items: ['SOCIAL','DOMINIO PLENO','PRIVADA','DESCONOCIDO','FEDERAL','GUBERNAMENTAL','ESTATAL','MUNICIPAL'].map((t) => DropdownMenuItem(value: t, child: Text(t))).toList(),
                     onChanged: (v) => setState(() => _tipoPropiedad = v ?? _tipoPropiedad),
                   ),
+              const SizedBox(height: 14),
+              DropdownButtonFormField<String>(
+                value: _estructura,
+                decoration: const InputDecoration(labelText: 'Estructura', hintText: 'Selecciona'),
+                items: _estructuraOpciones
+                    .map((t) => DropdownMenuItem(value: t, child: Text(t)))
+                    .toList(),
+                onChanged: (v) => setState(() => _estructura = v),
+              ),
               const SizedBox(height: 14),
               TextFormField(
                 controller: _ejidoCtrl,
