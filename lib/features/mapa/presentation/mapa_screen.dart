@@ -95,6 +95,9 @@ class _MapaScreenState extends ConsumerState<MapaScreen> {
   double _lastTrackpadRotationRad = 0;
   static const _defaultCenter = LatLng(20.72, -100.35);
   static const _defaultZoom = 10.0;
+  /// Pixel ratio usado al capturar el mapa para descarga; entre más alto,
+  /// mayor resolución/nitidez de la imagen exportada.
+  static const double _capturaPixelRatio = 3.0;
   double _currentZoom = _defaultZoom;
   // Memoización de polígonos importados (deben ser de instancia, no static locales)
   List<Map<String, dynamic>>? _lastImportedFeatures;
@@ -3233,10 +3236,11 @@ class _MapaScreenState extends ConsumerState<MapaScreen> {
     try {
       await _screenshotCtrl.startSelectionCapture(
         context: context,
+        capturePixelRatio: _capturaPixelRatio,
         captureFunction: () async {
           final image = await _screenshotPackageCtrl.capture(
-            delay: const Duration(milliseconds: 150),
-            pixelRatio: 2.0,
+            delay: const Duration(milliseconds: 300),
+            pixelRatio: _capturaPixelRatio,
           );
           if (image == null) {
             throw Exception('No fue posible capturar el mapa en pantalla.');

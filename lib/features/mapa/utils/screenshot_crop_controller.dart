@@ -14,20 +14,22 @@ class GeoportalScreenshotController {
     required BuildContext context,
     required Future<Uint8List> Function() captureFunction,
     required Function(Uint8List) onCaptured,
+    required double capturePixelRatio,
     VoidCallback? onCancel,
   }) async {
     // Primero capturar la pantalla
     try {
       final fullImageBytes = await captureFunction();
-      
+
       if (!context.mounted) return;
-      
+
       // Luego mostrar el overlay con la imagen capturada
       Navigator.of(context).push(
         PageRouteBuilder(
           opaque: false,
           pageBuilder: (context, _, __) => CropOverlay(
             fullImageBytes: fullImageBytes,
+            capturePixelRatio: capturePixelRatio,
             onCropped: (bytes) {
               onCaptured(bytes);
               Navigator.of(context).pop();
@@ -60,10 +62,11 @@ class GeoportalScreenshotController {
     required Widget child,
     required Future<Uint8List> Function() captureFunction,
     required Function(Uint8List) onCaptured,
+    required double capturePixelRatio,
     VoidCallback? onCancel,
   }) async {
     if (!context.mounted) return;
-    
+
     // Mostrar overlay de selección en vivo
     Navigator.of(context).push(
       PageRouteBuilder(
@@ -71,6 +74,7 @@ class GeoportalScreenshotController {
         pageBuilder: (ctx, _, __) => LiveCropOverlay(
           child: child,
           captureFunction: captureFunction,
+          capturePixelRatio: capturePixelRatio,
           onCropped: (bytes) {
             onCaptured(bytes);
             Navigator.of(context).pop();
@@ -90,12 +94,14 @@ class CropOverlay extends StatefulWidget {
   final Uint8List fullImageBytes;
   final Function(Uint8List) onCropped;
   final VoidCallback onCancel;
+  final double capturePixelRatio;
 
   const CropOverlay({
     super.key,
     required this.fullImageBytes,
     required this.onCropped,
     required this.onCancel,
+    required this.capturePixelRatio,
   });
 
   @override
@@ -172,8 +178,9 @@ class _CropOverlayState extends State<CropOverlay> {
         return;
       }
 
-      // Obtener el pixel ratio
-      final pixelRatio = MediaQuery.of(context).devicePixelRatio;
+      // Pixel ratio con el que se generó fullImageBytes (no el devicePixelRatio
+      // de la pantalla, que puede no coincidir y desalinear el recorte).
+      final pixelRatio = widget.capturePixelRatio;
 
       // Convertir coordenadas
       final int x = (left * pixelRatio).round();
@@ -490,6 +497,7 @@ class LiveCropOverlay extends StatefulWidget {
   final Future<Uint8List> Function() captureFunction;
   final Function(Uint8List) onCropped;
   final VoidCallback onCancel;
+  final double capturePixelRatio;
 
   const LiveCropOverlay({
     super.key,
@@ -497,6 +505,7 @@ class LiveCropOverlay extends StatefulWidget {
     required this.captureFunction,
     required this.onCropped,
     required this.onCancel,
+    required this.capturePixelRatio,
   });
 
   @override
@@ -551,8 +560,9 @@ class _LiveCropOverlayState extends State<LiveCropOverlay> {
         return;
       }
 
-      // Obtener el pixel ratio
-      final pixelRatio = MediaQuery.of(context).devicePixelRatio;
+      // Pixel ratio con el que se generó fullImageBytes (no el devicePixelRatio
+      // de la pantalla, que puede no coincidir y desalinear el recorte).
+      final pixelRatio = widget.capturePixelRatio;
 
       // Convertir coordenadas
       final int x = (left * pixelRatio).round();
