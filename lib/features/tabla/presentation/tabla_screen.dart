@@ -566,11 +566,15 @@ class _TablaScreenState extends ConsumerState<TablaScreen> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Wrap(
-            crossAxisAlignment: WrapCrossAlignment.center,
-            spacing: 8,
-            runSpacing: 6,
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.center,
             children: [
+              Expanded(
+                child: Wrap(
+                  crossAxisAlignment: WrapCrossAlignment.center,
+                  spacing: 8,
+                  runSpacing: 6,
+                  children: [
               const Icon(Icons.folder_outlined, size: 16, color: AppColors.textSecondary),
               const Text(
                 'Proyecto:',
@@ -637,21 +641,27 @@ class _TablaScreenState extends ConsumerState<TablaScreen> {
                   ),
                 ),
               ),
-              if (camposIncompletos > 0)
-                Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    const Icon(Icons.error, color: AppColors.danger, size: 16),
-                    const SizedBox(width: 4),
-                    Text(
-                      'CAMPOS INCOMPLETOS: ($camposIncompletos)',
-                      style: const TextStyle(
-                        fontSize: 12,
-                        fontWeight: FontWeight.w700,
-                        color: AppColors.danger,
-                      ),
-                    ),
                   ],
+                ),
+              ),
+              if (camposIncompletos > 0)
+                Padding(
+                  padding: const EdgeInsets.only(left: 8),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      const Icon(Icons.error, color: AppColors.danger, size: 16),
+                      const SizedBox(width: 4),
+                      Text(
+                        'CAMPOS INCOMPLETOS: ($camposIncompletos)',
+                        style: const TextStyle(
+                          fontSize: 12,
+                          fontWeight: FontWeight.w700,
+                          color: AppColors.danger,
+                        ),
+                      ),
+                    ],
+                  ),
                 ),
             ],
           ),
