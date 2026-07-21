@@ -320,7 +320,9 @@ class _MapaScreenState extends ConsumerState<MapaScreen> {
                 },
                 child: Screenshot(
                   controller: _screenshotPackageCtrl,
-                  child: FlutterMap(
+                  child: ColoredBox(
+                    color: baseLayer == MapaBaseLayer.sinMapa ? Colors.white : Colors.transparent,
+                    child: FlutterMap(
                     mapController: _mapCtrl,
                     options: MapOptions(
                       initialCenter: _defaultCenter,
@@ -445,6 +447,7 @@ class _MapaScreenState extends ConsumerState<MapaScreen> {
                       },
                     ),
                     children: [
+                    if (baseLayer != MapaBaseLayer.sinMapa)
                     TileLayer(
                       urlTemplate: _tileTemplate(baseLayer),
                       maxZoom: 19,
@@ -500,6 +503,7 @@ class _MapaScreenState extends ConsumerState<MapaScreen> {
                           : const [],
                     ),
                     ],
+                  ),
                   ),
                 ),
               );
@@ -761,6 +765,10 @@ class _MapaScreenState extends ConsumerState<MapaScreen> {
     if (layer == MapaBaseLayer.satelital) {
       // Google Satellite Hybrid - incluye imágenes satelitales con etiquetas de calles y lugares
       return 'https://mt1.google.com/vt/lyrs=y&x={x}&y={y}&z={z}';
+    }
+    if (layer == MapaBaseLayer.satelitalSinEtiquetas) {
+      // Google Satellite puro - solo imagen aérea, sin etiquetas de calles ni lugares
+      return 'https://mt1.google.com/vt/lyrs=s&x={x}&y={y}&z={z}';
     }
     return 'https://tile.openstreetmap.org/{z}/{x}/{y}.png';
   }
@@ -2010,7 +2018,6 @@ class _MapaScreenState extends ConsumerState<MapaScreen> {
     );
   }
   Widget _buildLayersPanel(MapaColorMode mode, MapaBaseLayer currentLayer) {
-    final isSatelital = currentLayer == MapaBaseLayer.satelital;
     return Card(
       elevation: 6,
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
@@ -2031,7 +2038,7 @@ class _MapaScreenState extends ConsumerState<MapaScreen> {
                 title: 'Estándar',
                 subtitle: 'Calles y etiquetas',
                 icon: Icons.map_outlined,
-                selected: !isSatelital,
+                selected: currentLayer == MapaBaseLayer.estandar,
                 onTap: () {
                   ref.read(mapaBaseLayerProvider.notifier).state = MapaBaseLayer.estandar;
                   setState(() => _showLayersPanel = false);
@@ -2042,9 +2049,31 @@ class _MapaScreenState extends ConsumerState<MapaScreen> {
                 title: 'Satelital',
                 subtitle: 'Imagen aérea',
                 icon: Icons.satellite_alt_outlined,
-                selected: isSatelital,
+                selected: currentLayer == MapaBaseLayer.satelital,
                 onTap: () {
                   ref.read(mapaBaseLayerProvider.notifier).state = MapaBaseLayer.satelital;
+                  setState(() => _showLayersPanel = false);
+                },
+              ),
+              const SizedBox(height: 6),
+              _layerButton(
+                title: 'Satelital sin etiquetas',
+                subtitle: 'Solo imagen aérea',
+                icon: Icons.satellite_outlined,
+                selected: currentLayer == MapaBaseLayer.satelitalSinEtiquetas,
+                onTap: () {
+                  ref.read(mapaBaseLayerProvider.notifier).state = MapaBaseLayer.satelitalSinEtiquetas;
+                  setState(() => _showLayersPanel = false);
+                },
+              ),
+              const SizedBox(height: 6),
+              _layerButton(
+                title: 'Sin mapa',
+                subtitle: 'Fondo blanco',
+                icon: Icons.layers_clear_outlined,
+                selected: currentLayer == MapaBaseLayer.sinMapa,
+                onTap: () {
+                  ref.read(mapaBaseLayerProvider.notifier).state = MapaBaseLayer.sinMapa;
                   setState(() => _showLayersPanel = false);
                 },
               ),

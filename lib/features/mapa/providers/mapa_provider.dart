@@ -5,6 +5,8 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 enum MapaBaseLayer {
 	estandar,
 	satelital,
+	satelitalSinEtiquetas,
+	sinMapa,
 }
 
 enum MapaColorMode {
