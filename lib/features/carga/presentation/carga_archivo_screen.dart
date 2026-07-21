@@ -154,17 +154,28 @@ class _CargaArchivoScreenState extends ConsumerState<CargaArchivoScreen> {
   String? get _currentUserEmail =>
       (ref.read(currentUserProvider) ?? FirebaseAuth.instance.currentUser)?.email;
 
-  /// Administrador ve todo. Gestor ve siempre lo suyo + los archivos sin
-  /// dueño registrado (importados antes de asociar `created_by_uid`), y
-  /// además cualquier archivo -aunque lo haya importado otro usuario- cuyo
-  /// proyecto coincida con su(s) proyecto(s) asignado(s). El proyecto se
-  /// toma del declarado en la encuesta previa (`f.proyecto`); si el archivo
-  /// es de un import anterior a esa pregunta, se recurre a la detección
-  /// heurística por features como respaldo.
-  List<ImportedFile> _visibleFiles(List<ImportedFile> files) {
-    if (_isAdminUser()) return files;
-    final uid = _currentUid;
-    final proyectosAsignados = ref.read(currentUserAssignedProjectsProvider);
+  /// Administrador y Supervisor Institucional ven todo. Gestor ve siempre lo
+  /// suyo + los archivos sin dueño registrado (importados antes de asociar
+  /// `created_by_uid`), y además cualquier archivo -aunque lo haya
+  /// importado otro usuario- cuyo proyecto coincida con su(s) proyecto(s)
+  /// asignado(s). El proyecto se toma del declarado en la encuesta previa
+  /// (`f.proyecto`); si el archivo es de un import anterior a esa
+  /// pregunta, se recurre a la detección heurística por features como
+  /// respaldo.
+  ///
+  /// Recibe el rol/uid/proyectos ya resueltos en vez de leerlos
+  /// internamente, para que quien llama pueda usar `ref.watch` y refiltrar
+  /// automáticamente en cuanto el perfil/proyectos (asíncronos, vía
+  /// Firestore) terminen de resolver -ver el `Consumer` en build()-, en
+  /// vez de aplicarse una sola vez al cargar desde la BD con datos que
+  /// podían aún no estar listos.
+  List<ImportedFile> _visibleFiles(
+    List<ImportedFile> files, {
+    required bool isAdmin,
+    required String? uid,
+    required List<String> proyectosAsignados,
+  }) {
+    if (isAdmin) return files;
     return files.where((f) {
       final propio = f.createdByUid == null || f.createdByUid == uid;
       if (propio) return true;
@@ -189,10 +200,14 @@ class _CargaArchivoScreenState extends ConsumerState<CargaArchivoScreen> {
           })
           .whereType<ImportedFile>()
           .toList();
-      final bdFiles = _visibleFiles(parsed);
       if (!mounted) return;
-      ref.read(cargaProvider.notifier).initFromBD(bdFiles);
-      if (bdFiles.isEmpty) {
+      // El filtrado por perfil/proyecto se aplica al construir la lista en
+      // build() (Consumer con ref.watch), no aquí: los providers de
+      // rol/perfil dependen de streams de Firestore que podrían no haber
+      // resuelto todavía en este punto, lo que antes causaba que archivos
+      // válidos desaparecieran intermitentemente al recargar.
+      ref.read(cargaProvider.notifier).initFromBD(parsed);
+      if (parsed.isEmpty) {
         clearImportedMapState(ref.read);
         ref.read(importacionAsyncProvider.notifier).reset();
       }
@@ -2479,7 +2494,20 @@ class _CargaArchivoScreenState extends ConsumerState<CargaArchivoScreen> {
             const SizedBox(height: 40),
             Consumer(
               builder: (context, ref, _) {
-                final importedFiles = ref.watch(cargaProvider);
+                final allFiles = ref.watch(cargaProvider);
+                final perfil = ref.watch(currentUserPerfilProvider);
+                final isAdmin = ref.watch(currentUserIsAdminProvider).valueOrNull == true ||
+                    isPerfilAdministrador(perfil) ||
+                    isPerfilSupervisorInstitucional(perfil) ||
+                    isAdminApproverUser(ref.watch(currentUserProvider) ?? FirebaseAuth.instance.currentUser);
+                final uid = (ref.watch(currentUserProvider) ?? FirebaseAuth.instance.currentUser)?.uid;
+                final proyectosAsignados = ref.watch(currentUserAssignedProjectsProvider);
+                final importedFiles = _visibleFiles(
+                  allFiles,
+                  isAdmin: isAdmin,
+                  uid: uid,
+                  proyectosAsignados: proyectosAsignados,
+                );
 
                 if (importedFiles.isEmpty) {
                   return Container(
