@@ -199,6 +199,9 @@ final mapaColorModeProvider = StateProvider<MapaColorMode>(
 	(ref) => MapaColorMode.estatusPredio,
 );
 
+/// Opacidad de relleno/borde de los predios renderizados en el mapa (0.0-1.0).
+final predioOpacityProvider = StateProvider<double>((ref) => 0.46);
+
 /// Features GeoJSON importados desde archivo — se renderizan directamente en el mapa
 /// sin necesidad de guardar a la base de datos primero.
 final importedFeaturesProvider = StateProvider<List<Map<String, dynamic>>>(

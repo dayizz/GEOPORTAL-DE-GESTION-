@@ -84,6 +84,7 @@ class _MapaScreenState extends ConsumerState<MapaScreen> {
   /// Si el panel de rotación está expandido.
   bool _showRotationPanel = false;
   bool _showFiltrosPanel = false;
+  bool _showOpacidadPanel = false;
   Set<String> _filtroEstatusMapa = {};
   Set<String> _filtroTipoMapa = {};
   Set<String> _filtroTramoMapa = {};
@@ -102,6 +103,7 @@ class _MapaScreenState extends ConsumerState<MapaScreen> {
   // Memoización de visuales
   List<Predio>? _lastPredios;
   MapaColorMode? _lastColorModeVisual;
+  double? _lastOpacityVisual;
   List<_PredioVisualData>? _lastVisuals;
   @override
   void dispose() {
@@ -120,6 +122,7 @@ class _MapaScreenState extends ConsumerState<MapaScreen> {
     final prediosById = ref.watch(prediosMapaByIdProvider);
     final baseLayer = ref.watch(mapaBaseLayerProvider);
     final colorMode = ref.watch(mapaColorModeProvider);
+    final predioOpacity = ref.watch(predioOpacityProvider);
     final importedFeatures = ref.watch(importedFeaturesProvider);
     final pksFeatures = ref.watch(pksPointFeaturesProvider);
     final shouldTrackZoomForPks = _showPksLabels && pksFeatures.isNotEmpty;
@@ -209,12 +212,13 @@ class _MapaScreenState extends ConsumerState<MapaScreen> {
             data: (rawPredios) {
               final predios = _applyFiltrosMapa(rawPredios);
               List<_PredioVisualData> visuals;
-              if (_lastPredios == predios && _lastColorModeVisual == colorMode) {
+              if (_lastPredios == predios && _lastColorModeVisual == colorMode && _lastOpacityVisual == predioOpacity) {
                 visuals = _lastVisuals ?? [];
               } else {
-                visuals = _buildVisualData(predios, colorMode);
+                visuals = _buildVisualData(predios, colorMode, predioOpacity);
                 _lastPredios = predios;
                 _lastColorModeVisual = colorMode;
+                _lastOpacityVisual = predioOpacity;
                 _lastVisuals = visuals;
               }
                 final canShowClaveLabels = _showClaveLabels;
@@ -651,6 +655,30 @@ class _MapaScreenState extends ConsumerState<MapaScreen> {
                         ),
                       ),
                     ),
+                    const SizedBox(width: 8),
+                    Material(
+                      color: Colors.white,
+                      elevation: 4,
+                      borderRadius: BorderRadius.circular(10),
+                      child: InkWell(
+                        borderRadius: BorderRadius.circular(10),
+                        onTap: () => setState(() {
+                          _showOpacidadPanel = !_showOpacidadPanel;
+                        }),
+                        child: Container(
+                          width: 40,
+                          height: 40,
+                          alignment: Alignment.center,
+                          child: Icon(
+                            Icons.opacity_outlined,
+                            size: 22,
+                            color: _showOpacidadPanel
+                                ? AppColors.primary
+                                : const Color(0xFF555555),
+                          ),
+                        ),
+                      ),
+                    ),
                   ],
                 ),
                 if (_showVisualizacionPanel) ...[
@@ -668,6 +696,10 @@ class _MapaScreenState extends ConsumerState<MapaScreen> {
                 if (_showRotationPanel) ...[
                   const SizedBox(height: 6),
                   _buildRotationPanel(),
+                ],
+                if (_showOpacidadPanel) ...[
+                  const SizedBox(height: 6),
+                  _buildOpacidadPanel(),
                 ],
               ],
             ),
@@ -908,6 +940,7 @@ class _MapaScreenState extends ConsumerState<MapaScreen> {
   List<_PredioVisualData> _buildVisualData(
     List<Predio> predios,
     MapaColorMode mode,
+    double opacity,
   ) {
     return predios.map((predio) {
       final color = _predioColor(predio, mode);
@@ -916,8 +949,8 @@ class _MapaScreenState extends ConsumerState<MapaScreen> {
           ? Polygon(
               points: rings.first,
               holePointsList: rings.length > 1 ? rings.sublist(1) : const [],
-              color: color.withValues(alpha: 0.46),
-              borderColor: color.withValues(alpha: 0.46),
+              color: color.withValues(alpha: opacity),
+              borderColor: color.withValues(alpha: opacity),
               borderStrokeWidth: 1.8,
             )
           : null;
@@ -2076,6 +2109,56 @@ class _MapaScreenState extends ConsumerState<MapaScreen> {
                   ref.read(mapaBaseLayerProvider.notifier).state = MapaBaseLayer.sinMapa;
                   setState(() => _showLayersPanel = false);
                 },
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+  Widget _buildOpacidadPanel() {
+    final opacidad = ref.watch(predioOpacityProvider);
+    final porcentaje = (opacidad * 100).round();
+    return Card(
+      elevation: 6,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+      child: Padding(
+        padding: const EdgeInsets.all(10),
+        child: SizedBox(
+          width: 220,
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  const Text(
+                    'Opacidad de predios',
+                    style: TextStyle(fontSize: 11, fontWeight: FontWeight.w700, color: Color(0xFF555555)),
+                  ),
+                  Text(
+                    '$porcentaje%',
+                    style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w700, color: AppColors.primary),
+                  ),
+                ],
+              ),
+              SliderTheme(
+                data: SliderTheme.of(context).copyWith(
+                  trackHeight: 3,
+                  thumbShape: const RoundSliderThumbShape(enabledThumbRadius: 7),
+                  overlayShape: const RoundSliderOverlayShape(overlayRadius: 14),
+                ),
+                child: Slider(
+                  value: opacidad,
+                  min: 0,
+                  max: 1,
+                  divisions: 100,
+                  activeColor: AppColors.primary,
+                  onChanged: (v) {
+                    ref.read(predioOpacityProvider.notifier).state = v;
+                  },
+                ),
               ),
             ],
           ),
