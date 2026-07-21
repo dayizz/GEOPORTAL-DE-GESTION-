@@ -139,11 +139,14 @@ class _CargaArchivoScreenState extends ConsumerState<CargaArchivoScreen> {
     _cargarArchivosDesdeBD();
   }
 
-  /// Administrador ve los archivos de todos; Gestor solo ve los que él importó.
+  /// Administrador y Supervisor Institucional ven los archivos de todos los
+  /// proyectos; Gestor solo ve los que él importó o los de su proyecto.
   bool _isAdminUser() {
     final perfil = ref.read(currentUserPerfilProvider);
     final user = ref.read(currentUserProvider) ?? FirebaseAuth.instance.currentUser;
-    return isPerfilAdministrador(perfil) || isAdminApproverUser(user);
+    return isPerfilAdministrador(perfil) ||
+        isPerfilSupervisorInstitucional(perfil) ||
+        isAdminApproverUser(user);
   }
 
   String? get _currentUid =>

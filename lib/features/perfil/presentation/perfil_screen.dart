@@ -333,6 +333,8 @@ class PerfilScreen extends ConsumerWidget {
         return Colors.red;
       case 'Gestor de proyecto':
         return Colors.blue;
+      case 'Supervisor Institucional':
+        return Colors.orange;
       case 'Operativo auxiliar':
         return Colors.green;
       default:

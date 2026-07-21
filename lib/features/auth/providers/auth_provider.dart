@@ -27,6 +27,7 @@ const String _adminApproverUidsRaw = String.fromEnvironment(
 const String perfilAdministrador = 'Administrador';
 const String perfilGestorProyecto = 'Gestor de proyecto';
 const String perfilOperativoAuxiliar = 'Operativo auxiliar';
+const String perfilSupervisorInstitucional = 'Supervisor Institucional';
 
 Set<String> _parseEmails(String raw) => raw
     .split(',')
@@ -57,6 +58,7 @@ String normalizePerfil(String? raw) {
   final value = (raw ?? '').trim();
   if (value == perfilAdministrador) return perfilAdministrador;
   if (value == perfilGestorProyecto) return perfilGestorProyecto;
+  if (value == perfilSupervisorInstitucional) return perfilSupervisorInstitucional;
   return perfilOperativoAuxiliar;
 }
 
@@ -66,10 +68,16 @@ bool isPerfilAdministrador(String? perfil) =>
 bool isPerfilGestor(String? perfil) =>
     normalizePerfil(perfil) == perfilGestorProyecto;
 
+bool isPerfilSupervisorInstitucional(String? perfil) =>
+    normalizePerfil(perfil) == perfilSupervisorInstitucional;
+
+/// Supervisor Institucional: acceso a todas las vistas excepto Estructura.
 bool canViewEstructura(String? perfil) => isPerfilAdministrador(perfil);
 
 bool canManageOperationalData(String? perfil) =>
-    isPerfilAdministrador(perfil) || isPerfilGestor(perfil);
+    isPerfilAdministrador(perfil) ||
+    isPerfilGestor(perfil) ||
+    isPerfilSupervisorInstitucional(perfil);
 
 bool canAccessCarga(String? perfil) => canManageOperationalData(perfil);
 
@@ -121,7 +129,7 @@ final canAccessAllProjectsProvider = Provider<bool>((ref) {
   }
 
   final perfil = ref.watch(currentUserPerfilProvider);
-  return isPerfilAdministrador(perfil);
+  return isPerfilAdministrador(perfil) || isPerfilSupervisorInstitucional(perfil);
 });
 
 /// Mapeo de contraseña a código de proyecto.

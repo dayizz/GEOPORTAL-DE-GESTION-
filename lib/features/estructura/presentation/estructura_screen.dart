@@ -375,6 +375,7 @@ class _CuentasUsuarioTabState extends ConsumerState<_CuentasUsuarioTab> {
     final admins = usuarios.where((u) => u.perfil == perfilAdministrador).length;
     final gestores = usuarios.where((u) => u.perfil == perfilGestorProyecto).length;
     final operativos = usuarios.where((u) => u.perfil == perfilOperativoAuxiliar).length;
+    final supervisores = usuarios.where((u) => u.perfil == perfilSupervisorInstitucional).length;
 
     Widget metric(String label, int value, Color color) {
       return Expanded(
@@ -409,6 +410,8 @@ class _CuentasUsuarioTabState extends ConsumerState<_CuentasUsuarioTab> {
         metric('Gestores', gestores, Colors.blue),
         const SizedBox(width: 8),
         metric('Operativos', operativos, Colors.green),
+        const SizedBox(width: 8),
+        metric('Supervisores', supervisores, Colors.orange),
       ],
     );
   }
@@ -438,7 +441,7 @@ class _CuentasUsuarioTabState extends ConsumerState<_CuentasUsuarioTab> {
         Wrap(
           spacing: 8,
           runSpacing: 8,
-          children: ['Todos', perfilAdministrador, perfilGestorProyecto, perfilOperativoAuxiliar]
+          children: ['Todos', perfilAdministrador, perfilGestorProyecto, perfilSupervisorInstitucional, perfilOperativoAuxiliar]
               .map(
                 (rol) => ChoiceChip(
                   label: Text(rol),
@@ -705,6 +708,9 @@ class _CuentasUsuarioTabState extends ConsumerState<_CuentasUsuarioTab> {
       case perfilGestorProyecto:
         color = Colors.blue;
         break;
+      case perfilSupervisorInstitucional:
+        color = Colors.orange;
+        break;
       case perfilOperativoAuxiliar:
         color = Colors.green;
         break;
@@ -831,6 +837,7 @@ class _CuentasUsuarioTabState extends ConsumerState<_CuentasUsuarioTab> {
                     children: [
                       perfilAdministrador,
                       perfilGestorProyecto,
+                      perfilSupervisorInstitucional,
                       perfilOperativoAuxiliar,
                     ].map((perfil) {
                       return ChoiceChip(
@@ -952,6 +959,7 @@ class _CuentasUsuarioTabState extends ConsumerState<_CuentasUsuarioTab> {
                     children: [
                       perfilAdministrador,
                       perfilGestorProyecto,
+                      perfilSupervisorInstitucional,
                       perfilOperativoAuxiliar,
                     ].map((perfil) {
                       return ChoiceChip(

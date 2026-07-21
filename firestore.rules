@@ -62,8 +62,12 @@ service cloud.firestore {
       return isSignedIn() && userRole() == 'Operativo auxiliar';
     }
 
+    function isSupervisorInstitucional() {
+      return isSignedIn() && userRole() == 'Supervisor Institucional';
+    }
+
     function canWriteOperationalData() {
-      return isAdmin() || isGestor();
+      return isAdmin() || isGestor() || isSupervisorInstitucional();
     }
 
     function isString(v, min, max) {
@@ -102,7 +106,7 @@ service cloud.firestore {
             || request.resource.data.created_by_uid == null
             || request.resource.data.created_by_uid == request.auth.uid);
       allow delete: if isAdmin()
-        || (isGestor() && (
+        || ((isGestor() || isSupervisorInstitucional()) && (
           resource.data.created_by_uid == request.auth.uid
           || !('created_by_uid' in resource.data)
           || resource.data.created_by_uid == null
