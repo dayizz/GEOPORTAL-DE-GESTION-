@@ -185,6 +185,18 @@ class _PredioFormScreenState extends ConsumerState<PredioFormScreen> {
     });
   }
 
+  /// Etiqueta con asterisco rojo para los campos obligatorios de Gestión.
+  Widget _requiredLabel(String text) {
+    return Text.rich(
+      TextSpan(
+        text: text,
+        children: const [
+          TextSpan(text: ' *', style: TextStyle(color: Colors.red, fontWeight: FontWeight.bold)),
+        ],
+      ),
+    );
+  }
+
   Future<void> _submit() async {
     if (!_formKey.currentState!.validate()) return;
     setState(() => _loading = true);
@@ -367,7 +379,7 @@ class _PredioFormScreenState extends ConsumerState<PredioFormScreen> {
               const SizedBox(height: 12),
               TextFormField(
                 controller: _claveCtrl,
-                decoration: const InputDecoration(labelText: 'Clave Catastral (ID SEDATU)', prefixIcon: Icon(Icons.tag)),
+                decoration: InputDecoration(label: _requiredLabel('Clave Catastral (ID SEDATU)'), prefixIcon: const Icon(Icons.tag)),
                 validator: (v) => (v == null || v.isEmpty) ? 'Campo requerido' : null,
                 textCapitalization: TextCapitalization.characters,
               ),
@@ -410,7 +422,7 @@ class _PredioFormScreenState extends ConsumerState<PredioFormScreen> {
               const SizedBox(height: 14),
               DropdownButtonFormField<String>(
                 value: _estructura,
-                decoration: const InputDecoration(labelText: 'Estructura', hintText: 'Selecciona'),
+                decoration: InputDecoration(label: _requiredLabel('Estructura'), hintText: 'Selecciona'),
                 items: _estructuraOpciones
                     .map((t) => DropdownMenuItem(value: t, child: Text(t)))
                     .toList(),
@@ -419,16 +431,16 @@ class _PredioFormScreenState extends ConsumerState<PredioFormScreen> {
               const SizedBox(height: 14),
               TextFormField(
                 controller: _ejidoCtrl,
-                decoration: const InputDecoration(labelText: 'Ejido', prefixIcon: Icon(Icons.agriculture_outlined)),
+                decoration: InputDecoration(label: _requiredLabel('Ejido'), prefixIcon: const Icon(Icons.agriculture_outlined)),
               ),
               const SizedBox(height: 14),
               Row(children: [
                 Expanded(
                   child: TextFormField(
                     controller: _estadoCtrl,
-                    decoration: const InputDecoration(
-                      labelText: 'Estado',
-                      prefixIcon: Icon(Icons.map_outlined),
+                    decoration: InputDecoration(
+                      label: _requiredLabel('Estado'),
+                      prefixIcon: const Icon(Icons.map_outlined),
                     ),
                   ),
                 ),
@@ -436,9 +448,9 @@ class _PredioFormScreenState extends ConsumerState<PredioFormScreen> {
                 Expanded(
                   child: TextFormField(
                     controller: _municipioCtrl,
-                    decoration: const InputDecoration(
-                      labelText: 'Municipio',
-                      prefixIcon: Icon(Icons.location_city_outlined),
+                    decoration: InputDecoration(
+                      label: _requiredLabel('Municipio'),
+                      prefixIcon: const Icon(Icons.location_city_outlined),
                     ),
                   ),
                 ),
@@ -447,26 +459,26 @@ class _PredioFormScreenState extends ConsumerState<PredioFormScreen> {
               _buildSectionTitle('Cadenamiento (km)', Icons.linear_scale),
               const SizedBox(height: 12),
               Row(children: [
-                Expanded(child: TextFormField(controller: _kmInicioCtrl, keyboardType: const TextInputType.numberWithOptions(decimal: true), decoration: const InputDecoration(labelText: 'km Inicio'))),
+                Expanded(child: TextFormField(controller: _kmInicioCtrl, keyboardType: const TextInputType.numberWithOptions(decimal: true), decoration: InputDecoration(label: _requiredLabel('km Inicio')))),
                 const SizedBox(width: 12),
-                Expanded(child: TextFormField(controller: _kmFinCtrl, keyboardType: const TextInputType.numberWithOptions(decimal: true), decoration: const InputDecoration(labelText: 'km Fin'))),
+                Expanded(child: TextFormField(controller: _kmFinCtrl, keyboardType: const TextInputType.numberWithOptions(decimal: true), decoration: InputDecoration(label: _requiredLabel('km Fin')))),
               ]),
               const SizedBox(height: 14),
               Row(children: [
-                Expanded(child: TextFormField(controller: _kmEfectivosCtrl, keyboardType: const TextInputType.numberWithOptions(decimal: true), decoration: const InputDecoration(labelText: 'km Efectivos'))),
+                Expanded(child: TextFormField(controller: _kmEfectivosCtrl, keyboardType: const TextInputType.numberWithOptions(decimal: true), decoration: InputDecoration(label: _requiredLabel('km Efectivos')))),
               ]),
               const SizedBox(height: 14),
               TextFormField(
                 controller: _superficieCtrl,
                 keyboardType: const TextInputType.numberWithOptions(decimal: true),
-                decoration: const InputDecoration(labelText: 'Superficie DDV (m2)', prefixIcon: Icon(Icons.square_foot)),
+                decoration: InputDecoration(label: _requiredLabel('Superficie DDV (m2)'), prefixIcon: const Icon(Icons.square_foot)),
               ),
               const SizedBox(height: 24),
               _buildSectionTitle('Propietario', Icons.person_outline),
               const SizedBox(height: 12),
               TextFormField(
                 controller: _propietarioNombreCtrl,
-                decoration: const InputDecoration(labelText: 'Nombre del Propietario', prefixIcon: Icon(Icons.person)),
+                decoration: InputDecoration(label: _requiredLabel('Nombre del Propietario'), prefixIcon: const Icon(Icons.person)),
               ),
               const SizedBox(height: 24),
               _buildSectionTitle('Documentos', Icons.folder_outlined),

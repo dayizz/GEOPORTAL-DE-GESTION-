@@ -315,7 +315,7 @@ class _TablaScreenState extends ConsumerState<TablaScreen> {
       if (prediosList.isEmpty) {
         content = Column(
           children: [
-            _buildTopBar(0, const [], proyectosDisponibles),
+            _buildTopBar(0, const [], proyectosDisponibles, 0),
             const Divider(height: 1),
             const Expanded(
               child: Center(
@@ -381,9 +381,11 @@ class _TablaScreenState extends ConsumerState<TablaScreen> {
           _dismissLiberadosAlert = false;
         }
 
+        final camposIncompletos = filtered.where(_tieneCamposIncompletos).length;
+
         content = Column(
           children: [
-            _buildTopBar(filtered.length, allPredios, proyectosDisponibles),
+            _buildTopBar(filtered.length, allPredios, proyectosDisponibles, camposIncompletos),
             const Divider(height: 1),
             if (totalPages > 1)
               Padding(
@@ -555,7 +557,7 @@ class _TablaScreenState extends ConsumerState<TablaScreen> {
     }
   }
 
-  Widget _buildTopBar(int visible, List<Predio> allPredios, List<String> proyectosDisponibles) {
+  Widget _buildTopBar(int visible, List<Predio> allPredios, List<String> proyectosDisponibles, int camposIncompletos) {
     final proyectoDropdownValue = proyectosDisponibles.contains(_proyectoActual)
         ? _proyectoActual
         : proyectosDisponibles.first;
@@ -574,6 +576,22 @@ class _TablaScreenState extends ConsumerState<TablaScreen> {
                 'Proyecto:',
                 style: TextStyle(fontSize: 13, color: AppColors.textSecondary),
               ),
+              if (camposIncompletos > 0)
+                Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    const Icon(Icons.error, color: AppColors.danger, size: 16),
+                    const SizedBox(width: 4),
+                    Text(
+                      'CAMPOS INCOMPLETOS: ($camposIncompletos)',
+                      style: const TextStyle(
+                        fontSize: 12,
+                        fontWeight: FontWeight.w700,
+                        color: AppColors.danger,
+                      ),
+                    ),
+                  ],
+                ),
               DecoratedBox(
                 decoration: BoxDecoration(
                   color: AppColors.primary.withValues(alpha: 0.08),
@@ -1109,6 +1127,23 @@ class _TablaScreenState extends ConsumerState<TablaScreen> {
     return 'https://$value';
   }
 
+  /// Campos obligatorios de Gestión (ver requerimiento de alerta de
+  /// campos incompletos): si alguno falta, la celda muestra un signo de
+  /// admiración rojo y el predio cuenta para el contador del topbar.
+  bool _campoTextoVacio(String? value) => value == null || value.trim().isEmpty;
+
+  bool _tieneCamposIncompletos(Predio p) =>
+      _campoTextoVacio(p.claveCatastral) ||
+      _campoTextoVacio(p.propietarioNombre) ||
+      _campoTextoVacio(p.estructura) ||
+      _campoTextoVacio(p.estado) ||
+      _campoTextoVacio(p.municipio) ||
+      _campoTextoVacio(p.ejido) ||
+      p.kmInicio == null ||
+      p.kmFin == null ||
+      p.kmEfectivos == null ||
+      p.superficie == null;
+
   Widget _buildDataRow(Predio p, List<double> widths, int idx) {
     final isEven = idx % 2 == 0;
     final tipoColor = AppColors.tipoPropiedadColor(p.tipoPropiedad);
@@ -1127,29 +1162,30 @@ class _TablaScreenState extends ConsumerState<TablaScreen> {
           // CLAVE
           _dataCell(p.claveCatastral, widths[2],
               style: const TextStyle(fontSize: 11, fontFamily: 'monospace'),
-              color: tipoColor.withValues(alpha: 0.08)),
+              color: tipoColor.withValues(alpha: 0.08),
+              requerido: true),
             // ESTRUCTURA
-            _dataCell(p.estructura ?? '-', widths[3]),
+            _dataCell(p.estructura ?? '-', widths[3], requerido: true),
           // T/F/S
             _tramoBadgeCell(p.tramo, widths[4]),
           // TIPO
             _tipoBadgeCell(p.tipoPropiedad, tipoColor, widths[5]),
           // ESTADO
-          _dataCell((p.estado == null || p.estado!.isEmpty) ? '-' : p.estado!, widths[6]),
+          _dataCell((p.estado == null || p.estado!.isEmpty) ? '-' : p.estado!, widths[6], requerido: true),
           // MUNICIPIO
-          _dataCell((p.municipio == null || p.municipio!.isEmpty) ? '-' : p.municipio!, widths[7]),
+          _dataCell((p.municipio == null || p.municipio!.isEmpty) ? '-' : p.municipio!, widths[7], requerido: true),
           // EJIDO
-          _dataCell(p.ejido ?? '-', widths[8]),
+          _dataCell(p.ejido ?? '-', widths[8], requerido: true),
           // PROPIETARIOS
-          _dataCell(p.propietarioNombre ?? '-', widths[9]),
+          _dataCell(p.propietarioNombre ?? '-', widths[9], requerido: true),
           // KM INICIO
-          _numCell(p.kmInicio, widths[10], decimals: 4),
+          _numCell(p.kmInicio, widths[10], decimals: 4, requerido: true),
           // KM FIN
-          _numCell(p.kmFin, widths[11], decimals: 4),
+          _numCell(p.kmFin, widths[11], decimals: 4, requerido: true),
           // KM EF
-          _numCell(p.kmEfectivos, widths[12], decimals: 4),
+          _numCell(p.kmEfectivos, widths[12], decimals: 4, requerido: true),
           // M²
-          _numCell(p.superficie, widths[13], decimals: 2),
+          _numCell(p.superficie, widths[13], decimals: 2, requerido: true),
           // TIPO LIBERACION
           _dataCell(p.tipoLiberacion ?? '-', widths[14]),
           // COP/DOT PDF (icono de estado)
@@ -1387,7 +1423,8 @@ class _TablaScreenState extends ConsumerState<TablaScreen> {
     );
   }
 
-  Widget _dataCell(String text, double width, {TextStyle? style, Color? color}) {
+  Widget _dataCell(String text, double width, {TextStyle? style, Color? color, bool requerido = false}) {
+    final vacio = requerido && (text.trim().isEmpty || text.trim() == '-');
     return Container(
       width: width,
       height: double.infinity,
@@ -1397,7 +1434,9 @@ class _TablaScreenState extends ConsumerState<TablaScreen> {
         color: color,
         border: const Border(right: BorderSide(color: AppColors.border, width: 0.5)),
       ),
-      child: Text(
+      child: vacio
+          ? const Icon(Icons.error, color: AppColors.danger, size: 16)
+          : Text(
         text,
         style: style ?? const TextStyle(fontSize: 12),
         overflow: TextOverflow.ellipsis,
@@ -1406,7 +1445,8 @@ class _TablaScreenState extends ConsumerState<TablaScreen> {
     );
   }
 
-  Widget _numCell(double? value, double width, {int decimals = 2}) {
+  Widget _numCell(double? value, double width, {int decimals = 2, bool requerido = false}) {
+    final vacio = requerido && value == null;
     final text = value == null
         ? '-'
         : decimals == 4
@@ -1420,7 +1460,9 @@ class _TablaScreenState extends ConsumerState<TablaScreen> {
       decoration: const BoxDecoration(
         border: Border(right: BorderSide(color: AppColors.border, width: 0.5)),
       ),
-      child: Text(
+      child: vacio
+          ? const Icon(Icons.error, color: AppColors.danger, size: 16)
+          : Text(
         text,
         style: const TextStyle(fontSize: 12, fontFeatures: [FontFeature.tabularFigures()]),
         overflow: TextOverflow.ellipsis,
