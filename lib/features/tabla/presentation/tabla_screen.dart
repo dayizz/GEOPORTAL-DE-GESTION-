@@ -576,22 +576,6 @@ class _TablaScreenState extends ConsumerState<TablaScreen> {
                 'Proyecto:',
                 style: TextStyle(fontSize: 13, color: AppColors.textSecondary),
               ),
-              if (camposIncompletos > 0)
-                Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    const Icon(Icons.error, color: AppColors.danger, size: 16),
-                    const SizedBox(width: 4),
-                    Text(
-                      'CAMPOS INCOMPLETOS: ($camposIncompletos)',
-                      style: const TextStyle(
-                        fontSize: 12,
-                        fontWeight: FontWeight.w700,
-                        color: AppColors.danger,
-                      ),
-                    ),
-                  ],
-                ),
               DecoratedBox(
                 decoration: BoxDecoration(
                   color: AppColors.primary.withValues(alpha: 0.08),
@@ -653,6 +637,22 @@ class _TablaScreenState extends ConsumerState<TablaScreen> {
                   ),
                 ),
               ),
+              if (camposIncompletos > 0)
+                Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    const Icon(Icons.error, color: AppColors.danger, size: 16),
+                    const SizedBox(width: 4),
+                    Text(
+                      'CAMPOS INCOMPLETOS: ($camposIncompletos)',
+                      style: const TextStyle(
+                        fontSize: 12,
+                        fontWeight: FontWeight.w700,
+                        color: AppColors.danger,
+                      ),
+                    ),
+                  ],
+                ),
             ],
           ),
           const SizedBox(height: 8),
