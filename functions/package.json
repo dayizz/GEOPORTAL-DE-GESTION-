@@ -1,0 +1,16 @@
+{
+  "name": "geoportal-gestion-functions",
+  "description": "Cloud Functions del Geoportal de Gestión",
+  "engines": {
+    "node": "20"
+  },
+  "main": "index.js",
+  "scripts": {
+    "backfill:predios-publicos": "node scripts/backfillPrediosPublicos.js"
+  },
+  "dependencies": {
+    "firebase-admin": "^12.7.0",
+    "firebase-functions": "^6.3.1"
+  },
+  "private": true
+}

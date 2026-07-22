@@ -85,6 +85,15 @@ service cloud.firestore {
       allow delete: if isAdmin();
     }
 
+    // Espejo público y saneado de `predios`, generado por la Cloud Function
+    // `sincronizarPredioPublico`. Solo trae campos de geometría/avance; nunca
+    // datos de propietario, contacto o documentos. Lo consume el Geoportal
+    // de Consulta (solo lectura, sin autenticación).
+    match /predios_publicos/{predioId} {
+      allow read: if true;
+      allow write: if false;
+    }
+
     // Catalogo de propietarios
     match /propietarios/{propietarioId} {
       allow read: if isSignedIn();

@@ -43,6 +43,19 @@
 		"rules": "firestore.rules",
 		"indexes": "firestore.indexes.json"
 	},
+	"functions": [
+		{
+			"source": "functions",
+			"codebase": "default",
+			"ignore": [
+				"node_modules",
+				".git",
+				"scripts",
+				"firebase-debug.log",
+				"firebase-debug.*.log"
+			]
+		}
+	],
 	"flutter": {
 		"platforms": {
 			"android": {
