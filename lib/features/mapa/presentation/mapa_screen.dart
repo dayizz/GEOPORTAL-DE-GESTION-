@@ -266,7 +266,7 @@ class _MapaScreenState extends ConsumerState<MapaScreen> {
                       (sp) => Polygon(
                         points: sp.points,
                         color: _savedPolygonColor(sp, colorMode).withValues(alpha: 0.46),
-                        borderColor: _savedPolygonColor(sp, colorMode),
+                        borderColor: _savedPolygonBorderColor(sp, colorMode),
                         borderStrokeWidth: 2,
                       ),
                     )
@@ -486,7 +486,7 @@ class _MapaScreenState extends ConsumerState<MapaScreen> {
                           Polygon(
                             points: _draftPoints,
                             color: _draftPolygonColor(colorMode).withValues(alpha: 0.4),
-                            borderColor: _draftPolygonColor(colorMode).withValues(alpha: 0.4),
+                            borderColor: _draftPolygonBorderColor(colorMode).withValues(alpha: 0.4),
                             borderStrokeWidth: 2,
                           ),
                         ],
@@ -947,13 +947,14 @@ class _MapaScreenState extends ConsumerState<MapaScreen> {
   ) {
     return predios.map((predio) {
       final color = _predioColor(predio, mode);
+      final borderColor = _predioBorderColor(predio, mode);
       final rings = _extractRings(predio.geometry);
       final polygon = rings.isNotEmpty
           ? Polygon(
               points: rings.first,
               holePointsList: rings.length > 1 ? rings.sublist(1) : const [],
               color: color.withValues(alpha: opacity),
-              borderColor: color.withValues(alpha: opacity),
+              borderColor: borderColor.withValues(alpha: opacity),
               borderStrokeWidth: 1.8,
             )
           : null;
@@ -1000,11 +1001,17 @@ class _MapaScreenState extends ConsumerState<MapaScreen> {
     if (mode == MapaColorMode.tipoPropiedad) {
       return AppColors.tipoPropiedadColor(predio.tipoPropiedad);
     }
+    if (mode == MapaColorMode.rangoEstatus) {
+      return AppColors.rangoEstatusColor(predio.rangoEstatus);
+    }
     return _estatusColor(_predioEstatus(predio));
   }
   Color _draftPolygonColor(MapaColorMode mode) {
     if (mode == MapaColorMode.tipoPropiedad) {
       return AppColors.tipoPropiedadColor(_tipoPropiedad ?? 'Sin tipo');
+    }
+    if (mode == MapaColorMode.rangoEstatus) {
+      return AppColors.rangoEstatusColor(_estatusPredio);
     }
     return _estatusColor(_estatusPredio);
   }
@@ -1012,7 +1019,28 @@ class _MapaScreenState extends ConsumerState<MapaScreen> {
     if (mode == MapaColorMode.tipoPropiedad) {
       return AppColors.tipoPropiedadColor(polygon.tipoPropiedad ?? 'Sin tipo');
     }
+    if (mode == MapaColorMode.rangoEstatus) {
+      return AppColors.rangoEstatusColor(polygon.estatus);
+    }
     return _estatusColor(polygon.estatus);
+  }
+  Color _predioBorderColor(Predio predio, MapaColorMode mode) {
+    if (mode == MapaColorMode.rangoEstatus) {
+      return AppColors.rangoEstatusBorderColor(predio.rangoEstatus);
+    }
+    return _predioColor(predio, mode);
+  }
+  Color _draftPolygonBorderColor(MapaColorMode mode) {
+    if (mode == MapaColorMode.rangoEstatus) {
+      return AppColors.rangoEstatusBorderColor(_estatusPredio);
+    }
+    return _draftPolygonColor(mode);
+  }
+  Color _savedPolygonBorderColor(_SavedPolygon polygon, MapaColorMode mode) {
+    if (mode == MapaColorMode.rangoEstatus) {
+      return AppColors.rangoEstatusBorderColor(polygon.estatus);
+    }
+    return _savedPolygonColor(polygon, mode);
   }
   String _predioEstatus(Predio predio) {
     if (predio.cop) return 'Liberado';
@@ -1033,9 +1061,10 @@ class _MapaScreenState extends ConsumerState<MapaScreen> {
       final geometry = _geometryAsMap(feature['geometry']);
       final extractedPolygons = _extractPolygons(geometry);
       final color = _importedFeatureColor(feature, mode);
+      final borderColor = _importedFeatureBorderColor(feature, mode);
       final isEnvolvente = _isEnvolventeFeature(feature);
       final fillColor = isEnvolvente ? color : color.withValues(alpha: 0.4);
-      final strokeColor = isEnvolvente ? color : color.withValues(alpha: 0.4);
+      final strokeColor = isEnvolvente ? borderColor : borderColor.withValues(alpha: 0.4);
       for (final rings in extractedPolygons) {
         if (rings.isEmpty || rings.first.length < 3) continue;
         polygons.add(
@@ -2201,6 +2230,10 @@ class _MapaScreenState extends ConsumerState<MapaScreen> {
                     DropdownMenuItem(
                       value: MapaColorMode.tipoPropiedad,
                       child: Text('Tipo de propiedad'),
+                    ),
+                    DropdownMenuItem(
+                      value: MapaColorMode.rangoEstatus,
+                      child: Text('Rango de estatus'),
                     ),
                   ],
                   onChanged: (value) {
@@ -4106,6 +4139,14 @@ class _MapaScreenState extends ConsumerState<MapaScreen> {
       ]);
       return AppColors.tipoPropiedadColor(tipo ?? 'Sin tipo');
     }
+    if (mode == MapaColorMode.rangoEstatus) {
+      final rango = _propValue(allProps, [
+        'rango_estatus',
+        'rangoestatus',
+        'rango de estatus',
+      ]);
+      return AppColors.rangoEstatusColor(rango ?? 'No liberado');
+    }
     final estatus = _propValue(allProps, [
       'estatus_predio',
       'estatus',
@@ -4118,6 +4159,23 @@ class _MapaScreenState extends ConsumerState<MapaScreen> {
       if (normalized == 'no liberado') return _estatusColor('No liberado');
     }
     return _estatusColor(null);
+  }
+  Color _importedFeatureBorderColor(Map<String, dynamic> feature, MapaColorMode mode) {
+    if (mode != MapaColorMode.rangoEstatus) {
+      return _importedFeatureColor(feature, mode);
+    }
+    if (_isEnvolventeFeature(feature)) {
+      return const Color(0xFF87CEEB); // azul cielo
+    }
+    final props = feature['properties'];
+    final propsMap = props is Map ? Map<String, dynamic>.from(props) : <String, dynamic>{};
+    final allProps = _flattenFeatureProps(feature, propsMap);
+    final rango = _propValue(allProps, [
+      'rango_estatus',
+      'rangoestatus',
+      'rango de estatus',
+    ]);
+    return AppColors.rangoEstatusBorderColor(rango ?? 'No liberado');
   }
 
   bool _isEnvolventeFeature(Map<String, dynamic> feature) {

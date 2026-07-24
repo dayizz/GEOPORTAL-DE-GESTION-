@@ -44,6 +44,7 @@ class _TablaScreenState extends ConsumerState<TablaScreen> {
   Set<String> _filtroTipo = {};
   Set<String> _filtroTipoLiberacion = {};
   Set<String> _filtroEstatus = {}; // 'Liberado' | 'No liberado'
+  Set<String> _filtroRangoEstatus = {};
 
   final _nf = NumberFormat('#,##0.00');
   final _nf4 = NumberFormat('0.0000');
@@ -116,6 +117,7 @@ class _TablaScreenState extends ConsumerState<TablaScreen> {
   Set<String> _lastTipo = {};
   Set<String> _lastTipoLiberacion = {};
   Set<String> _lastEstatus = {};
+  Set<String> _lastRangoEstatus = {};
   String? _lastBusqueda;
   List<Predio>? _lastFiltered;
 
@@ -126,6 +128,7 @@ class _TablaScreenState extends ConsumerState<TablaScreen> {
         !setEquals(_lastTipo, _filtroTipo) ||
         !setEquals(_lastTipoLiberacion, _filtroTipoLiberacion) ||
         !setEquals(_lastEstatus, _filtroEstatus) ||
+        !setEquals(_lastRangoEstatus, _filtroRangoEstatus) ||
         _lastBusqueda != _busqueda;
     if (!shouldRecompute && _lastFiltered != null) {
       return _lastFiltered!;
@@ -138,6 +141,7 @@ class _TablaScreenState extends ConsumerState<TablaScreen> {
         final estatus = p.cop ? 'Liberado' : 'No liberado';
         if (!_filtroEstatus.contains(estatus)) return false;
       }
+      if (_filtroRangoEstatus.isNotEmpty && !_filtroRangoEstatus.contains(p.rangoEstatus)) return false;
       if (_filtroTipoLiberacion.isNotEmpty) {
         final tipoLiberacion = _normalizarTipoLiberacion(p.tipoLiberacion);
         if (!_filtroTipoLiberacion.contains(tipoLiberacion)) return false;
@@ -156,6 +160,7 @@ class _TablaScreenState extends ConsumerState<TablaScreen> {
     _lastTipo = Set.of(_filtroTipo);
     _lastTipoLiberacion = Set.of(_filtroTipoLiberacion);
     _lastEstatus = Set.of(_filtroEstatus);
+    _lastRangoEstatus = Set.of(_filtroRangoEstatus);
     _lastBusqueda = _busqueda;
     _lastFiltered = filtered;
     return filtered;
@@ -165,13 +170,15 @@ class _TablaScreenState extends ConsumerState<TablaScreen> {
       _filtroTramo.isNotEmpty ||
       _filtroTipo.isNotEmpty ||
       _filtroTipoLiberacion.isNotEmpty ||
-      _filtroEstatus.isNotEmpty;
+      _filtroEstatus.isNotEmpty ||
+      _filtroRangoEstatus.isNotEmpty;
 
   int get _totalFiltrosActivos =>
       _filtroTramo.length +
       _filtroTipo.length +
       _filtroTipoLiberacion.length +
-      _filtroEstatus.length;
+      _filtroEstatus.length +
+      _filtroRangoEstatus.length;
 
   String _normalizarTipoLiberacion(String? value) {
     final text = (value ?? '').trim().toUpperCase();
@@ -368,6 +375,7 @@ class _TablaScreenState extends ConsumerState<TablaScreen> {
               _filtroTipo = {};
               _filtroTipoLiberacion = {};
               _filtroEstatus = {};
+              _filtroRangoEstatus = {};
               _currentPage = 0;
             });
             ref.read(gestionProyectoProvider.notifier).state = null;
@@ -479,7 +487,7 @@ class _TablaScreenState extends ConsumerState<TablaScreen> {
       final headers = [
         'CLAVE', 'PROYECTO', 'T/F/S', 'TIPO', 'ESTRUCTURA', 'ESTADO', 'MUNICIPIO', 
         'EJIDO', 'PROPIETARIO', 'KM INICIO', 'KM FIN', 'KM EFECTIVOS',
-        'SUPERFICIE M2', 'COP', 'FECHA COP', 'ESTATUS',
+        'SUPERFICIE M2', 'COP', 'FECHA COP', 'RANGO ESTATUS', 'ESTATUS',
         'IDENTIFICACION', 'LEVANTAMIENTO', 'NEGOCIACION', 'OBSERVACIONES'
       ];
       
@@ -506,6 +514,7 @@ class _TablaScreenState extends ConsumerState<TablaScreen> {
           p.superficie?.toString() ?? '',
           p.cop ? 'SI' : 'NO',
           p.copFecha != null ? '${p.copFecha!.day}/${p.copFecha!.month}/${p.copFecha!.year}' : '',
+          p.rangoEstatus,
           p.cop ? 'Liberado' : 'No liberado',
           p.identificacion ? 'SI' : 'NO',
           p.levantamiento ? 'SI' : 'NO',
@@ -769,6 +778,18 @@ class _TablaScreenState extends ConsumerState<TablaScreen> {
                         visualDensity: VisualDensity.compact,
                       ),
                     ),
+                  for (final t in _filtroRangoEstatus)
+                    Padding(
+                      padding: const EdgeInsets.only(right: 6),
+                      child: Chip(
+                        label: Text('Rango: $t'),
+                        onDeleted: () => setState(() => _filtroRangoEstatus = {..._filtroRangoEstatus}..remove(t)),
+                        backgroundColor: AppColors.rangoEstatusColor(t).withValues(alpha: 0.15),
+                        deleteIcon: const Icon(Icons.close, size: 14),
+                        materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                        visualDensity: VisualDensity.compact,
+                      ),
+                    ),
                 ],
               ),
             ),
@@ -810,6 +831,7 @@ class _TablaScreenState extends ConsumerState<TablaScreen> {
       120, // TIPO LIBERACION
        46, // COP
        92, // FECHA
+      110, // RANGO ESTATUS
        90, // ESTATUS
        54, // IDENT.
        54, // LEVANT.
@@ -820,7 +842,7 @@ class _TablaScreenState extends ConsumerState<TablaScreen> {
     const headers = <String>[
       '', 'MAPA', 'CLAVE', 'ESTRUCTURA', 'T/F/S', 'TIPO', 'ESTADO', 'MUNICIPIO', 'EJIDO', 'PROPIETARIOS',
       'KM INICIO', 'KM FIN', 'KM EF', 'M²', 'TIPO\nLIBERACION',
-      'COP/DOT', 'FECHA', 'ESTATUS',
+      'COP/DOT', 'FECHA', 'RANGO\nESTATUS', 'ESTATUS',
       'IDENT.', 'LEVANT.', 'NEGOC.', 'OBSERVACIONES',
     ];
 
@@ -1202,11 +1224,13 @@ class _TablaScreenState extends ConsumerState<TablaScreen> {
           _copPdfIndicatorCell(p, widths[15]),
           // FECHA COP/DOT
           _dataCell(_copFechaLabel(p), widths[16]),
+          // RANGO ESTATUS
+          _rangoEstatusCell(p, widths[17]),
           // ESTATUS
-          _estatusCell(p, widths[17]),
+          _estatusCell(p, widths[18]),
           // IDENTIFICACION (tappable)
           _tappableBoolCell(
-            p.identificacion, widths[18],
+            p.identificacion, widths[19],
             onTap: () => _savePredio(
               p,
               p.copyWith(
@@ -1217,7 +1241,7 @@ class _TablaScreenState extends ConsumerState<TablaScreen> {
           ),
           // LEVANTAMIENTO (tappable)
           _tappableBoolCell(
-            p.levantamiento, widths[19],
+            p.levantamiento, widths[20],
             onTap: () => _savePredio(
               p,
               p.copyWith(
@@ -1228,7 +1252,7 @@ class _TablaScreenState extends ConsumerState<TablaScreen> {
           ),
           // NEGOCIACION (tappable)
           _tappableBoolCell(
-            p.negociacion, widths[20],
+            p.negociacion, widths[21],
             onTap: () => _savePredio(
               p,
               p.copyWith(
@@ -1238,7 +1262,7 @@ class _TablaScreenState extends ConsumerState<TablaScreen> {
             ),
           ),
           // OBSERVACIONES (antes situacion social)
-          _dataCell(p.situacionSocial ?? '-', widths[21]),
+          _dataCell(p.situacionSocial ?? '-', widths[22]),
         ],
       ),
     );
@@ -1354,6 +1378,34 @@ class _TablaScreenState extends ConsumerState<TablaScreen> {
               : 'Autocompletado: $actualizados actualizado(s), $errores con error.',
         ),
         backgroundColor: errores == 0 ? AppColors.secondary : AppColors.danger,
+      ),
+    );
+  }
+
+  Widget _rangoEstatusCell(Predio predio, double width) {
+    final color = AppColors.rangoEstatusColor(predio.rangoEstatus);
+    final borderColor = AppColors.rangoEstatusBorderColor(predio.rangoEstatus);
+
+    return Container(
+      width: width,
+      height: double.infinity,
+      alignment: Alignment.center,
+      decoration: const BoxDecoration(
+        border: Border(right: BorderSide(color: AppColors.border, width: 0.5)),
+      ),
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+        decoration: BoxDecoration(
+          color: color.withValues(alpha: 0.15),
+          borderRadius: BorderRadius.circular(4),
+          border: Border.all(color: borderColor, width: 1.2),
+        ),
+        child: Text(
+          predio.rangoEstatus,
+          style: TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: color),
+          textAlign: TextAlign.center,
+          overflow: TextOverflow.ellipsis,
+        ),
       ),
     );
   }
@@ -1588,6 +1640,7 @@ class _TablaScreenState extends ConsumerState<TablaScreen> {
     final tipo = Set<String>.of(_filtroTipo);
     final tipoLiberacion = Set<String>.of(_filtroTipoLiberacion);
     final estatus = Set<String>.of(_filtroEstatus);
+    final rangoEstatus = Set<String>.of(_filtroRangoEstatus);
     final tramos = _opcionesTramoProyecto(allPredios);
     final tipos = _opcionesTipoProyecto(allPredios);
     final tiposLiberacion = _opcionesTipoLiberacionProyecto(allPredios);
@@ -1630,6 +1683,7 @@ class _TablaScreenState extends ConsumerState<TablaScreen> {
                           tipo.clear();
                           tipoLiberacion.clear();
                           estatus.clear();
+                          rangoEstatus.clear();
                         });
                       },
                       child: const Text('Limpiar todo'),
@@ -1757,6 +1811,31 @@ class _TablaScreenState extends ConsumerState<TablaScreen> {
                     ),
                   ],
                 ),
+                const SizedBox(height: 16),
+                Text(
+                  'Rango de estatus',
+                  style: Theme.of(ctx).textTheme.labelLarge?.copyWith(
+                        color: AppColors.textPrimary,
+                        fontWeight: FontWeight.w700,
+                      ),
+                ),
+                const SizedBox(height: 8),
+                Wrap(
+                  spacing: 8,
+                  runSpacing: 6,
+                  children: Predio.rangoEstatusOpciones
+                      .map(
+                        (t) => FilterChip(
+                          label: Text(t),
+                          labelStyle: const TextStyle(color: AppColors.textPrimary),
+                          checkmarkColor: AppColors.rangoEstatusColor(t),
+                          selected: rangoEstatus.contains(t),
+                          onSelected: (v) => setS(() => v ? rangoEstatus.add(t) : rangoEstatus.remove(t)),
+                          selectedColor: AppColors.rangoEstatusColor(t).withValues(alpha: 0.2),
+                        ),
+                      )
+                      .toList(),
+                ),
                 const SizedBox(height: 20),
                 SizedBox(
                   width: double.infinity,
@@ -1773,6 +1852,7 @@ class _TablaScreenState extends ConsumerState<TablaScreen> {
                         _filtroTipo = tipo;
                         _filtroTipoLiberacion = tipoLiberacion;
                         _filtroEstatus = estatus;
+                        _filtroRangoEstatus = rangoEstatus;
                       });
                       Navigator.pop(ctx);
                     },

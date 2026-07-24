@@ -54,36 +54,92 @@ class AppColors {
   }
 
   // Colores para tipos de propiedad LDDV
+  // Simbologia oficial: usada tanto en Mapa (visualizar poligonos por
+  // "tipo de propiedad") como en Gestion (tabla, chips, reportes).
 
-  static const Color tipoSinTipo = Color(0xFF6D6D6D);      // gris
-  static const Color tipoSocial = Color(0xFF7E57C2);       // purpura
-  static const Color tipoPrivada = Color(0xFFF57C00);      // naranja
-  static const Color tipoDominioPleno = Color(0xFF26A69A);  // teal
-  static const Color tipoEjidal = Color(0xFF5C6BC0);       // indigo
-  static const Color tipoMixto = Color(0xFFEC407A);        // pink
-  static const Color tipoFederal = Color(0xFF1976D2);      // blue
-  static const Color tipoGubernamental = Color(0xFF455A64); // blue grey
+  static const Color tipoPrivada = Color(0xFFFB8C00);        // naranja
+  static const Color tipoSocial = Color(0xFFB39DDB);         // morado claro
+  static const Color tipoDominioPleno = Color(0xFF4DB6AC);   // verde agua
+  static const Color tipoGubernamental = Color(0xFF7B1E3D);  // rojo vino
+  static const Color tipoMunicipal = Color(0xFFF48FB1);      // rosa claro
+  static const Color tipoEstatal = Color(0xFFA1887F);        // cafe claro
+  static const Color tipoFederal = Color(0xFF64B5F6);        // azul claro
+  static const Color tipoDesconocido = Color(0xFFBDBDBD);    // gris claro
 
   static Color tipoPropiedadColor(String tipo) {
-    switch (tipo.toUpperCase()) {
-      case 'SIN TIPO':
-        return tipoSinTipo;
-      case 'SOCIAL':
-        return tipoSocial;
+    switch (tipo.toUpperCase().trim()) {
       case 'PRIVADA':
         return tipoPrivada;
+      case 'SOCIAL':
+        return tipoSocial;
       case 'DOMINIO PLENO':
         return tipoDominioPleno;
-      case 'EJIDAL':
-        return tipoEjidal;
-      case 'MIXTO':
-        return tipoMixto;
-      case 'FEDERAL':
-        return tipoFederal;
       case 'GUBERNAMENTAL':
         return tipoGubernamental;
+      case 'MUNICIPAL':
+        return tipoMunicipal;
+      case 'ESTATAL':
+        return tipoEstatal;
+      case 'FEDERAL':
+        return tipoFederal;
+      case 'DESCONOCIDO':
+      case 'SIN TIPO':
+        return tipoDesconocido;
       default:
-        return tipoSinTipo;
+        return tipoDesconocido;
+    }
+  }
+
+  // Colores para "Rango de estatus" (extension detallada de Estatus).
+  // Se usan tanto en Gestion (columna/badge) como en Mapa (visualizar
+  // poligonos por "Rango de estatus"), para que un mismo predio se pinte
+  // igual en ambos lugares.
+
+  static const Color rangoLiberado = Color(0xFF6AA84F);          // verde
+  static const Color rangoLNueva = Color(0xFF00FF00);            // verde
+  // Instruccion UVSR y Con ingreso comparten relleno con Posible DOT y
+  // Negociacion respectivamente; se distinguen por su contorno verde
+  // (ver rangoEstatusBorderColor).
+  static const Color rangoInstruccionUvsr = Color(0xFFBD817E);   // relleno = Posible DOT
+  static const Color rangoConIngreso = Color(0xFFFFFF00);        // relleno = Negociacion
+  static const Color rangoNegociacion = Color(0xFFFFFF00);       // amarillo
+  static const Color rangoPosibleDot = Color(0xFFBD817E);        // rosa/marron
+  static const Color rangoNoLiberado = Color(0xFFFF0000);        // rojo
+  static const Color rangoDesconocido = Color(0xFFBDBDBD);       // gris claro
+  static const Color rangoContornoVerde = Color(0xFF00FF00);     // contorno distintivo
+
+  static Color rangoEstatusColor(String? rango) {
+    switch ((rango ?? '').toUpperCase().trim()) {
+      case 'LIBERADO':
+        return rangoLiberado;
+      case 'L NUEVA':
+        return rangoLNueva;
+      case 'INSTRUCCION UVSR':
+        return rangoInstruccionUvsr;
+      case 'CON INGRESO':
+        return rangoConIngreso;
+      case 'NEGOCIACION':
+        return rangoNegociacion;
+      case 'POSIBLE DOT':
+        return rangoPosibleDot;
+      case 'NO LIBERADO':
+        return rangoNoLiberado;
+      default:
+        return rangoDesconocido;
+    }
+  }
+
+  /// Color de contorno para "Rango de estatus". Para la mayoria de los
+  /// rangos es igual al relleno; "Instruccion UVSR" y "Con ingreso" llevan
+  /// un contorno verde distintivo porque comparten relleno con otro rango
+  /// (Posible DOT y Negociacion respectivamente).
+  static Color rangoEstatusBorderColor(String? rango) {
+    switch ((rango ?? '').toUpperCase().trim()) {
+      case 'INSTRUCCION UVSR':
+      case 'CON INGRESO':
+        return rangoContornoVerde;
+      default:
+        return rangoEstatusColor(rango);
     }
   }
 }

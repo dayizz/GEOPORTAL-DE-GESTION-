@@ -6,7 +6,8 @@
   },
   "main": "index.js",
   "scripts": {
-    "backfill:predios-publicos": "node scripts/backfillPrediosPublicos.js"
+    "backfill:predios-publicos": "node scripts/backfillPrediosPublicos.js",
+    "backfill:rango-estatus": "node scripts/backfillRangoEstatus.js"
   },
   "dependencies": {
     "firebase-admin": "^12.7.0",

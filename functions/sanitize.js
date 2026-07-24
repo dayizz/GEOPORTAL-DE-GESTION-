@@ -28,6 +28,8 @@ const ALLOWED_FIELDS = [
   'negociacion',
   'cop',
   'tipo_liberacion',
+  'rango_estatus',
+  'rango_estatus_fecha',
   'created_at',
   'updated_at',
 ];

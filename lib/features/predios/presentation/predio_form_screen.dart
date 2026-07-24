@@ -7,6 +7,7 @@ import '../providers/predios_provider.dart';
 import '../providers/demo_predios_notifier.dart';
 import '../providers/local_predios_provider.dart';
 import '../data/predios_repository.dart';
+import '../models/predio.dart';
 import '../../auth/providers/demo_provider.dart';
 import '../../../core/constants/app_colors.dart';
 import '../../../core/constants/app_strings.dart';
@@ -57,7 +58,9 @@ class _PredioFormScreenState extends ConsumerState<PredioFormScreen> {
   bool _identificacion = false;
   bool _levantamiento = false;
   bool _negociacion = false;
-  String _estatusPredio = 'No liberado';
+  String _rangoEstatus = 'No liberado';
+  String? _rangoEstatusOriginal;
+  DateTime? _rangoEstatusFechaOriginal;
   String? _propietarioId;
   String? _pdfUrl;
   DateTime? _copFecha;
@@ -131,7 +134,9 @@ class _PredioFormScreenState extends ConsumerState<PredioFormScreen> {
         _identificacion = predio.identificacion;
         _levantamiento = predio.levantamiento;
         _negociacion = predio.negociacion;
-        _estatusPredio = predio.cop ? 'Liberado' : 'No liberado';
+        _rangoEstatus = predio.rangoEstatus;
+        _rangoEstatusOriginal = predio.rangoEstatus;
+        _rangoEstatusFechaOriginal = predio.rangoEstatusFecha;
         _propietarioId = predio.propietarioId;
       }
     } finally {
@@ -205,8 +210,12 @@ class _PredioFormScreenState extends ConsumerState<PredioFormScreen> {
       final isDemo = ref.read(demoModeProvider);
       final isEdit = widget.id != null;
       final isLocalPredio = isEdit && widget.id!.startsWith('local-');
-      final estatusLiberado = _estatusPredio == 'Liberado';
-      final estatusNoLiberado = _estatusPredio == 'No liberado';
+      final estatusDerivado = Predio.estatusSimplificado(_rangoEstatus);
+      final estatusLiberado = estatusDerivado == 'Liberado';
+      final estatusNoLiberado = estatusDerivado == 'No liberado';
+      final rangoEstatusFecha = (!isEdit || _rangoEstatus != _rangoEstatusOriginal)
+          ? DateTime.now()
+          : _rangoEstatusFechaOriginal;
 
       if (isDemo && isEdit) {
         // En modo demo: actualizar estado local
@@ -238,6 +247,8 @@ class _PredioFormScreenState extends ConsumerState<PredioFormScreen> {
           levantamiento: _levantamiento,
           negociacion: estatusNoLiberado,
           propietarioNombre: _propietarioNombreCtrl.text.isEmpty ? null : _propietarioNombreCtrl.text.trim(),
+          rangoEstatus: _rangoEstatus,
+          rangoEstatusFecha: rangoEstatusFecha,
           updatedAt: DateTime.now(),
         );
         ref.read(demoPrediosNotifierProvider.notifier).updatePredio(actualizado);
@@ -270,6 +281,8 @@ class _PredioFormScreenState extends ConsumerState<PredioFormScreen> {
           negociacion: estatusNoLiberado,
           propietarioNombre: _propietarioNombreCtrl.text.isEmpty ? null : _propietarioNombreCtrl.text.trim(),
           propietarioId: _propietarioId,
+          rangoEstatus: _rangoEstatus,
+          rangoEstatusFecha: rangoEstatusFecha,
           updatedAt: DateTime.now(),
         );
         ref.read(localPrediosProvider.notifier).updatePredio(actualizado);
@@ -300,6 +313,8 @@ class _PredioFormScreenState extends ConsumerState<PredioFormScreen> {
           'negociacion': estatusNoLiberado,
           'propietario_nombre': _propietarioNombreCtrl.text.isEmpty ? null : _propietarioNombreCtrl.text.trim(),
           'propietario_id': _propietarioId,
+          'rango_estatus': _rangoEstatus,
+          'rango_estatus_fecha': rangoEstatusFecha?.toIso8601String(),
         };
 
         final repo = ref.read(prediosRepositoryProvider);
@@ -595,24 +610,44 @@ class _PredioFormScreenState extends ConsumerState<PredioFormScreen> {
               _buildSectionTitle('Estatus del Predio', Icons.flag_outlined),
               const SizedBox(height: 8),
               DropdownButtonFormField<String>(
-                value: _estatusPredio,
+                value: _rangoEstatus,
                 decoration: const InputDecoration(
-                  labelText: 'Estatus',
+                  labelText: 'Rango de estatus',
                   prefixIcon: Icon(Icons.verified_outlined),
                 ),
-                items: const [
-                  DropdownMenuItem(value: 'Liberado', child: Text('Liberado')),
-                  DropdownMenuItem(value: 'No liberado', child: Text('No liberado')),
-                ],
+                items: Predio.rangoEstatusOpciones
+                    .map((r) => DropdownMenuItem(value: r, child: Text(r)))
+                    .toList(),
                 onChanged: (v) {
                   if (v == null) return;
                   setState(() {
-                    _estatusPredio = v;
-                    _cop = v == 'Liberado';
-                    _negociacion = v == 'No liberado';
+                    _rangoEstatus = v;
+                    _cop = Predio.estatusSimplificado(v) == 'Liberado';
+                    _negociacion = Predio.estatusSimplificado(v) == 'No liberado';
                   });
                 },
               ),
+              const SizedBox(height: 8),
+              Builder(builder: (context) {
+                final estatus = Predio.estatusSimplificado(_rangoEstatus);
+                final color = estatus == 'Liberado' ? AppColors.rangoLiberado : AppColors.rangoNoLiberado;
+                return Row(
+                  children: [
+                    const Text('Estatus: ', style: TextStyle(fontWeight: FontWeight.w600)),
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                      decoration: BoxDecoration(
+                        color: color.withValues(alpha: 0.15),
+                        borderRadius: BorderRadius.circular(4),
+                      ),
+                      child: Text(
+                        estatus,
+                        style: TextStyle(fontWeight: FontWeight.bold, color: color),
+                      ),
+                    ),
+                  ],
+                );
+              }),
               const SizedBox(height: 24),
               _buildSectionTitle('Avance DDV', Icons.checklist_outlined),
               const SizedBox(height: 8),
@@ -623,7 +658,7 @@ class _PredioFormScreenState extends ConsumerState<PredioFormScreen> {
                 value: _negociacion,
                 onChanged: (v) => setState(() {
                   _negociacion = v ?? false;
-                  _estatusPredio = _negociacion ? 'No liberado' : _estatusPredio;
+                  _rangoEstatus = _negociacion ? 'Negociacion' : _rangoEstatus;
                 }),
                 dense: true,
               ),

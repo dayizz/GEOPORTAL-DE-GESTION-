@@ -37,11 +37,39 @@ class Predio {
   final Propietario? propietario;
   final DateTime createdAt;
   final DateTime? updatedAt;
+  final String rangoEstatus; // Liberado, L nueva, Instruccion UVSR, Con ingreso, Negociacion, Posible DOT, No liberado
+  final DateTime? rangoEstatusFecha; // fecha del último cambio de rangoEstatus
 
   // Aliases para compatibilidad con pantallas existentes
   String get usoSuelo => tipoPropiedad;
   String get zona => tramo;
   String get direccion => ejido ?? '-';
+
+  /// Valores válidos para "Rango de estatus", en el orden mostrado en los
+  /// dropdowns de Gestión.
+  static const List<String> rangoEstatusOpciones = [
+    'Liberado',
+    'Negociacion',
+    'Posible DOT',
+    'Instruccion UVSR',
+    'Con ingreso',
+    'No liberado',
+    'L nueva',
+  ];
+
+  static const Set<String> _rangosLiberado = {
+    'liberado',
+    'instruccion uvsr',
+    'con ingreso',
+    'l nueva',
+  };
+
+  /// "Estatus" simplificado (Liberado / No liberado) derivado del
+  /// "Rango de estatus". Única fuente de esta relación.
+  static String estatusSimplificado(String? rango) {
+    final normalizado = (rango ?? '').toLowerCase().trim();
+    return _rangosLiberado.contains(normalizado) ? 'Liberado' : 'No liberado';
+  }
 
   const Predio({
     required this.id,
@@ -78,6 +106,8 @@ class Predio {
     this.propietario,
     required this.createdAt,
     this.updatedAt,
+    this.rangoEstatus = 'No liberado',
+    this.rangoEstatusFecha,
   });
 
   factory Predio.fromMap(Map<String, dynamic> map) {
@@ -244,6 +274,11 @@ class Predio {
       updatedAt: map['updated_at'] != null
           ? DateTime.parse(map['updated_at'] as String)
           : null,
+      rangoEstatus: pickText(['rango_estatus', 'RANGO_ESTATUS']) ??
+          (map['cop'] == true ? 'Liberado' : 'No liberado'),
+      rangoEstatusFecha: map['rango_estatus_fecha'] != null
+          ? DateTime.tryParse(map['rango_estatus_fecha'] as String)
+          : null,
     );
   }
 
@@ -278,6 +313,8 @@ class Predio {
       'longitud': longitud,
       'geometry': geometry,
       'propietario_id': propietarioId,
+      'rango_estatus': rangoEstatus,
+      'rango_estatus_fecha': rangoEstatusFecha?.toIso8601String(),
     };
   }
 
@@ -331,6 +368,8 @@ class Predio {
     Propietario? propietario,
     DateTime? createdAt,
     DateTime? updatedAt,
+    String? rangoEstatus,
+    DateTime? rangoEstatusFecha,
   }) {
     return Predio(
       id: id ?? this.id,
@@ -367,6 +406,8 @@ class Predio {
       propietario: propietario ?? this.propietario,
       createdAt: createdAt ?? this.createdAt,
       updatedAt: updatedAt ?? this.updatedAt,
+      rangoEstatus: rangoEstatus ?? this.rangoEstatus,
+      rangoEstatusFecha: rangoEstatusFecha ?? this.rangoEstatusFecha,
     );
   }
 }

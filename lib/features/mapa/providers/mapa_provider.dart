@@ -12,6 +12,7 @@ enum MapaBaseLayer {
 enum MapaColorMode {
 	estatusPredio,
 	tipoPropiedad,
+	rangoEstatus,
 }
 
 /// Estado del proceso de importación / sincronización GeoJSON.
