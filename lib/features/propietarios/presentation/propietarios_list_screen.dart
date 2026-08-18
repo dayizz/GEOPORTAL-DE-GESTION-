@@ -6,6 +6,7 @@ import '../../../features/predios/models/propietario.dart';
 import '../../../core/constants/app_colors.dart';
 import '../../../core/constants/app_strings.dart';
 import '../../../shared/widgets/app_scaffold.dart';
+import '../../estructura/providers/proyectos_provider.dart';
 
 class PropietariosListScreen extends ConsumerStatefulWidget {
   const PropietariosListScreen({super.key});
@@ -28,6 +29,7 @@ class _PropietariosListScreenState extends ConsumerState<PropietariosListScreen>
   Widget build(BuildContext context) {
     final propietariosAsync = ref.watch(propietariosListProvider);
     final proyectoFiltro = ref.watch(propietariosProyectoFiltroProvider);
+    final proyectosVigentes = ref.watch(proyectosCodigosProvider);
 
     return AppScaffold(
       currentIndex: 2,
@@ -72,26 +74,14 @@ class _PropietariosListScreenState extends ConsumerState<PropietariosListScreen>
                         isSelected: proyectoFiltro == null,
                         onTap: () => ref.read(propietariosProyectoFiltroProvider.notifier).state = null,
                       ),
-                      _buildProyectoChip(
-                        label: 'TQI',
-                        isSelected: proyectoFiltro == 'TQI',
-                        onTap: () => ref.read(propietariosProyectoFiltroProvider.notifier).state = 'TQI',
-                      ),
-                      _buildProyectoChip(
-                        label: 'TSNL',
-                        isSelected: proyectoFiltro == 'TSNL',
-                        onTap: () => ref.read(propietariosProyectoFiltroProvider.notifier).state = 'TSNL',
-                      ),
-                      _buildProyectoChip(
-                        label: 'TAP',
-                        isSelected: proyectoFiltro == 'TAP',
-                        onTap: () => ref.read(propietariosProyectoFiltroProvider.notifier).state = 'TAP',
-                      ),
-                      _buildProyectoChip(
-                        label: 'TQM',
-                        isSelected: proyectoFiltro == 'TQM',
-                        onTap: () => ref.read(propietariosProyectoFiltroProvider.notifier).state = 'TQM',
-                      ),
+                      for (final proyecto in proyectosVigentes)
+                        _buildProyectoChip(
+                          label: proyecto,
+                          isSelected: proyectoFiltro == proyecto,
+                          onTap: () => ref
+                              .read(propietariosProyectoFiltroProvider.notifier)
+                              .state = proyecto,
+                        ),
                     ],
                   ),
                 ),

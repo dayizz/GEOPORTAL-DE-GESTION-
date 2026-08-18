@@ -71,6 +71,9 @@ bool isPerfilGestor(String? perfil) =>
 bool isPerfilSupervisorInstitucional(String? perfil) =>
     normalizePerfil(perfil) == perfilSupervisorInstitucional;
 
+bool isPerfilOperativoAuxiliar(String? perfil) =>
+    normalizePerfil(perfil) == perfilOperativoAuxiliar;
+
 /// Supervisor Institucional: acceso a todas las vistas excepto Estructura.
 bool canViewEstructura(String? perfil) => isPerfilAdministrador(perfil);
 
@@ -79,11 +82,16 @@ bool canManageOperationalData(String? perfil) =>
     isPerfilGestor(perfil) ||
     isPerfilSupervisorInstitucional(perfil);
 
-bool canAccessCarga(String? perfil) => canManageOperationalData(perfil);
+bool canAccessCarga(String? perfil) =>
+    canManageOperationalData(perfil) ||
+    normalizePerfil(perfil) == perfilOperativoAuxiliar;
 
 bool canAccessProyectosCatalogo(String? perfil) => canManageOperationalData(perfil);
 
 bool canAccessReportes(String? perfil) => canManageOperationalData(perfil);
+
+/// "Composiciones": por ahora solo visible para Administrador.
+bool canAccessComposiciones(String? perfil) => isPerfilAdministrador(perfil);
 
 bool canAccessRouteByPerfil(String route, String? perfil) {
   if (route == '/estructura' || route.startsWith('/estructura/')) {
@@ -100,6 +108,10 @@ bool canAccessRouteByPerfil(String route, String? perfil) {
 
   if (route == '/proyectos' || route.startsWith('/proyectos/')) {
     return canAccessProyectosCatalogo(perfil);
+  }
+
+  if (route == '/composiciones' || route.startsWith('/composiciones/')) {
+    return canAccessComposiciones(perfil);
   }
 
   if (route.endsWith('/nuevo') || route.endsWith('/editar')) {
@@ -133,10 +145,13 @@ final canAccessAllProjectsProvider = Provider<bool>((ref) {
 });
 
 /// Mapeo de contraseña a código de proyecto.
+/// 'TQM123' se conserva como alias heredado (typo histórico) por si algún
+/// usuario ya la tiene asignada; el código/contraseña correcto es 'TMQ'/'TMQ123'.
 const Map<String, String> proyectoPasswords = {
   'TQI123': 'TQI',
   'TSNL123': 'TSNL',
-  'TQM123': 'TQM',
+  'TMQ123': 'TMQ',
+  'TQM123': 'TMQ',
   'TAP123': 'TAP',
 };
 

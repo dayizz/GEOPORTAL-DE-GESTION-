@@ -7,6 +7,13 @@ class ImportedFile {
   final DateTime importedAt;
   final List<Map<String, dynamic>> features;
 
+  /// Claves catastrales de TODAS las features del archivo (guardadas
+  /// aparte, sin el recorte por tamaño que sí aplica a `features` — ver
+  /// `ArchivosGeoJsonRepository.saveArchivo`). Vacío = archivo previo a
+  /// este campo; quien borra el archivo debe recurrir a
+  /// `extractClavesFromFeatures(features)` como respaldo en ese caso.
+  final List<String> clavesCatastrales;
+
   /// UUID de la fila en la tabla `archivos_geojson`. Null = solo en memoria.
   final String? bdId;
 
@@ -34,6 +41,7 @@ class ImportedFile {
     required this.featureCount,
     required this.importedAt,
     required this.features,
+    this.clavesCatastrales = const [],
     this.bdId,
     this.guardadoEnBD = false,
     this.sincronizado = false,
@@ -63,6 +71,7 @@ class ImportedFile {
       featureCount: featureCount,
       importedAt: importedAt,
       features: features ?? this.features,
+      clavesCatastrales: clavesCatastrales,
       bdId: bdId ?? this.bdId,
       guardadoEnBD: guardadoEnBD ?? this.guardadoEnBD,
       sincronizado: sincronizado ?? this.sincronizado,
@@ -98,6 +107,7 @@ class ImportedFile {
       featureCount: (map['features_count'] as num?)?.toInt() ?? features.length,
       importedAt: importedAt,
       features: features,
+      clavesCatastrales: (map['claves_catastrales'] as List?)?.map((v) => v.toString()).toList() ?? const [],
       bdId: uuid.isEmpty ? null : uuid,
       guardadoEnBD: true,
       sincronizado: map['sincronizado'] == true || map['sincronizado'] == 1,
@@ -146,6 +156,7 @@ class CargaNotifier extends StateNotifier<List<ImportedFile>> {
     String? createdByUid,
     String? createdByEmail,
     String? proyecto,
+    List<String> clavesCatastrales = const [],
   }) {
     final id = bdId ?? DateTime.now().millisecondsSinceEpoch.toString();
     final file = ImportedFile(
@@ -163,6 +174,7 @@ class CargaNotifier extends StateNotifier<List<ImportedFile>> {
       createdByUid: createdByUid,
       createdByEmail: createdByEmail,
       proyecto: proyecto,
+      clavesCatastrales: clavesCatastrales,
     );
     state = [file, ...state];
   }

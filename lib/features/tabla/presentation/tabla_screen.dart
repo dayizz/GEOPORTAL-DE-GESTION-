@@ -20,6 +20,8 @@ import '../../predios/providers/predios_provider.dart';
 import '../../propietarios/providers/local_propietarios_provider.dart';
 import '../../propietarios/providers/propietarios_provider.dart';
 import '../../auth/providers/auth_provider.dart';
+import '../../estructura/providers/proyectos_provider.dart';
+import '../../../core/utils/import_normalization.dart' as norm;
 
 class TablaScreen extends ConsumerStatefulWidget {
   const TablaScreen({super.key});
@@ -30,7 +32,8 @@ class TablaScreen extends ConsumerStatefulWidget {
 
 
 class _TablaScreenState extends ConsumerState<TablaScreen> {
-  static const _proyectos = ['TQI', 'TSNL', 'TAP', 'TQM'];
+  /// Códigos de proyecto vigentes, dados de alta en Estructura (Firestore).
+  List<String> get _proyectos => ref.read(proyectosCodigosProvider);
 
   final _searchCtrl = TextEditingController();
   final _verticalScroll = ScrollController();
@@ -45,6 +48,7 @@ class _TablaScreenState extends ConsumerState<TablaScreen> {
   Set<String> _filtroTipoLiberacion = {};
   Set<String> _filtroEstatus = {}; // 'Liberado' | 'No liberado'
   Set<String> _filtroRangoEstatus = {};
+  Set<String> _filtroEstructura = {};
 
   final _nf = NumberFormat('#,##0.00');
   final _nf4 = NumberFormat('0.0000');
@@ -118,6 +122,7 @@ class _TablaScreenState extends ConsumerState<TablaScreen> {
   Set<String> _lastTipoLiberacion = {};
   Set<String> _lastEstatus = {};
   Set<String> _lastRangoEstatus = {};
+  Set<String> _lastEstructura = {};
   String? _lastBusqueda;
   List<Predio>? _lastFiltered;
 
@@ -129,6 +134,7 @@ class _TablaScreenState extends ConsumerState<TablaScreen> {
         !setEquals(_lastTipoLiberacion, _filtroTipoLiberacion) ||
         !setEquals(_lastEstatus, _filtroEstatus) ||
         !setEquals(_lastRangoEstatus, _filtroRangoEstatus) ||
+        !setEquals(_lastEstructura, _filtroEstructura) ||
         _lastBusqueda != _busqueda;
     if (!shouldRecompute && _lastFiltered != null) {
       return _lastFiltered!;
@@ -138,13 +144,17 @@ class _TablaScreenState extends ConsumerState<TablaScreen> {
       if (_filtroTramo.isNotEmpty && !_filtroTramo.contains(p.tramo)) return false;
       if (_filtroTipo.isNotEmpty && !_filtroTipo.contains(p.tipoPropiedad)) return false;
       if (_filtroEstatus.isNotEmpty) {
-        final estatus = p.cop ? 'Liberado' : 'No liberado';
+        final estatus = Predio.estatusSimplificado(p.rangoEstatus);
         if (!_filtroEstatus.contains(estatus)) return false;
       }
       if (_filtroRangoEstatus.isNotEmpty && !_filtroRangoEstatus.contains(p.rangoEstatus)) return false;
       if (_filtroTipoLiberacion.isNotEmpty) {
         final tipoLiberacion = _normalizarTipoLiberacion(p.tipoLiberacion);
         if (!_filtroTipoLiberacion.contains(tipoLiberacion)) return false;
+      }
+      if (_filtroEstructura.isNotEmpty &&
+          !_filtroEstructura.contains((p.estructura ?? '').trim().toUpperCase())) {
+        return false;
       }
       if (_busqueda.isNotEmpty) {
         final q = _busqueda.toLowerCase();
@@ -161,6 +171,7 @@ class _TablaScreenState extends ConsumerState<TablaScreen> {
     _lastTipoLiberacion = Set.of(_filtroTipoLiberacion);
     _lastEstatus = Set.of(_filtroEstatus);
     _lastRangoEstatus = Set.of(_filtroRangoEstatus);
+    _lastEstructura = Set.of(_filtroEstructura);
     _lastBusqueda = _busqueda;
     _lastFiltered = filtered;
     return filtered;
@@ -171,14 +182,16 @@ class _TablaScreenState extends ConsumerState<TablaScreen> {
       _filtroTipo.isNotEmpty ||
       _filtroTipoLiberacion.isNotEmpty ||
       _filtroEstatus.isNotEmpty ||
-      _filtroRangoEstatus.isNotEmpty;
+      _filtroRangoEstatus.isNotEmpty ||
+      _filtroEstructura.isNotEmpty;
 
   int get _totalFiltrosActivos =>
       _filtroTramo.length +
       _filtroTipo.length +
       _filtroTipoLiberacion.length +
       _filtroEstatus.length +
-      _filtroRangoEstatus.length;
+      _filtroRangoEstatus.length +
+      _filtroEstructura.length;
 
   String _normalizarTipoLiberacion(String? value) {
     final text = (value ?? '').trim().toUpperCase();
@@ -188,6 +201,9 @@ class _TablaScreenState extends ConsumerState<TablaScreen> {
 
   String _predioProyecto(Predio predio) {
     final proyectoDirecto = predio.proyecto?.trim().toUpperCase();
+    // 'TQM' es un alias heredado (typo histórico); el código correcto es
+    // 'TMQ' (Tren México-Querétaro).
+    if (proyectoDirecto == 'TQM') return 'TMQ';
     if (proyectoDirecto != null && _proyectos.contains(proyectoDirecto)) {
       return proyectoDirecto;
     }
@@ -197,7 +213,9 @@ class _TablaScreenState extends ConsumerState<TablaScreen> {
     if (compact.startsWith('TQI') || compact.startsWith('QI')) return 'TQI';
     if (compact.startsWith('TSNL') || compact.startsWith('SNL') || compact.startsWith('SL')) return 'TSNL';
     if (compact.startsWith('TAP') || compact.startsWith('AP')) return 'TAP';
-    if (compact.startsWith('TQM') || compact.startsWith('QM')) return 'TQM';
+    if (compact.startsWith('TMQ') || compact.startsWith('TQM') || compact.startsWith('QM')) {
+      return 'TMQ';
+    }
 
     final contenido = [
       predio.claveCatastral,
@@ -211,6 +229,7 @@ class _TablaScreenState extends ConsumerState<TablaScreen> {
     for (final proyecto in _proyectos) {
       if (contenido.contains(proyecto)) return proyecto;
     }
+    if (contenido.contains('TQM')) return 'TMQ';
 
     return 'Sin proyecto';
   }
@@ -239,6 +258,17 @@ class _TablaScreenState extends ConsumerState<TablaScreen> {
         .toList();
     tipos.sort((a, b) => a.compareTo(b));
     return tipos;
+  }
+
+  List<String> _opcionesEstructuraProyecto(List<Predio> predios) {
+    final estructuras = predios
+        .where((predio) => _predioProyecto(predio) == _proyectoActual)
+        .map((predio) => (predio.estructura ?? '').trim().toUpperCase())
+        .where((estructura) => estructura.isNotEmpty)
+        .toSet()
+        .toList();
+    estructuras.sort((a, b) => a.compareTo(b));
+    return estructuras;
   }
 
   List<String> _opcionesTipoLiberacionProyecto(List<Predio> predios) {
@@ -273,6 +303,7 @@ class _TablaScreenState extends ConsumerState<TablaScreen> {
 
   @override
   Widget build(BuildContext context) {
+    ref.watch(proyectosCodigosProvider);
     final prediosAsync = ref.watch(prediosListProvider);
     final canAllProjects = ref.watch(canAccessAllProjectsProvider);
     final proyectosAsignados = ref.watch(currentUserAssignedProjectsProvider);
@@ -280,7 +311,9 @@ class _TablaScreenState extends ConsumerState<TablaScreen> {
     final proyectosDisponibles = canAllProjects
         ? _proyectos
         : _proyectos.where(proyectosAsignados.contains).toList(growable: false);
-    if (!sinProyectoAsignado && !proyectosDisponibles.contains(_proyectoActual)) {
+    if (!sinProyectoAsignado &&
+        proyectosDisponibles.isNotEmpty &&
+        !proyectosDisponibles.contains(_proyectoActual)) {
       final fallback = proyectosDisponibles.first;
       WidgetsBinding.instance.addPostFrameCallback((_) {
         if (!mounted) return;
@@ -376,6 +409,7 @@ class _TablaScreenState extends ConsumerState<TablaScreen> {
               _filtroTipoLiberacion = {};
               _filtroEstatus = {};
               _filtroRangoEstatus = {};
+              _filtroEstructura = {};
               _currentPage = 0;
             });
             ref.read(gestionProyectoProvider.notifier).state = null;
@@ -383,13 +417,26 @@ class _TablaScreenState extends ConsumerState<TablaScreen> {
         }
 
         final liberadosIncompletos = filtered
-            .where((p) => p.cop && (!p.identificacion || !p.levantamiento || !p.negociacion))
+            .where((p) =>
+                Predio.estatusSimplificado(p.rangoEstatus) == 'Liberado' &&
+                (!p.identificacion || !p.levantamiento || !p.negociacion))
             .toList(growable: false);
         if (liberadosIncompletos.isEmpty) {
           _dismissLiberadosAlert = false;
         }
 
         final camposIncompletos = filtered.where(_tieneCamposIncompletos).length;
+
+        // Numeracion estable por proyecto: se calcula sobre TODOS los
+        // predios del proyecto actual (sin busqueda/filtros secundarios ni
+        // paginacion), para que el ID de un registro no cambie segun que
+        // filtro este activo en el momento.
+        final proyectoOrdenado = allPredios
+            .where((p) => _predioProyecto(p) == _proyectoActual)
+            .toList(growable: false);
+        final idPorPredio = <String, int>{
+          for (var i = 0; i < proyectoOrdenado.length; i++) proyectoOrdenado[i].id: i + 1,
+        };
 
         content = Column(
           children: [
@@ -433,7 +480,7 @@ class _TablaScreenState extends ConsumerState<TablaScreen> {
               child: Stack(
                 children: [
                   Positioned.fill(
-                    child: _buildTable(rowsToRender),
+                    child: _buildTable(rowsToRender, idPorPredio),
                   ),
                   if (liberadosIncompletos.isNotEmpty && !_dismissLiberadosAlert)
                     Positioned(
@@ -454,6 +501,11 @@ class _TablaScreenState extends ConsumerState<TablaScreen> {
       title: 'Gestion',
       actions: [
         IconButton(
+          icon: const Icon(Icons.add),
+          tooltip: 'Registrar nuevo predio',
+          onPressed: () => context.push('/predios/nuevo?proyecto=$_proyectoActual'),
+        ),
+        IconButton(
           icon: const Icon(Icons.download),
           tooltip: 'Exportar a Excel',
           onPressed: () {
@@ -461,7 +513,13 @@ class _TablaScreenState extends ConsumerState<TablaScreen> {
             final prediosList = prediosAsync.asData?.value ?? [];
             final allPredios = prediosList.map((p) => _prediosOptimistas[p.id] ?? p).toList();
             final filtered = _applyFilters(allPredios);
-            _exportToExcel(filtered);
+            final proyectoOrdenado = allPredios
+                .where((p) => _predioProyecto(p) == _proyectoActual)
+                .toList(growable: false);
+            final idPorPredio = <String, int>{
+              for (var i = 0; i < proyectoOrdenado.length; i++) proyectoOrdenado[i].id: i + 1,
+            };
+            _exportToExcel(filtered, idPorPredio);
           },
         ),
       ],
@@ -469,7 +527,7 @@ class _TablaScreenState extends ConsumerState<TablaScreen> {
     );
   }
 
-  Future<void> _exportToExcel(List<Predio> predios) async {
+  Future<void> _exportToExcel(List<Predio> predios, Map<String, int> idPorPredio) async {
     if (predios.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('No hay datos para exportar')),
@@ -485,10 +543,11 @@ class _TablaScreenState extends ConsumerState<TablaScreen> {
       
       // Headers
       final headers = [
-        'CLAVE', 'PROYECTO', 'T/F/S', 'TIPO', 'ESTRUCTURA', 'ESTADO', 'MUNICIPIO', 
+        'ID', 'CLAVE', 'PROYECTO', 'T/F/S', 'TIPO', 'ESTRUCTURA', 'ESTADO', 'MUNICIPIO',
         'EJIDO', 'PROPIETARIO', 'KM INICIO', 'KM FIN', 'KM EFECTIVOS',
-        'SUPERFICIE M2', 'COP', 'FECHA COP', 'RANGO ESTATUS', 'ESTATUS',
-        'IDENTIFICACION', 'LEVANTAMIENTO', 'NEGOCIACION', 'OBSERVACIONES'
+        'SUPERFICIE M2', 'COP', 'FECHA DE LIBERACION', 'COP/DOT PDF', 'DWG', 'PLANO PDF', 'BDT',
+        'RANGO ESTATUS', 'ESTATUS',
+        'IDENTIFICACION', 'LEVANTAMIENTO', 'NEGOCIACION', 'OBSERVACIONES', 'FECHA LIMITE DE PAGO'
       ];
       
       for (var i = 0; i < headers.length; i++) {
@@ -499,6 +558,7 @@ class _TablaScreenState extends ConsumerState<TablaScreen> {
       for (var row = 0; row < predios.length; row++) {
         final p = predios[row];
         final rowData = [
+          idPorPredio[p.id]?.toString() ?? '',
           p.claveCatastral,
           _predioProyecto(p),
           p.tramo,
@@ -508,18 +568,25 @@ class _TablaScreenState extends ConsumerState<TablaScreen> {
           p.municipio ?? '',
           p.ejido ?? '',
           p.propietarioNombre ?? '',
-          p.kmInicio?.toString() ?? '',
-          p.kmFin?.toString() ?? '',
+          p.kmInicio != null ? norm.formatKmPk(p.kmInicio!) : '',
+          p.kmFin != null ? norm.formatKmPk(p.kmFin!) : '',
           p.kmEfectivos?.toString() ?? '',
           p.superficie?.toString() ?? '',
           p.cop ? 'SI' : 'NO',
           p.copFecha != null ? '${p.copFecha!.day}/${p.copFecha!.month}/${p.copFecha!.year}' : '',
+          _pdfUrlFor(p) ?? '',
+          p.poligonoDwg ?? '',
+          p.planoPdf ?? '',
+          p.bdt ?? '',
           p.rangoEstatus,
-          p.cop ? 'Liberado' : 'No liberado',
+          Predio.estatusSimplificado(p.rangoEstatus),
           p.identificacion ? 'SI' : 'NO',
           p.levantamiento ? 'SI' : 'NO',
           p.negociacion ? 'SI' : 'NO',
           p.situacionSocial ?? '',
+          p.fechaLimitePago != null
+              ? '${p.fechaLimitePago!.day}/${p.fechaLimitePago!.month}/${p.fechaLimitePago!.year}'
+              : '',
         ];
         
         for (var col = 0; col < rowData.length; col++) {
@@ -567,6 +634,15 @@ class _TablaScreenState extends ConsumerState<TablaScreen> {
   }
 
   Widget _buildTopBar(int visible, List<Predio> allPredios, List<String> proyectosDisponibles, int camposIncompletos) {
+    if (proyectosDisponibles.isEmpty) {
+      return const Padding(
+        padding: EdgeInsets.all(16),
+        child: Text(
+          'No hay proyectos dados de alta en Estructura.',
+          style: TextStyle(color: AppColors.textSecondary),
+        ),
+      );
+    }
     final proyectoDropdownValue = proyectosDisponibles.contains(_proyectoActual)
         ? _proyectoActual
         : proyectosDisponibles.first;
@@ -729,6 +805,17 @@ class _TablaScreenState extends ConsumerState<TablaScreen> {
               scrollDirection: Axis.horizontal,
               child: Row(
                 children: [
+                  for (final t in _filtroEstructura)
+                    Padding(
+                      padding: const EdgeInsets.only(right: 6),
+                      child: Chip(
+                        label: Text('Estructura: $t'),
+                        onDeleted: () => setState(() => _filtroEstructura = {..._filtroEstructura}..remove(t)),
+                        deleteIcon: const Icon(Icons.close, size: 14),
+                        materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                        visualDensity: VisualDensity.compact,
+                      ),
+                    ),
                   for (final t in _filtroTramo)
                     Padding(
                       padding: const EdgeInsets.only(right: 6),
@@ -799,7 +886,7 @@ class _TablaScreenState extends ConsumerState<TablaScreen> {
     );
   }
 
-  Widget _buildTable(List<Predio> rows) {
+  Widget _buildTable(List<Predio> rows, Map<String, int> idPorPredio) {
     if (rows.isEmpty) {
       return Center(
         child: Column(
@@ -814,8 +901,8 @@ class _TablaScreenState extends ConsumerState<TablaScreen> {
     }
 
     const rawWidths = <double>[
-       44, // ACCIONES
-       55, // VER MAPA
+       48, // ID (numeracion por proyecto)
+       48, // ACCIONES (ver en mapa / editar / eliminar)
       180, // CLAVE
        90, // ESTRUCTURA
        50, // T/F/S
@@ -830,20 +917,24 @@ class _TablaScreenState extends ConsumerState<TablaScreen> {
        80, // M²
       120, // TIPO LIBERACION
        46, // COP
-       92, // FECHA
+      100, // FECHA DE LIBERACION
+       46, // DWG
+       46, // PLANO PDF
+       46, // BDT
       110, // RANGO ESTATUS
        90, // ESTATUS
        54, // IDENT.
        54, // LEVANT.
        54, // NEGOC.
       150, // OBSERVACIONES
+      100, // FECHA LIMITE DE PAGO
     ];
 
     const headers = <String>[
-      '', 'MAPA', 'CLAVE', 'ESTRUCTURA', 'T/F/S', 'TIPO', 'ESTADO', 'MUNICIPIO', 'EJIDO', 'PROPIETARIOS',
+      'ID', '', 'CLAVE', 'ESTRUCTURA', 'T/F/S', 'TIPO', 'ESTADO', 'MUNICIPIO', 'EJIDO', 'PROPIETARIOS',
       'KM INICIO', 'KM FIN', 'KM EF', 'M²', 'TIPO\nLIBERACION',
-      'COP/DOT', 'FECHA', 'RANGO\nESTATUS', 'ESTATUS',
-      'IDENT.', 'LEVANT.', 'NEGOC.', 'OBSERVACIONES',
+      'COP/DOT', 'FECHA DE\nLIBERACION', 'DWG', 'PLANO\nPDF', 'BDT', 'RANGO\nESTATUS', 'ESTATUS',
+      'IDENT.', 'LEVANT.', 'NEGOC.', 'OBSERVACIONES', 'FECHA LIMITE\nDE PAGO',
     ];
 
     return LayoutBuilder(
@@ -875,7 +966,12 @@ class _TablaScreenState extends ConsumerState<TablaScreen> {
                         controller: _verticalScroll,
                         itemCount: rows.length,
                         itemExtent: 38,
-                        itemBuilder: (ctx2, idx) => _buildDataRow(rows[idx], colWidths, idx),
+                        itemBuilder: (ctx2, idx) => _buildDataRow(
+                          rows[idx],
+                          colWidths,
+                          idx,
+                          idPorPredio[rows[idx].id],
+                        ),
                       ),
                     ),
                   ],
@@ -930,6 +1026,7 @@ class _TablaScreenState extends ConsumerState<TablaScreen> {
     if (updated.id.startsWith('local-')) {
       ref.read(localPrediosProvider.notifier).updatePredio(updated);
       ref.invalidate(prediosListProvider);
+      ref.invalidate(prediosMapaProvider);
       return;
     }
 
@@ -983,6 +1080,182 @@ class _TablaScreenState extends ConsumerState<TablaScreen> {
     return DateFormat('dd/MM/yyyy').format(fecha);
   }
 
+  /// Celda de "Fecha de liberación": es un dato independiente del link de
+  /// COP/DOT (ya no se autocompleta al vincular el PDF). Se puede llenar
+  /// manualmente aquí, desde "Editar predio", o venir de un archivo
+  /// importado.
+  Widget _fechaLiberacionCell(Predio predio, double width) {
+    return Tooltip(
+      message: 'Editar fecha de liberación',
+      child: InkWell(
+        onTap: () => _showFechaLiberacionDialog(predio),
+        child: Container(
+          width: width,
+          height: double.infinity,
+          alignment: Alignment.center,
+          decoration: const BoxDecoration(
+            border: Border(right: BorderSide(color: AppColors.border, width: 0.5)),
+          ),
+          child: Text(
+            _copFechaLabel(predio),
+            style: const TextStyle(fontSize: 12),
+            overflow: TextOverflow.ellipsis,
+          ),
+        ),
+      ),
+    );
+  }
+
+  Future<void> _elegirFechaLiberacion(Predio predio) async {
+    final now = DateTime.now();
+    final picked = await showDatePicker(
+      context: context,
+      initialDate: predio.copFecha ?? now,
+      firstDate: DateTime(2000),
+      lastDate: DateTime(now.year + 10),
+      locale: const Locale('es', 'MX'),
+      helpText: 'Fecha de liberación',
+    );
+    if (picked == null) return;
+    await _savePredio(
+      predio,
+      predio.copyWith(
+        copFecha: DateTime(picked.year, picked.month, picked.day),
+        updatedAt: DateTime.now(),
+      ),
+    );
+  }
+
+  Future<void> _showFechaLiberacionDialog(Predio predio) async {
+    final actual = predio.copFecha;
+
+    await showDialog<void>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: const Text('Fecha de liberación'),
+        content: Text(
+          actual != null
+              ? 'Fecha actual: ${DateFormat('dd/MM/yyyy').format(actual)}'
+              : 'Sin fecha registrada.',
+        ),
+        actions: [
+          if (actual != null)
+            TextButton(
+              onPressed: () async {
+                Navigator.of(dialogContext).pop();
+                await _savePredio(
+                  predio,
+                  predio.copyWith(clearCopFecha: true, updatedAt: DateTime.now()),
+                );
+              },
+              child: const Text('Quitar fecha', style: TextStyle(color: AppColors.danger)),
+            ),
+          TextButton(
+            onPressed: () => Navigator.of(dialogContext).pop(),
+            child: const Text('Cerrar'),
+          ),
+          ElevatedButton(
+            onPressed: () async {
+              Navigator.of(dialogContext).pop();
+              await _elegirFechaLiberacion(predio);
+            },
+            child: Text(actual != null ? 'Cambiar fecha' : 'Elegir fecha'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  String _fechaLimitePagoLabel(Predio predio) {
+    final fecha = predio.fechaLimitePago;
+    if (fecha == null) return '-';
+    return DateFormat('dd/MM/yyyy').format(fecha);
+  }
+
+  /// Celda de "Fecha límite de pago": se puede llenar manualmente aquí,
+  /// desde "Editar predio", o venir de un archivo importado.
+  Widget _fechaLimitePagoCell(Predio predio, double width) {
+    return Tooltip(
+      message: 'Editar fecha límite de pago',
+      child: InkWell(
+        onTap: () => _showFechaLimitePagoDialog(predio),
+        child: Container(
+          width: width,
+          height: double.infinity,
+          alignment: Alignment.center,
+          decoration: const BoxDecoration(
+            border: Border(right: BorderSide(color: AppColors.border, width: 0.5)),
+          ),
+          child: Text(
+            _fechaLimitePagoLabel(predio),
+            style: const TextStyle(fontSize: 12),
+            overflow: TextOverflow.ellipsis,
+          ),
+        ),
+      ),
+    );
+  }
+
+  Future<void> _elegirFechaLimitePago(Predio predio) async {
+    final now = DateTime.now();
+    final picked = await showDatePicker(
+      context: context,
+      initialDate: predio.fechaLimitePago ?? now,
+      firstDate: DateTime(2000),
+      lastDate: DateTime(now.year + 10),
+      locale: const Locale('es', 'MX'),
+      helpText: 'Fecha límite de pago',
+    );
+    if (picked == null) return;
+    await _savePredio(
+      predio,
+      predio.copyWith(
+        fechaLimitePago: DateTime(picked.year, picked.month, picked.day),
+        updatedAt: DateTime.now(),
+      ),
+    );
+  }
+
+  Future<void> _showFechaLimitePagoDialog(Predio predio) async {
+    final actual = predio.fechaLimitePago;
+
+    await showDialog<void>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: const Text('Fecha límite de pago'),
+        content: Text(
+          actual != null
+              ? 'Fecha actual: ${DateFormat('dd/MM/yyyy').format(actual)}'
+              : 'Sin fecha registrada.',
+        ),
+        actions: [
+          if (actual != null)
+            TextButton(
+              onPressed: () async {
+                Navigator.of(dialogContext).pop();
+                await _savePredio(
+                  predio,
+                  predio.copyWith(clearFechaLimitePago: true, updatedAt: DateTime.now()),
+                );
+              },
+              child: const Text('Quitar fecha', style: TextStyle(color: AppColors.danger)),
+            ),
+          TextButton(
+            onPressed: () => Navigator.of(dialogContext).pop(),
+            child: const Text('Cerrar'),
+          ),
+          ElevatedButton(
+            onPressed: () async {
+              Navigator.of(dialogContext).pop();
+              await _elegirFechaLimitePago(predio);
+            },
+            child: Text(actual != null ? 'Cambiar fecha' : 'Elegir fecha'),
+          ),
+        ],
+      ),
+    );
+  }
+
   Future<void> _openPdfUrl(String url) async {
     final uri = _normalizedHttpUrl(url);
     if (uri == null) {
@@ -998,40 +1271,237 @@ class _TablaScreenState extends ConsumerState<TablaScreen> {
     }
   }
 
-  Future<void> _handleCopPdfTap(Predio predio) async {
-    final existingUrl = _pdfUrlFor(predio);
-    if (existingUrl != null) {
-      await _openPdfUrl(existingUrl);
-      return;
+  /// Etiqueta legible de cada uno de los 4 archivos gestionados desde
+  /// "Editar archivos".
+  String _archivoLabel(String campo) {
+    switch (campo) {
+      case 'copdot':
+        return 'COP/DOT PDF';
+      case 'dwg':
+        return 'DWG';
+      case 'planoPdf':
+        return 'Plano PDF';
+      case 'bdt':
+        return 'BDT';
+      default:
+        return campo;
     }
+  }
 
-    final url = await _requestPdfUrl(
-      context,
-      initialValue: predio.pdfUrl?.trim() ?? '',
-    );
-    if (url == null) return;
+  String? _archivoUrlFor(Predio predio, String campo) {
+    switch (campo) {
+      case 'copdot':
+        return _pdfUrlFor(predio);
+      case 'dwg':
+        final v = predio.poligonoDwg?.trim();
+        return (v != null && v.isNotEmpty) ? v : null;
+      case 'planoPdf':
+        final v = predio.planoPdf?.trim();
+        return (v != null && v.isNotEmpty) ? v : null;
+      case 'bdt':
+        final v = predio.bdt?.trim();
+        return (v != null && v.isNotEmpty) ? v : null;
+      default:
+        return null;
+    }
+  }
 
-    await _savePredio(
-      predio,
-      predio.copyWith(
-        pdfUrl: url,
-        copFirmado: url,
-        copFecha: DateTime.now(),
-        updatedAt: DateTime.now(),
-      ),
-    );
+  Future<void> _guardarArchivo(Predio predio, String campo, String url) async {
+    final now = DateTime.now();
+    Predio updated;
+    switch (campo) {
+      case 'copdot':
+        // La "Fecha de liberación" ya NO se autocompleta al vincular el
+        // link -es un dato independiente, editable por su cuenta desde su
+        // propia columna o "Editar predio", o importable desde archivos-.
+        updated = predio.copyWith(pdfUrl: url, copFirmado: url, updatedAt: now);
+        break;
+      case 'dwg':
+        updated = predio.copyWith(poligonoDwg: url, updatedAt: now);
+        break;
+      case 'planoPdf':
+        updated = predio.copyWith(planoPdf: url, updatedAt: now);
+        break;
+      case 'bdt':
+        updated = predio.copyWith(bdt: url, updatedAt: now);
+        break;
+      default:
+        return;
+    }
+    await _savePredio(predio, updated);
     if (!mounted) return;
     ScaffoldMessenger.of(context).showSnackBar(
       const SnackBar(
-        content: Text('URL del archivo vinculada correctamente.'),
+        content: Text('Archivo vinculado correctamente.'),
         backgroundColor: AppColors.secondary,
       ),
+    );
+  }
+
+  /// Limpia el link de un archivo. Usa las banderas `clearXxx` de
+  /// `Predio.copyWith` -pasar `null` no alcanza, ver comentario en el
+  /// modelo- para poder borrar el valor en vez de conservar el anterior.
+  Future<void> _quitarArchivo(Predio predio, String campo) async {
+    final now = DateTime.now();
+    Predio updated;
+    switch (campo) {
+      case 'copdot':
+        // No se limpia la fecha de liberación al quitar el link: son datos
+        // independientes.
+        updated = predio.copyWith(
+          clearPdfUrl: true,
+          clearCopFirmado: true,
+          updatedAt: now,
+        );
+        break;
+      case 'dwg':
+        updated = predio.copyWith(clearPoligonoDwg: true, updatedAt: now);
+        break;
+      case 'planoPdf':
+        updated = predio.copyWith(clearPlanoPdf: true, updatedAt: now);
+        break;
+      case 'bdt':
+        updated = predio.copyWith(clearBdt: true, updatedAt: now);
+        break;
+      default:
+        return;
+    }
+    await _savePredio(predio, updated);
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(
+        content: Text('Archivo eliminado.'),
+        backgroundColor: AppColors.secondary,
+      ),
+    );
+  }
+
+  Future<bool> _confirmarQuitarArchivo(String label) async {
+    final result = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: const Text('Eliminar archivo'),
+        content: Text('¿Quitar el $label vinculado? Esta acción no se puede deshacer.'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(dialogContext).pop(false),
+            child: const Text('Cancelar'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.of(dialogContext).pop(true),
+            child: const Text('Eliminar', style: TextStyle(color: AppColors.danger)),
+          ),
+        ],
+      ),
+    );
+    return result ?? false;
+  }
+
+  /// Diálogo unificado "Editar archivos": agrupa los 4 archivos-link del
+  /// predio (COP/DOT PDF, DWG, Plano PDF, BDT) con acciones de
+  /// Abrir/Agregar/Sustituir/Eliminar para cada uno.
+  Future<void> _showEditarArchivosDialog(Predio predio) async {
+    const campos = ['copdot', 'dwg', 'planoPdf', 'bdt'];
+
+    await showDialog<void>(
+      context: context,
+      builder: (dialogContext) {
+        return AlertDialog(
+          title: const Text('Editar archivos'),
+          content: SizedBox(
+            width: 460,
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: campos.map((campo) {
+                final label = _archivoLabel(campo);
+                final url = _archivoUrlFor(predio, campo);
+                final hasUrl = url != null;
+                return Padding(
+                  padding: const EdgeInsets.symmetric(vertical: 6),
+                  child: Row(
+                    children: [
+                      Icon(
+                        Icons.link,
+                        size: 18,
+                        color: hasUrl ? AppColors.secondary : Colors.grey.shade400,
+                      ),
+                      const SizedBox(width: 10),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(label, style: const TextStyle(fontWeight: FontWeight.w600)),
+                            Text(
+                              hasUrl ? 'Vinculado' : 'Sin vincular',
+                              style: TextStyle(
+                                fontSize: 12,
+                                color: hasUrl ? AppColors.secondary : Colors.grey,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                      if (hasUrl)
+                        IconButton(
+                          tooltip: 'Abrir',
+                          icon: const Icon(Icons.open_in_new, size: 18),
+                          onPressed: () async {
+                            try {
+                              await _openPdfUrl(url);
+                            } catch (e) {
+                              if (!mounted) return;
+                              ScaffoldMessenger.of(context).showSnackBar(
+                                SnackBar(content: Text('$e'), backgroundColor: AppColors.danger),
+                              );
+                            }
+                          },
+                        ),
+                      IconButton(
+                        tooltip: hasUrl ? 'Sustituir' : 'Agregar',
+                        icon: Icon(hasUrl ? Icons.edit_outlined : Icons.add_link, size: 18),
+                        onPressed: () async {
+                          Navigator.of(dialogContext).pop();
+                          final nuevaUrl = await _requestPdfUrl(
+                            context,
+                            initialValue: url ?? '',
+                            titulo: hasUrl ? 'Sustituir $label' : 'Agregar $label',
+                          );
+                          if (nuevaUrl == null) return;
+                          await _guardarArchivo(predio, campo, nuevaUrl);
+                        },
+                      ),
+                      if (hasUrl)
+                        IconButton(
+                          tooltip: 'Eliminar',
+                          icon: const Icon(Icons.delete_outline, size: 18, color: AppColors.danger),
+                          onPressed: () async {
+                            Navigator.of(dialogContext).pop();
+                            final confirmado = await _confirmarQuitarArchivo(label);
+                            if (!confirmado) return;
+                            await _quitarArchivo(predio, campo);
+                          },
+                        ),
+                    ],
+                  ),
+                );
+              }).toList(),
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(dialogContext).pop(),
+              child: const Text('Cerrar'),
+            ),
+          ],
+        );
+      },
     );
   }
 
   Future<String?> _requestPdfUrl(
     BuildContext context, {
     String initialValue = '',
+    String titulo = 'Vincular URL de archivo',
   }) async {
     final ctrl = TextEditingController(text: initialValue);
     final focusNode = FocusNode();
@@ -1064,7 +1534,7 @@ class _TablaScreenState extends ConsumerState<TablaScreen> {
             }
 
             return AlertDialog(
-              title: const Text('Vincular URL de archivo'),
+              title: Text(titulo),
               content: SizedBox(
                 width: 520,
                 child: Column(
@@ -1176,7 +1646,7 @@ class _TablaScreenState extends ConsumerState<TablaScreen> {
       p.kmEfectivos == null ||
       p.superficie == null;
 
-  Widget _buildDataRow(Predio p, List<double> widths, int idx) {
+  Widget _buildDataRow(Predio p, List<double> widths, int idx, int? idProyecto) {
     final isEven = idx % 2 == 0;
     final tipoColor = AppColors.tipoPropiedadColor(p.tipoPropiedad);
     return Container(
@@ -1187,10 +1657,14 @@ class _TablaScreenState extends ConsumerState<TablaScreen> {
       ),
       child: Row(
         children: [
-          // ACCIONES
-          _actionCell(p, widths[0]),
-          // VER EN MAPA
-          _mapCell(p, widths[1]),
+          // ID (numeracion estable dentro del proyecto actual)
+          _dataCell(
+            idProyecto?.toString() ?? '-',
+            widths[0],
+            style: const TextStyle(fontSize: 11, color: AppColors.textSecondary),
+          ),
+          // ACCIONES (ver en mapa / editar / eliminar)
+          _accionesCell(p, widths[1]),
           // CLAVE
           _dataCell(p.claveCatastral, widths[2],
               style: const TextStyle(fontSize: 11, fontFamily: 'monospace'),
@@ -1211,9 +1685,9 @@ class _TablaScreenState extends ConsumerState<TablaScreen> {
           // PROPIETARIOS
           _dataCell(p.propietarioNombre ?? '-', widths[9], requerido: true),
           // KM INICIO
-          _numCell(p.kmInicio, widths[10], decimals: 4, requerido: true),
+          _kmCell(p.kmInicio, widths[10], requerido: true),
           // KM FIN
-          _numCell(p.kmFin, widths[11], decimals: 4, requerido: true),
+          _kmCell(p.kmFin, widths[11], requerido: true),
           // KM EF
           _numCell(p.kmEfectivos, widths[12], decimals: 4, requerido: true),
           // M²
@@ -1221,16 +1695,22 @@ class _TablaScreenState extends ConsumerState<TablaScreen> {
           // TIPO LIBERACION
           _dataCell(p.tipoLiberacion ?? '-', widths[14]),
           // COP/DOT PDF (icono de estado)
-          _copPdfIndicatorCell(p, widths[15]),
-          // FECHA COP/DOT
-          _dataCell(_copFechaLabel(p), widths[16]),
+          _archivoLinkCell(p, widths[15], campo: 'copdot'),
+          // FECHA DE LIBERACION (editable: calendario)
+          _fechaLiberacionCell(p, widths[16]),
+          // DWG
+          _archivoLinkCell(p, widths[17], campo: 'dwg'),
+          // PLANO PDF
+          _archivoLinkCell(p, widths[18], campo: 'planoPdf'),
+          // BDT
+          _archivoLinkCell(p, widths[19], campo: 'bdt'),
           // RANGO ESTATUS
-          _rangoEstatusCell(p, widths[17]),
+          _rangoEstatusCell(p, widths[20]),
           // ESTATUS
-          _estatusCell(p, widths[18]),
+          _estatusCell(p, widths[21]),
           // IDENTIFICACION (tappable)
           _tappableBoolCell(
-            p.identificacion, widths[19],
+            p.identificacion, widths[22],
             onTap: () => _savePredio(
               p,
               p.copyWith(
@@ -1241,7 +1721,7 @@ class _TablaScreenState extends ConsumerState<TablaScreen> {
           ),
           // LEVANTAMIENTO (tappable)
           _tappableBoolCell(
-            p.levantamiento, widths[20],
+            p.levantamiento, widths[23],
             onTap: () => _savePredio(
               p,
               p.copyWith(
@@ -1252,7 +1732,7 @@ class _TablaScreenState extends ConsumerState<TablaScreen> {
           ),
           // NEGOCIACION (tappable)
           _tappableBoolCell(
-            p.negociacion, widths[21],
+            p.negociacion, widths[24],
             onTap: () => _savePredio(
               p,
               p.copyWith(
@@ -1262,7 +1742,8 @@ class _TablaScreenState extends ConsumerState<TablaScreen> {
             ),
           ),
           // OBSERVACIONES (antes situacion social)
-          _dataCell(p.situacionSocial ?? '-', widths[22]),
+          _dataCell(p.situacionSocial ?? '-', widths[25]),
+          _fechaLimitePagoCell(p, widths[26]),
         ],
       ),
     );
@@ -1384,7 +1865,14 @@ class _TablaScreenState extends ConsumerState<TablaScreen> {
 
   Widget _rangoEstatusCell(Predio predio, double width) {
     final color = AppColors.rangoEstatusColor(predio.rangoEstatus);
-    final borderColor = AppColors.rangoEstatusBorderColor(predio.rangoEstatus);
+    // Negociacion y Con ingreso son amarillo: el texto amarillo se pierde
+    // sobre un fondo amarillo claro, asi que para estos dos se usa un
+    // fondo gris (el texto se mantiene en su color indicado).
+    final rangoNorm = predio.rangoEstatus.toUpperCase().trim();
+    final esAmarillo = rangoNorm == 'NEGOCIACION' || rangoNorm == 'CON INGRESO';
+    final backgroundColor = esAmarillo
+        ? Colors.grey.withValues(alpha: 0.35)
+        : color.withValues(alpha: 0.15);
 
     return Container(
       width: width,
@@ -1396,9 +1884,8 @@ class _TablaScreenState extends ConsumerState<TablaScreen> {
       child: Container(
         padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
         decoration: BoxDecoration(
-          color: color.withValues(alpha: 0.15),
+          color: backgroundColor,
           borderRadius: BorderRadius.circular(4),
-          border: Border.all(color: borderColor, width: 1.2),
         ),
         child: Text(
           predio.rangoEstatus,
@@ -1411,8 +1898,8 @@ class _TablaScreenState extends ConsumerState<TablaScreen> {
   }
 
   Widget _estatusCell(Predio predio, double width) {
-    final estatus = predio.cop ? 'Liberado' : 'No liberado';
-    final color = predio.cop ? AppColors.secondary : AppColors.danger;
+    final estatus = Predio.estatusSimplificado(predio.rangoEstatus);
+    final color = estatus == 'Liberado' ? AppColors.secondary : AppColors.danger;
 
     return Container(
       width: width,
@@ -1436,53 +1923,146 @@ class _TablaScreenState extends ConsumerState<TablaScreen> {
     );
   }
 
-  Widget _actionCell(Predio p, double width) {
-    return InkWell(
-      onTap: () => context.push('/predios/${p.id}/editar'),
-      child: Container(
-        width: width,
-        height: double.infinity,
-        alignment: Alignment.center,
-        decoration: const BoxDecoration(
-          border: Border(right: BorderSide(color: AppColors.border, width: 0.5)),
-        ),
-        child: const Icon(Icons.edit_outlined, size: 16, color: AppColors.primary),
+  /// Columna de acciones: un menú flotante con "Ver en mapa", "Editar
+  /// predio" y "Eliminar registro" (antes eran dos columnas separadas).
+  Widget _accionesCell(Predio p, double width) {
+    // Un predio también cuenta como vinculado si comparte polígono con otro
+    // (afectación repetida vinculada por clave a un predio vectorial: ver
+    // `polygonRefId`), aunque no tenga su propia `geometry`.
+    final vinculado = p.poligonoInsertado ||
+        p.geometry != null ||
+        (p.polygonRefId != null && p.polygonRefId!.trim().isNotEmpty);
+
+    return Container(
+      width: width,
+      height: double.infinity,
+      alignment: Alignment.center,
+      decoration: const BoxDecoration(
+        border: Border(right: BorderSide(color: AppColors.border, width: 0.5)),
+      ),
+      child: PopupMenuButton<String>(
+        tooltip: 'Acciones',
+        padding: EdgeInsets.zero,
+        icon: const Icon(Icons.menu, size: 18, color: AppColors.primary),
+        onSelected: (value) {
+          switch (value) {
+            case 'mapa':
+              if (!vinculado) {
+                ref.read(manualVincularPredioIdProvider.notifier).state = p.id;
+                context.go('/mapa');
+              } else {
+                ref.read(focusPredioIdProvider.notifier).state = p.id;
+                context.go('/mapa');
+              }
+              break;
+            case 'editar':
+              context.push('/predios/${p.id}/editar');
+              break;
+            case 'archivos':
+              _showEditarArchivosDialog(p);
+              break;
+            case 'eliminar':
+              _confirmarEliminarPredio(p);
+              break;
+          }
+        },
+        itemBuilder: (context) => [
+          PopupMenuItem(
+            value: 'mapa',
+            child: Row(
+              children: [
+                Icon(
+                  vinculado ? Icons.link_rounded : Icons.link_off_rounded,
+                  size: 16,
+                  color: vinculado ? AppColors.secondary : AppColors.danger,
+                ),
+                const SizedBox(width: 10),
+                Text(vinculado ? 'Ver en mapa' : 'Vincular en mapa'),
+              ],
+            ),
+          ),
+          const PopupMenuItem(
+            value: 'editar',
+            child: Row(
+              children: [
+                Icon(Icons.edit_outlined, size: 16, color: AppColors.primary),
+                SizedBox(width: 10),
+                Text('Editar predio'),
+              ],
+            ),
+          ),
+          const PopupMenuItem(
+            value: 'archivos',
+            child: Row(
+              children: [
+                Icon(Icons.attach_file, size: 16, color: AppColors.primary),
+                SizedBox(width: 10),
+                Text('Editar archivos'),
+              ],
+            ),
+          ),
+          const PopupMenuDivider(height: 1),
+          const PopupMenuItem(
+            value: 'eliminar',
+            child: Row(
+              children: [
+                Icon(Icons.delete_outline, size: 16, color: AppColors.danger),
+                SizedBox(width: 10),
+                Text('Eliminar registro', style: TextStyle(color: AppColors.danger)),
+              ],
+            ),
+          ),
+        ],
       ),
     );
   }
 
-  /// Botón "Ver en Mapa": navega al mapa y hace fly-to al predio.
-  Widget _mapCell(Predio p, double width) {
-    final vinculado = p.poligonoInsertado || p.geometry != null;
-    return Tooltip(
-      message: vinculado
-          ? 'Vinculado: ver en mapa'
-          : 'No vinculado: vincular manualmente',
-      child: InkWell(
-        onTap: () {
-          if (!vinculado) {
-            ref.read(manualVincularPredioIdProvider.notifier).state = p.id;
-            context.go('/mapa');
-            return;
-          }
-          ref.read(focusPredioIdProvider.notifier).state = p.id;
-          context.go('/mapa');
-        },
-        child: Container(
-          width: width,
-          height: double.infinity,
-          alignment: Alignment.center,
-          decoration: const BoxDecoration(
-            border: Border(right: BorderSide(color: AppColors.border, width: 0.5)),
-          ),
-          child: Icon(
-            vinculado ? Icons.link_rounded : Icons.link_off_rounded,
-            size: 16,
-            color: vinculado ? AppColors.secondary : AppColors.danger,
-          ),
+  Future<void> _confirmarEliminarPredio(Predio p) async {
+    final confirmado = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: const Text('Eliminar predio'),
+        content: Text(
+          '¿Eliminar el registro "${p.claveCatastral}" de Gestión? '
+          'Esta acción no se puede deshacer.',
         ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(dialogContext).pop(false),
+            child: const Text('Cancelar'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.of(dialogContext).pop(true),
+            child: const Text('Eliminar', style: TextStyle(color: AppColors.danger)),
+          ),
+        ],
       ),
     );
+    if (confirmado != true) return;
+    await _eliminarPredio(p);
+  }
+
+  Future<void> _eliminarPredio(Predio p) async {
+    try {
+      if (p.id.startsWith('local-')) {
+        ref.read(localPrediosProvider.notifier).removePredio(p.id);
+      } else {
+        await ref.read(prediosRepositoryProvider).eliminarPredioConReasignacion(p.id);
+        ref.invalidate(prediosListProvider);
+        ref.invalidate(prediosMapaProvider);
+      }
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Predio "${p.claveCatastral}" eliminado')),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('No se pudo eliminar el predio: $e'), backgroundColor: AppColors.danger),
+        );
+      }
+    }
   }
 
   Widget _dataCell(String text, double width, {TextStyle? style, Color? color, bool requerido = false}) {
@@ -1503,6 +2083,30 @@ class _TablaScreenState extends ConsumerState<TablaScreen> {
         style: style ?? const TextStyle(fontSize: 12),
         overflow: TextOverflow.ellipsis,
         maxLines: 1,
+      ),
+    );
+  }
+
+  /// Celda para "km inicio"/"km fin": siempre se muestran en formato PK
+  /// (placa kilométrica) "KM+M", sin importar si el archivo de origen traía
+  /// el dato como "12+359" o como "12.359" -son la misma distancia-.
+  Widget _kmCell(double? value, double width, {bool requerido = false}) {
+    final vacio = requerido && value == null;
+    final text = value == null ? '-' : norm.formatKmPk(value);
+    return Container(
+      width: width,
+      height: double.infinity,
+      alignment: Alignment.centerRight,
+      padding: const EdgeInsets.symmetric(horizontal: 6),
+      decoration: const BoxDecoration(
+        border: Border(right: BorderSide(color: AppColors.border, width: 0.5)),
+      ),
+      child: vacio
+          ? const Icon(Icons.error, color: AppColors.danger, size: 16)
+          : Text(
+        text,
+        style: const TextStyle(fontSize: 12, fontFeatures: [FontFeature.tabularFigures()]),
+        overflow: TextOverflow.ellipsis,
       ),
     );
   }
@@ -1554,17 +2158,18 @@ class _TablaScreenState extends ConsumerState<TablaScreen> {
     );
   }
 
-  Widget _copPdfIndicatorCell(Predio predio, double width) {
-    final hasPdf = _pdfUrlFor(predio) != null;
-    final iconColor = hasPdf ? AppColors.secondary : Colors.grey.shade400;
-    final tooltip = hasPdf
-        ? 'Abrir archivo vinculado'
-        : 'Vincular URL de archivo';
+  /// Celda de icono-link para cada uno de los 4 archivos gestionados desde
+  /// "Editar archivos" (COP/DOT PDF, DWG, Plano PDF, BDT). Tocar cualquiera
+  /// de las 4 columnas abre el mismo diálogo unificado, donde se puede
+  /// Abrir/Agregar/Sustituir/Eliminar cualquiera de los 4.
+  Widget _archivoLinkCell(Predio predio, double width, {required String campo}) {
+    final hasUrl = _archivoUrlFor(predio, campo) != null;
+    final label = _archivoLabel(campo);
 
     return Tooltip(
-      message: tooltip,
+      message: hasUrl ? 'Editar $label' : 'Agregar $label',
       child: InkWell(
-        onTap: () => _handleCopPdfTap(predio),
+        onTap: () => _showEditarArchivosDialog(predio),
         child: Container(
           width: width,
           height: double.infinity,
@@ -1575,7 +2180,7 @@ class _TablaScreenState extends ConsumerState<TablaScreen> {
           child: Icon(
             Icons.link,
             size: 18,
-            color: iconColor,
+            color: hasUrl ? AppColors.secondary : Colors.grey.shade400,
           ),
         ),
       ),
@@ -1641,9 +2246,11 @@ class _TablaScreenState extends ConsumerState<TablaScreen> {
     final tipoLiberacion = Set<String>.of(_filtroTipoLiberacion);
     final estatus = Set<String>.of(_filtroEstatus);
     final rangoEstatus = Set<String>.of(_filtroRangoEstatus);
+    final estructura = Set<String>.of(_filtroEstructura);
     final tramos = _opcionesTramoProyecto(allPredios);
     final tipos = _opcionesTipoProyecto(allPredios);
     final tiposLiberacion = _opcionesTipoLiberacionProyecto(allPredios);
+    final estructuras = _opcionesEstructuraProyecto(allPredios);
     final tieneDatosProyecto =
         allPredios.any((predio) => _predioProyecto(predio) == _proyectoActual);
 
@@ -1684,6 +2291,7 @@ class _TablaScreenState extends ConsumerState<TablaScreen> {
                           tipoLiberacion.clear();
                           estatus.clear();
                           rangoEstatus.clear();
+                          estructura.clear();
                         });
                       },
                       child: const Text('Limpiar todo'),
@@ -1706,6 +2314,31 @@ class _TablaScreenState extends ConsumerState<TablaScreen> {
                           ),
                     ),
                   ),
+                Text(
+                  'Estructura',
+                  style: Theme.of(ctx).textTheme.labelLarge?.copyWith(
+                        color: AppColors.textPrimary,
+                        fontWeight: FontWeight.w700,
+                      ),
+                ),
+                const SizedBox(height: 8),
+                Wrap(
+                  spacing: 8,
+                  runSpacing: 6,
+                  children: estructuras
+                      .map(
+                        (t) => FilterChip(
+                          label: Text(t),
+                          labelStyle: const TextStyle(color: AppColors.textPrimary),
+                          checkmarkColor: AppColors.primary,
+                          selected: estructura.contains(t),
+                          onSelected: (v) => setS(() => v ? estructura.add(t) : estructura.remove(t)),
+                          selectedColor: AppColors.primary.withValues(alpha: 0.2),
+                        ),
+                      )
+                      .toList(),
+                ),
+                const SizedBox(height: 16),
                 Text(
                   'T/F/S',
                   style: Theme.of(ctx).textTheme.labelLarge?.copyWith(
@@ -1853,6 +2486,7 @@ class _TablaScreenState extends ConsumerState<TablaScreen> {
                         _filtroTipoLiberacion = tipoLiberacion;
                         _filtroEstatus = estatus;
                         _filtroRangoEstatus = rangoEstatus;
+                        _filtroEstructura = estructura;
                       });
                       Navigator.pop(ctx);
                     },

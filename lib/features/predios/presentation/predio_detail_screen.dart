@@ -9,6 +9,7 @@ import '../models/predio.dart';
 import '../../../core/constants/app_colors.dart';
 import '../../../core/constants/app_strings.dart';
 import '../../auth/providers/demo_provider.dart';
+import '../../../core/utils/import_normalization.dart' as norm;
 
 class PredioDetailScreen extends ConsumerWidget {
   final String id;
@@ -64,6 +65,16 @@ class PredioDetailScreen extends ConsumerWidget {
           }
 
           final color = AppColors.tipoPropiedadColor(predio.tipoPropiedad);
+          // Cuenta cuántos registros de Gestión comparten esta misma clave
+          // catastral (relación 1:N: varias afectaciones sobre el mismo
+          // predio físico, cada una con su propia fila).
+          final totalAfectaciones = ref
+                  .watch(prediosListProvider)
+                  .asData
+                  ?.value
+                  .where((p) => p.claveCatastral == predio.claveCatastral)
+                  .length ??
+              1;
 
           return SingleChildScrollView(
             child: Column(
@@ -98,11 +109,14 @@ class PredioDetailScreen extends ConsumerWidget {
                                   style: Theme.of(context).textTheme.headlineMedium,
                                 ),
                                 const SizedBox(height: 6),
-                                Row(
+                                Wrap(
+                                  spacing: 8,
+                                  runSpacing: 6,
                                   children: [
                                     _buildChip(predio.tipoPropiedad, color),
-                                    const SizedBox(width: 8),
                                     _buildChip(predio.tramo, AppColors.info),
+                                    if (totalAfectaciones > 1)
+                                      _buildChip('Afectaciones: $totalAfectaciones', AppColors.danger),
                                   ],
                                 ),
                                 if (predio.ejido != null && predio.ejido != '-') ...[
@@ -165,7 +179,7 @@ class PredioDetailScreen extends ConsumerWidget {
                             child: _buildMetricCard(
                               context,
                               Icons.route,
-                              '${predio.kmInicio?.toStringAsFixed(3) ?? "-"} – ${predio.kmFin?.toStringAsFixed(3) ?? "-"}',
+                              '${predio.kmInicio != null ? norm.formatKmPk(predio.kmInicio!) : "-"} – ${predio.kmFin != null ? norm.formatKmPk(predio.kmFin!) : "-"}',
                               'Cadenamiento',
                               AppColors.secondary,
                             ),
@@ -208,9 +222,17 @@ class PredioDetailScreen extends ConsumerWidget {
                             _buildInfoRow('COP Firmado', predio.copFirmado!),
                           if (predio.poligonoDwg != null)
                             _buildInfoRow('Polígono DWG', predio.poligonoDwg!),
+                          if (predio.planoPdf != null)
+                            _buildInfoRow('Plano PDF', predio.planoPdf!),
+                          if (predio.bdt != null)
+                            _buildInfoRow('BDT', predio.bdt!),
                           if (predio.oficio != null)
                             _buildInfoRow('Oficio', predio.oficio!),
-                          if (predio.copFirmado == null && predio.poligonoDwg == null && predio.oficio == null)
+                          if (predio.copFirmado == null &&
+                              predio.poligonoDwg == null &&
+                              predio.planoPdf == null &&
+                              predio.bdt == null &&
+                              predio.oficio == null)
                             _buildInfoRow('Estado', 'Sin documentos registrados'),
                         ],
                       ),

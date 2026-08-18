@@ -5,6 +5,7 @@ import '../../../features/predios/providers/predios_provider.dart';
 import '../../../features/predios/models/predio.dart';
 import '../../../core/constants/app_colors.dart';
 import '../../../shared/widgets/app_scaffold.dart';
+import '../../estructura/providers/proyectos_provider.dart';
 import 'package:intl/intl.dart';
 
 class ReportesScreen extends ConsumerStatefulWidget {
@@ -15,13 +16,17 @@ class ReportesScreen extends ConsumerStatefulWidget {
 }
 
 class _ReportesScreenState extends ConsumerState<ReportesScreen> {
-  static const _proyectos = ['TQI', 'TSNL', 'TAP', 'TQM'];
+  /// Códigos de proyecto vigentes, dados de alta en Estructura (Firestore).
+  List<String> get _proyectos => ref.read(proyectosCodigosProvider);
   static const _sparkMonths = 6;
 
   String _proyectoActual = 'TQI';
 
   String _predioProyecto(Predio predio) {
     final proyectoDirecto = predio.proyecto?.trim().toUpperCase();
+    // 'TQM' es un alias heredado (typo histórico); el código correcto es
+    // 'TMQ' (Tren México-Querétaro).
+    if (proyectoDirecto == 'TQM') return 'TMQ';
     if (proyectoDirecto != null && _proyectos.contains(proyectoDirecto)) {
       return proyectoDirecto;
     }
@@ -31,7 +36,9 @@ class _ReportesScreenState extends ConsumerState<ReportesScreen> {
     if (compact.startsWith('TQI') || compact.startsWith('QI')) return 'TQI';
     if (compact.startsWith('TSNL') || compact.startsWith('SNL') || compact.startsWith('SL')) return 'TSNL';
     if (compact.startsWith('TAP') || compact.startsWith('AP')) return 'TAP';
-    if (compact.startsWith('TQM') || compact.startsWith('QM')) return 'TQM';
+    if (compact.startsWith('TMQ') || compact.startsWith('TQM') || compact.startsWith('QM')) {
+      return 'TMQ';
+    }
 
     final contenido = [
       predio.claveCatastral,
@@ -44,6 +51,7 @@ class _ReportesScreenState extends ConsumerState<ReportesScreen> {
     for (final proyecto in _proyectos) {
       if (contenido.contains(proyecto)) return proyecto;
     }
+    if (contenido.contains('TQM')) return 'TMQ';
 
     return 'Sin proyecto';
   }
@@ -86,6 +94,13 @@ class _ReportesScreenState extends ConsumerState<ReportesScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final proyectosVigentes = ref.watch(proyectosCodigosProvider);
+    if (proyectosVigentes.isNotEmpty && !proyectosVigentes.contains(_proyectoActual)) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (!mounted) return;
+        setState(() => _proyectoActual = proyectosVigentes.first);
+      });
+    }
     final prediosAsync = ref.watch(prediosMapaProvider);
     final fmt = NumberFormat('#,##0.00', 'es_MX');
     final fmtInt = NumberFormat('#,##0', 'es_MX');

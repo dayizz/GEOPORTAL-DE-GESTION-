@@ -7,6 +7,11 @@ import 'package:uuid/uuid.dart';
 import '../../../shared/widgets/app_scaffold.dart';
 import '../../../core/constants/app_colors.dart';
 import '../../auth/providers/auth_provider.dart';
+import '../models/proyecto_item.dart';
+import '../providers/proyectos_provider.dart';
+
+export '../models/proyecto_item.dart';
+export '../providers/proyectos_provider.dart';
 
 // ============================================================
 // MODELOS
@@ -72,39 +77,6 @@ class Usuario {
   }
 }
 
-/// Modelo para proyectos del sistema
-class ProyectoItem {
-  final String id;
-  final String nombre;
-  final String descripcion;
-  final bool activo;
-  final DateTime createdAt;
-
-  const ProyectoItem({
-    required this.id,
-    required this.nombre,
-    required this.descripcion,
-    required this.activo,
-    required this.createdAt,
-  });
-
-  ProyectoItem copyWith({
-    String? id,
-    String? nombre,
-    String? descripcion,
-    bool? activo,
-    DateTime? createdAt,
-  }) {
-    return ProyectoItem(
-      id: id ?? this.id,
-      nombre: nombre ?? this.nombre,
-      descripcion: descripcion ?? this.descripcion,
-      activo: activo ?? this.activo,
-      createdAt: createdAt ?? this.createdAt,
-    );
-  }
-}
-
 // ============================================================
 // PROVIDERS
 // ============================================================
@@ -122,67 +94,6 @@ final usuariosProvider = StreamProvider<List<Usuario>>((ref) {
       .map((snapshot) =>
           snapshot.docs.map(Usuario.fromFirestore).toList(growable: false));
 });
-
-/// Provider para proyectos
-final proyectosItemsProvider = StateNotifierProvider<ProyectosItemsNotifier, List<ProyectoItem>>((ref) {
-  return ProyectosItemsNotifier();
-});
-
-class ProyectosItemsNotifier extends StateNotifier<List<ProyectoItem>> {
-  ProyectosItemsNotifier() : super(_proyectosIniciales);
-
-  static final _proyectosIniciales = [
-    ProyectoItem(
-      id: const Uuid().v4(),
-      nombre: 'TQI',
-      descripcion: 'Tren Querétaro - Irapuato',
-      activo: true,
-      createdAt: DateTime.now(),
-    ),
-    ProyectoItem(
-      id: const Uuid().v4(),
-      nombre: 'TSNL',
-      descripcion: 'Tren Saltillo - Nuevo Laredo',
-      activo: true,
-      createdAt: DateTime.now(),
-    ),
-    ProyectoItem(
-      id: const Uuid().v4(),
-      nombre: 'TAP',
-      descripcion: 'Tren AIFA - Pachuca',
-      activo: true,
-      createdAt: DateTime.now(),
-    ),
-    ProyectoItem(
-      id: const Uuid().v4(),
-      nombre: 'TMQ',
-      descripcion: 'Tren México - Querétaro',
-      activo: false,
-      createdAt: DateTime.now(),
-    ),
-  ];
-
-  void agregarProyecto(ProyectoItem proyecto) {
-    state = [...state, proyecto];
-  }
-
-  void actualizarProyecto(ProyectoItem proyecto) {
-    state = state.map((p) => p.id == proyecto.id ? proyecto : p).toList();
-  }
-
-  void eliminarProyecto(String id) {
-    state = state.where((p) => p.id != id).toList();
-  }
-
-  void togglearActivo(String id) {
-    state = state.map((p) {
-      if (p.id == id) {
-        return p.copyWith(activo: !p.activo);
-      }
-      return p;
-    }).toList();
-  }
-}
 
 // ============================================================
 // PANTALLA PRINCIPAL
@@ -794,7 +705,7 @@ class _CuentasUsuarioTabState extends ConsumerState<_CuentasUsuarioTab> {
     String perfilSeleccionado = perfilOperativoAuxiliar;
     List<String> proyectosSeleccionados = [];
 
-    final proyectosItems = ref.read(proyectosItemsProvider);
+    final proyectosItems = ref.read(proyectosProvider).valueOrNull ?? const <ProyectoItem>[];
 
     showDialog(
       context: context,
@@ -916,7 +827,7 @@ class _CuentasUsuarioTabState extends ConsumerState<_CuentasUsuarioTab> {
     String perfilSeleccionado = usuario.perfil;
     List<String> proyectosSeleccionados = List.from(usuario.proyectos);
 
-    final proyectosItems = ref.read(proyectosItemsProvider);
+    final proyectosItems = ref.read(proyectosProvider).valueOrNull ?? const <ProyectoItem>[];
 
     showDialog(
       context: context,
@@ -1060,16 +971,56 @@ class _CuentasUsuarioTabState extends ConsumerState<_CuentasUsuarioTab> {
 // SECCIÓN 2: PROYECTOS
 // ============================================================
 
+/// Estado local (solo de formulario) de una fila de PK dentro del dialogo
+/// de crear/editar proyecto. No es el modelo persistido.
+class _PkFormRow {
+  final String id;
+  final TextEditingController numeroIdCtrl;
+  final TextEditingController pkInicioCtrl;
+  final TextEditingController pkFinCtrl;
+
+  _PkFormRow({String numeroId = '', String pkInicio = '', String pkFin = ''})
+      : id = const Uuid().v4(),
+        numeroIdCtrl = TextEditingController(text: numeroId),
+        pkInicioCtrl = TextEditingController(text: pkInicio),
+        pkFinCtrl = TextEditingController(text: pkFin);
+}
+
+/// Estado local (solo de formulario) de un bloque de cadenamiento dentro del
+/// dialogo de crear/editar proyecto. No es el modelo persistido.
+class _CadenamientoFormBlock {
+  final String id;
+  String tipoDivision;
+  final List<_PkFormRow> pks;
+
+  _CadenamientoFormBlock({this.tipoDivision = 'Tramo', List<_PkFormRow>? pks})
+      : id = const Uuid().v4(),
+        pks = pks ?? [_PkFormRow()];
+}
+
 class _ProyectosTab extends ConsumerWidget {
   const _ProyectosTab();
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final proyectos = ref.watch(proyectosItemsProvider);
+    final proyectosAsync = ref.watch(proyectosProvider);
     final currentIsAdminAsync = ref.watch(currentUserIsAdminProvider);
     final perfil = ref.watch(currentUserPerfilProvider);
     final canManageProjects = currentIsAdminAsync.valueOrNull == true || isPerfilAdministrador(perfil) || isPerfilGestor(perfil);
 
+    return proyectosAsync.when(
+      loading: () => const Scaffold(body: Center(child: CircularProgressIndicator())),
+      error: (e, _) => Scaffold(body: Center(child: Text('Error al cargar proyectos: $e'))),
+      data: (proyectos) => _buildScaffold(context, ref, proyectos, canManageProjects: canManageProjects),
+    );
+  }
+
+  Widget _buildScaffold(
+    BuildContext context,
+    WidgetRef ref,
+    List<ProyectoItem> proyectos, {
+    required bool canManageProjects,
+  }) {
     return Scaffold(
       body: proyectos.isEmpty
           ? _buildEmptyState(context, ref, canManageProjects: canManageProjects)
@@ -1181,7 +1132,7 @@ class _ProyectosTab extends ConsumerWidget {
                       } else if (value == 'eliminar') {
                         _showEliminarProyectoDialog(context, ref, proyecto);
                       } else if (value == 'toggle') {
-                        ref.read(proyectosItemsProvider.notifier).togglearActivo(proyecto.id);
+                        _saveProyecto(context, ref, proyecto.copyWith(activo: !proyecto.activo));
                       }
                     },
                     itemBuilder: (context) => [
@@ -1227,66 +1178,275 @@ class _ProyectosTab extends ConsumerWidget {
     );
   }
 
+  Future<bool> _saveProyecto(BuildContext context, WidgetRef ref, ProyectoItem proyecto) async {
+    final collection = ref.read(proyectosCollectionProvider);
+    try {
+      await collection.doc(proyecto.id).set(proyecto.toMap(), SetOptions(merge: true));
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Proyecto guardado')),
+        );
+      }
+      return true;
+    } catch (e) {
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('No fue posible guardar el proyecto: $e'),
+            backgroundColor: AppColors.danger,
+          ),
+        );
+      }
+      return false;
+    }
+  }
+
+  Future<void> _deleteProyecto(BuildContext context, WidgetRef ref, String id) async {
+    final collection = ref.read(proyectosCollectionProvider);
+    try {
+      await collection.doc(id).delete();
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Proyecto eliminado')),
+        );
+      }
+    } catch (e) {
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('No fue posible eliminar el proyecto: $e'),
+            backgroundColor: AppColors.danger,
+          ),
+        );
+      }
+    }
+  }
+
+  /// Seccion "Cadenamiento" reutilizada por los dialogos de crear y editar
+  /// proyecto: boton "Agregar Cadenamiento" + los bloques ya agregados.
+  Widget _buildCadenamientosSection(
+    StateSetter setState,
+    List<_CadenamientoFormBlock> cadenamientos,
+  ) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        const SizedBox(height: 16),
+        Align(
+          alignment: Alignment.centerLeft,
+          child: OutlinedButton.icon(
+            onPressed: () => setState(() => cadenamientos.add(_CadenamientoFormBlock())),
+            icon: const Icon(Icons.add_road),
+            label: const Text('Agregar Cadenamiento'),
+          ),
+        ),
+        for (final bloque in cadenamientos)
+          Container(
+            margin: const EdgeInsets.only(top: 12),
+            padding: const EdgeInsets.all(12),
+            decoration: BoxDecoration(
+              border: Border.all(color: Colors.grey.shade300),
+              borderRadius: BorderRadius.circular(8),
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  children: [
+                    Expanded(
+                      child: DropdownButtonFormField<String>(
+                        initialValue: bloque.tipoDivision,
+                        decoration: const InputDecoration(
+                          labelText: 'Tipo de division',
+                          isDense: true,
+                        ),
+                        items: Cadenamiento.letras.keys
+                            .map((t) => DropdownMenuItem(value: t, child: Text(t)))
+                            .toList(),
+                        onChanged: (v) => setState(() => bloque.tipoDivision = v ?? bloque.tipoDivision),
+                      ),
+                    ),
+                    IconButton(
+                      tooltip: 'Eliminar cadenamiento',
+                      icon: const Icon(Icons.delete_outline, color: AppColors.danger),
+                      onPressed: () => setState(() => cadenamientos.remove(bloque)),
+                    ),
+                  ],
+                ),
+                for (final fila in bloque.pks)
+                  Padding(
+                    padding: const EdgeInsets.only(top: 8),
+                    child: Row(
+                      crossAxisAlignment: CrossAxisAlignment.center,
+                      children: [
+                        Text(
+                          Cadenamiento.letras[bloque.tipoDivision] ?? 'T',
+                          style: const TextStyle(fontWeight: FontWeight.bold),
+                        ),
+                        const SizedBox(width: 4),
+                        SizedBox(
+                          width: 64,
+                          child: TextField(
+                            controller: fila.numeroIdCtrl,
+                            keyboardType: TextInputType.number,
+                            inputFormatters: [
+                              FilteringTextInputFormatter.digitsOnly,
+                              LengthLimitingTextInputFormatter(2),
+                            ],
+                            decoration: const InputDecoration(labelText: 'Num. ID', isDense: true),
+                          ),
+                        ),
+                        const SizedBox(width: 8),
+                        Expanded(
+                          child: TextField(
+                            controller: fila.pkInicioCtrl,
+                            decoration: const InputDecoration(
+                              labelText: 'PK Inicio',
+                              hintText: 'Ej. 12+345',
+                              isDense: true,
+                            ),
+                          ),
+                        ),
+                        const SizedBox(width: 8),
+                        Expanded(
+                          child: TextField(
+                            controller: fila.pkFinCtrl,
+                            decoration: const InputDecoration(
+                              labelText: 'PK Fin',
+                              hintText: 'Ej. 15+200',
+                              isDense: true,
+                            ),
+                          ),
+                        ),
+                        IconButton(
+                          tooltip: 'Eliminar PK',
+                          icon: const Icon(Icons.close, size: 18),
+                          onPressed: bloque.pks.length <= 1
+                              ? null
+                              : () => setState(() => bloque.pks.remove(fila)),
+                        ),
+                      ],
+                    ),
+                  ),
+                Align(
+                  alignment: Alignment.centerRight,
+                  child: TextButton.icon(
+                    onPressed: () => setState(() => bloque.pks.add(_PkFormRow())),
+                    icon: const Icon(Icons.add, size: 18),
+                    label: const Text('Agregar PK'),
+                  ),
+                ),
+              ],
+            ),
+          ),
+      ],
+    );
+  }
+
+  List<Cadenamiento> _readCadenamientos(List<_CadenamientoFormBlock> bloques) {
+    return bloques
+        .map(
+          (b) => Cadenamiento(
+            id: b.id,
+            tipoDivision: b.tipoDivision,
+            pks: b.pks
+                .map(
+                  (p) => CadenamientoPk(
+                    id: p.id,
+                    numeroId: p.numeroIdCtrl.text.trim(),
+                    pkInicio: p.pkInicioCtrl.text.trim(),
+                    pkFin: p.pkFinCtrl.text.trim(),
+                  ),
+                )
+                .toList(),
+          ),
+        )
+        .toList();
+  }
+
   void _showAgregarProyectoDialog(BuildContext context, WidgetRef ref) {
     final nombreCtrl = TextEditingController();
     final descripcionCtrl = TextEditingController();
+    final cadenamientos = <_CadenamientoFormBlock>[];
 
     showDialog(
       context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('Nuevo Proyecto'),
-        content: SizedBox(
-          width: 400,
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              TextField(
-                controller: nombreCtrl,
-                decoration: const InputDecoration(
-                  labelText: 'Nombre del proyecto',
-                  prefixIcon: Icon(Icons.folder_special),
-                  border: OutlineInputBorder(),
-                  hintText: 'Ej: TQI, TSNL, TAP, TQM',
-                ),
+      builder: (context) => StatefulBuilder(
+        builder: (context, setState) => AlertDialog(
+          title: const Text('Nuevo Proyecto'),
+          content: SizedBox(
+            width: 420,
+            child: SingleChildScrollView(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  TextField(
+                    controller: nombreCtrl,
+                    decoration: const InputDecoration(
+                      labelText: 'Nombre del proyecto',
+                      prefixIcon: Icon(Icons.folder_special),
+                      border: OutlineInputBorder(),
+                      hintText: 'Ej: TQI, TSNL, TAP, TMQ',
+                    ),
+                  ),
+                  const SizedBox(height: 16),
+                  TextField(
+                    controller: descripcionCtrl,
+                    decoration: const InputDecoration(
+                      labelText: 'Descripción',
+                      prefixIcon: Icon(Icons.description),
+                      border: OutlineInputBorder(),
+                    ),
+                    maxLines: 3,
+                  ),
+                  _buildCadenamientosSection(setState, cadenamientos),
+                ],
               ),
-              const SizedBox(height: 16),
-              TextField(
-                controller: descripcionCtrl,
-                decoration: const InputDecoration(
-                  labelText: 'Descripción',
-                  prefixIcon: Icon(Icons.description),
-                  border: OutlineInputBorder(),
-                ),
-                maxLines: 3,
-              ),
-            ],
+            ),
           ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context),
+              child: const Text('Cancelar'),
+            ),
+            ElevatedButton(
+              onPressed: () async {
+                if (nombreCtrl.text.trim().isEmpty) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(
+                      content: Text('El nombre del proyecto es obligatorio.'),
+                      backgroundColor: AppColors.danger,
+                    ),
+                  );
+                  return;
+                }
+                try {
+                  final proyecto = ProyectoItem(
+                    id: const Uuid().v4(),
+                    nombre: nombreCtrl.text.toUpperCase(),
+                    descripcion: descripcionCtrl.text,
+                    activo: true,
+                    createdAt: DateTime.now(),
+                    cadenamientos: _readCadenamientos(cadenamientos),
+                  );
+                  final ok = await _saveProyecto(context, ref, proyecto);
+                  if (!context.mounted || !ok) return;
+                  Navigator.pop(context);
+                } catch (e) {
+                  if (context.mounted) {
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      SnackBar(
+                        content: Text('No fue posible guardar el proyecto: $e'),
+                        backgroundColor: AppColors.danger,
+                      ),
+                    );
+                  }
+                }
+              },
+              child: const Text('Agregar'),
+            ),
+          ],
         ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: const Text('Cancelar'),
-          ),
-          ElevatedButton(
-            onPressed: () {
-              if (nombreCtrl.text.isNotEmpty) {
-                final proyecto = ProyectoItem(
-                  id: const Uuid().v4(),
-                  nombre: nombreCtrl.text.toUpperCase(),
-                  descripcion: descripcionCtrl.text,
-                  activo: true,
-                  createdAt: DateTime.now(),
-                );
-                ref.read(proyectosItemsProvider.notifier).agregarProyecto(proyecto);
-                Navigator.pop(context);
-                ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(content: Text('Proyecto agregado')),
-                );
-              }
-            },
-            child: const Text('Agregar'),
-          ),
-        ],
       ),
     );
   }
@@ -1294,59 +1454,91 @@ class _ProyectosTab extends ConsumerWidget {
   void _showEditarProyectoDialog(BuildContext context, WidgetRef ref, ProyectoItem proyecto) {
     final nombreCtrl = TextEditingController(text: proyecto.nombre);
     final descripcionCtrl = TextEditingController(text: proyecto.descripcion);
+    final cadenamientos = proyecto.cadenamientos
+        .map(
+          (c) => _CadenamientoFormBlock(
+            tipoDivision: c.tipoDivision,
+            pks: c.pks
+                .map((p) => _PkFormRow(numeroId: p.numeroId, pkInicio: p.pkInicio, pkFin: p.pkFin))
+                .toList(),
+          ),
+        )
+        .toList();
 
     showDialog(
       context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('Editar Proyecto'),
-        content: SizedBox(
-          width: 400,
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              TextField(
-                controller: nombreCtrl,
-                decoration: const InputDecoration(
-                  labelText: 'Nombre del proyecto',
-                  prefixIcon: Icon(Icons.folder_special),
-                  border: OutlineInputBorder(),
-                ),
+      builder: (context) => StatefulBuilder(
+        builder: (context, setState) => AlertDialog(
+          title: const Text('Editar Proyecto'),
+          content: SizedBox(
+            width: 420,
+            child: SingleChildScrollView(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  TextField(
+                    controller: nombreCtrl,
+                    decoration: const InputDecoration(
+                      labelText: 'Nombre del proyecto',
+                      prefixIcon: Icon(Icons.folder_special),
+                      border: OutlineInputBorder(),
+                    ),
+                  ),
+                  const SizedBox(height: 16),
+                  TextField(
+                    controller: descripcionCtrl,
+                    decoration: const InputDecoration(
+                      labelText: 'Descripción',
+                      prefixIcon: Icon(Icons.description),
+                      border: OutlineInputBorder(),
+                    ),
+                    maxLines: 3,
+                  ),
+                  _buildCadenamientosSection(setState, cadenamientos),
+                ],
               ),
-              const SizedBox(height: 16),
-              TextField(
-                controller: descripcionCtrl,
-                decoration: const InputDecoration(
-                  labelText: 'Descripción',
-                  prefixIcon: Icon(Icons.description),
-                  border: OutlineInputBorder(),
-                ),
-                maxLines: 3,
-              ),
-            ],
+            ),
           ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context),
+              child: const Text('Cancelar'),
+            ),
+            ElevatedButton(
+              onPressed: () async {
+                if (nombreCtrl.text.trim().isEmpty) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(
+                      content: Text('El nombre del proyecto es obligatorio.'),
+                      backgroundColor: AppColors.danger,
+                    ),
+                  );
+                  return;
+                }
+                try {
+                  final proyectoActualizado = proyecto.copyWith(
+                    nombre: nombreCtrl.text.toUpperCase(),
+                    descripcion: descripcionCtrl.text,
+                    cadenamientos: _readCadenamientos(cadenamientos),
+                  );
+                  final ok = await _saveProyecto(context, ref, proyectoActualizado);
+                  if (!context.mounted || !ok) return;
+                  Navigator.pop(context);
+                } catch (e) {
+                  if (context.mounted) {
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      SnackBar(
+                        content: Text('No fue posible guardar el proyecto: $e'),
+                        backgroundColor: AppColors.danger,
+                      ),
+                    );
+                  }
+                }
+              },
+              child: const Text('Guardar'),
+            ),
+          ],
         ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: const Text('Cancelar'),
-          ),
-          ElevatedButton(
-            onPressed: () {
-              if (nombreCtrl.text.isNotEmpty) {
-                final proyectoActualizado = proyecto.copyWith(
-                  nombre: nombreCtrl.text.toUpperCase(),
-                  descripcion: descripcionCtrl.text,
-                );
-                ref.read(proyectosItemsProvider.notifier).actualizarProyecto(proyectoActualizado);
-                Navigator.pop(context);
-                ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(content: Text('Proyecto actualizado')),
-                );
-              }
-            },
-            child: const Text('Guardar'),
-          ),
-        ],
       ),
     );
   }
@@ -1363,12 +1555,10 @@ class _ProyectosTab extends ConsumerWidget {
             child: const Text('Cancelar'),
           ),
           ElevatedButton(
-            onPressed: () {
-              ref.read(proyectosItemsProvider.notifier).eliminarProyecto(proyecto.id);
+            onPressed: () async {
+              await _deleteProyecto(context, ref, proyecto.id);
+              if (!context.mounted) return;
               Navigator.pop(context);
-              ScaffoldMessenger.of(context).showSnackBar(
-                const SnackBar(content: Text('Proyecto eliminado')),
-              );
             },
             style: ElevatedButton.styleFrom(backgroundColor: AppColors.danger),
             child: const Text('Eliminar'),

@@ -3,6 +3,7 @@ import '../data/predios_repository.dart';
 import '../models/predio.dart';
 import 'local_predios_provider.dart';
 import '../../auth/providers/auth_provider.dart';
+import '../../estructura/providers/proyectos_provider.dart';
 
 // Filtros activos
 class PrediosFiltros {
@@ -10,7 +11,7 @@ class PrediosFiltros {
   final String? usoSuelo;
   final String? zona;
   final String? propietarioId;
-  final String? proyecto; // TQI, TSNL, TAP, TQM, etc.
+  final String? proyecto; // TQI, TSNL, TAP, TMQ, etc.
 
   const PrediosFiltros({
     this.busqueda = '',
@@ -53,6 +54,7 @@ final prediosListProvider = FutureProvider<List<Predio>>((ref) async {
   final proyectoSesion = ref.watch(proyectoActivoProvider);
   final allowedProjects = ref.watch(currentUserAssignedProjectsProvider);
   final canAccessAllProjects = ref.watch(canAccessAllProjectsProvider);
+  final proyectosValidos = ref.watch(proyectosCodigosProvider);
   final repo = ref.read(prediosRepositoryProvider);
   List<Predio> remotos = const [];
   try {
@@ -94,10 +96,10 @@ final prediosListProvider = FutureProvider<List<Predio>>((ref) async {
   final proyectoFiltro = filtros.proyecto ?? proyectoSesion;
   if (proyectoFiltro != null) {
     remotos = remotos
-        .where((p) => _extractProjectoFromPredio(p) == proyectoFiltro)
+        .where((p) => _extractProjectoFromPredio(p, proyectosValidos) == proyectoFiltro)
         .toList();
     localesFiltrados = localesFiltrados
-        .where((p) => _extractProjectoFromPredio(p) == proyectoFiltro)
+        .where((p) => _extractProjectoFromPredio(p, proyectosValidos) == proyectoFiltro)
         .toList();
   }
 
@@ -111,10 +113,14 @@ final prediosListProvider = FutureProvider<List<Predio>>((ref) async {
   return merged;
 });
 
-/// Extrae el proyecto de un predio según sus campos
-String _extractProjectoFromPredio(Predio predio) {
+/// Extrae el proyecto de un predio según sus campos. [proyectosValidos] es la
+/// lista vigente de códigos dados de alta en Estructura (Firestore).
+String _extractProjectoFromPredio(Predio predio, List<String> proyectosValidos) {
   final proyectoDirecto = predio.proyecto?.trim().toUpperCase();
   if (proyectoDirecto != null && proyectoDirecto.isNotEmpty) {
+    // 'TQM' es un alias heredado (typo histórico); el código correcto es
+    // 'TMQ' (Tren México-Querétaro).
+    if (proyectoDirecto == 'TQM' && proyectosValidos.contains('TMQ')) return 'TMQ';
     return proyectoDirecto;
   }
 
@@ -127,10 +133,10 @@ String _extractProjectoFromPredio(Predio predio) {
     predio.copFirmado ?? '',
   ].join(' ').toUpperCase();
 
-  const proyectos = ['TQI', 'TSNL', 'TAP', 'TQM'];
-  for (final proyecto in proyectos) {
+  for (final proyecto in proyectosValidos) {
     if (contenido.contains(proyecto)) return proyecto;
   }
+  if (contenido.contains('TQM') && proyectosValidos.contains('TMQ')) return 'TMQ';
 
   return 'Sin proyecto';
 }
@@ -141,6 +147,7 @@ final prediosMapaProvider = FutureProvider<List<Predio>>((ref) async {
   final proyectoSesion = ref.watch(proyectoActivoProvider);
   final allowedProjects = ref.watch(currentUserAssignedProjectsProvider);
   final canAccessAllProjects = ref.watch(canAccessAllProjectsProvider);
+  final proyectosValidos = ref.watch(proyectosCodigosProvider);
   final repo = ref.read(prediosRepositoryProvider);
   List<Predio> remotos = const [];
   try {
@@ -154,8 +161,8 @@ final prediosMapaProvider = FutureProvider<List<Predio>>((ref) async {
   }
   var localesFiltrados = locales.toList();
   if (proyectoSesion != null) {
-    remotos = remotos.where((p) => _extractProjectoFromPredio(p) == proyectoSesion).toList();
-    localesFiltrados = localesFiltrados.where((p) => _extractProjectoFromPredio(p) == proyectoSesion).toList();
+    remotos = remotos.where((p) => _extractProjectoFromPredio(p, proyectosValidos) == proyectoSesion).toList();
+    localesFiltrados = localesFiltrados.where((p) => _extractProjectoFromPredio(p, proyectosValidos) == proyectoSesion).toList();
   }
   final merged = <Predio>[...remotos];
   final claves = remotos.map((p) => p.claveCatastral).toSet();

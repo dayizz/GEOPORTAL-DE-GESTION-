@@ -1,5 +1,6 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../../core/utils/import_normalization.dart' as norm;
 import '../../predios/data/predios_repository.dart';
 import '../../predios/models/propietario.dart';
 import '../../propietarios/data/propietarios_repository.dart';
@@ -32,8 +33,9 @@ class ImportacionRepository {
         _propietariosRepository = propietariosRepository;
 
   Future<ImportacionUpsertResult> upsertPredioConPropietario(
-    Map<String, dynamic> row,
-  ) async {
+    Map<String, dynamic> row, {
+    bool esRepetidoEnArchivo = false,
+  }) async {
     final clave = row['clave_catastral']?.toString().trim() ?? '';
     if (clave.isEmpty) {
       throw ArgumentError('Fila sin clave_catastral.');
@@ -54,17 +56,22 @@ class ImportacionRepository {
       payload['propietario_nombre'] = propietario.nombreCompleto;
     }
 
-    final existente = await _prediosRepository.buscarPorClaveCatastral(clave);
-    if (existente != null) {
-      await _prediosRepository.updatePredio(
-        existente['id'].toString(),
-        payload,
-      );
-      return const ImportacionUpsertResult(creado: false, actualizado: true);
-    }
+    // Si ya existe exactamente un registro con esta clave y este archivo no
+    // la había traído antes, esta fila se FUSIONA con él (join): típicamente
+    // es el "lado vectorial" del mismo predio, creado desde un GeoJSON,
+    // heredando datos mutuamente. Si `esRepetidoEnArchivo` es true (el
+    // propio archivo que se está importando ya trajo esta misma clave antes)
+    // se trata como una afectación repetida real y se crea un registro
+    // nuevo vinculado al mismo polígono, sin importar cuántos hermanos haya.
+    final resultado = await _prediosRepository.upsertPredioPorClave(
+      payload,
+      forzarNuevoRegistro: esRepetidoEnArchivo,
+    );
 
-    await _prediosRepository.createPredio(payload);
-    return const ImportacionUpsertResult(creado: true, actualizado: false);
+    return ImportacionUpsertResult(
+      creado: !resultado.fusionado,
+      actualizado: resultado.fusionado,
+    );
   }
 
   Future<ImportacionUpsertResult> upsertPropietario(
@@ -154,7 +161,7 @@ class ImportacionRepository {
   }
 
   String _normalizeUpperCode(String value) {
-    return _normalizePlainText(value).toUpperCase();
+    return norm.normalizeCode(value) ?? _normalizePlainText(value).toUpperCase();
   }
 
   String _normalizeEmail(String value) {

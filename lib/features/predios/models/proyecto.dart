@@ -11,7 +11,7 @@ class Proyecto {
   final double? kmInicio;
   final double? kmFin;
   final double superficie; // m²
-  final String proyecto; // TQI, TSNL, TAP, TQM, Sin proyecto
+  final String proyecto; // TQI, TSNL, TAP, TMQ, Sin proyecto
   final Map<String, dynamic>? geometry; // GeoJSON del polígono
   final DateTime createdAt;
   final DateTime? updatedAt;

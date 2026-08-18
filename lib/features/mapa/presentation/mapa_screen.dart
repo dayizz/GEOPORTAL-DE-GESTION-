@@ -21,12 +21,17 @@ import '../../predios/providers/demo_predios_notifier.dart';
 import '../../predios/providers/predios_provider.dart';
 import '../../predios/providers/local_predios_provider.dart';
 import '../../predios/providers/proyectos_provider.dart';
+import '../../estructura/providers/proyectos_provider.dart' show proyectosCodigosProvider;
 import '../../propietarios/data/propietarios_repository.dart';
 import '../../propietarios/providers/propietarios_provider.dart';
 import '../../carga/utils/geojson_mapper.dart';
 import '../../carga/utils/file_download_io.dart';
 import '../../../core/utils/browser_download.dart';
 import '../providers/mapa_provider.dart';
+import '../models/vista_mapa.dart';
+import '../providers/vistas_mapa_provider.dart';
+import 'widgets/guardar_vista_dialog.dart';
+import 'widgets/vista_mapa_selection_painter.dart';
 import 'package:screenshot/screenshot.dart';
 import '../utils/screenshot_crop_controller.dart';
 class MapaScreen extends ConsumerStatefulWidget {
@@ -40,9 +45,21 @@ class _MapaScreenState extends ConsumerState<MapaScreen> {
   final ScreenshotController _screenshotPackageCtrl = ScreenshotController();
   bool _isSelectingRegion = false;
   Predio? _selectedPredio;
+  // Afectaciones (registros de Gestión) que comparten el polígono
+  // seleccionado con `_selectedPredio`; longitud 1 en el caso normal.
+  List<Predio> _selectedAfectaciones = const [];
   bool _showCapturaModal = false;
   bool _showCapturaPantalla = false;
   bool _isCapturingScreen = false;
+  // "Guardar vista de mapa": recuadro de selección arrastrable sobre el
+  // mapa en vivo (no una imagen rasterizada, ver `_confirmarVistaSeleccionada`)
+  // + panel de vistas guardadas (crear/actualizar/eliminar).
+  bool _showVistasMapaPanel = false;
+  bool _isSelectingVista = false;
+  String? _vistaEnEdicionId;
+  Offset? _vistaSelStart;
+  Offset? _vistaSelCurrent;
+  bool _isGuardandoVista = false;
   bool _showLayersPanel = false;
   bool _showVisualizacionPanel = false;
   bool _showClaveLabels = false;
@@ -76,7 +93,10 @@ class _MapaScreenState extends ConsumerState<MapaScreen> {
   /// Índice del feature importado actualmente seleccionado para captura.
   int? _importedFeatureIndex;
   int? _manualFeatureIndex;
-  String? _manualSelectedPredioId;
+  // Ids de los registros de Gestión seleccionados para vincular al mismo
+  // polígono (afectaciones repetidas): el primero se vuelve el "ancla"
+  // (guarda la geometría propia), el resto solo se vincula a él.
+  final List<String> _manualSelectedPredioIds = [];
   final TextEditingController _manualPredioSearchCtrl = TextEditingController();
   int? _lastImportedFeaturesIdentity;
   /// Rotación actual del mapa en grados.
@@ -89,6 +109,9 @@ class _MapaScreenState extends ConsumerState<MapaScreen> {
   Set<String> _filtroTipoMapa = {};
   Set<String> _filtroTramoMapa = {};
   Set<String> _filtroEstadoMapa = {};
+  Set<String> _filtroEstructuraMapa = {};
+  Set<String> _filtroTipoLiberacionMapa = {};
+  Set<String> _filtroRangoEstatusMapa = {};
   bool _isMiddleMouseRotateActive = false;
   Offset? _lastMiddleMousePosition;
   bool _isTrackpadRotateActive = false;
@@ -108,6 +131,25 @@ class _MapaScreenState extends ConsumerState<MapaScreen> {
   MapaColorMode? _lastColorModeVisual;
   double? _lastOpacityVisual;
   List<_PredioVisualData>? _lastVisuals;
+  @override
+  void initState() {
+    super.initState();
+    // `prediosMapaProvider` usa `keepAlive()`: sin esto, datos borrados o
+    // modificados fuera de la app (o antes de la última vez que este
+    // provider se invalidó desde otra pantalla) seguían viéndose en el
+    // mapa hasta un recargo completo de la pestaña -mismo patrón ya usado
+    // en `BalanceScreen` para lo mismo-.
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) ref.invalidate(prediosMapaProvider);
+    });
+  }
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    ref.invalidate(prediosMapaProvider);
+  }
+
   @override
   void dispose() {
     _tramoCtrl.dispose();
@@ -150,9 +192,12 @@ class _MapaScreenState extends ConsumerState<MapaScreen> {
       if (predio != null) {
         WidgetsBinding.instance.addPostFrameCallback((_) {
           if (!mounted) return;
-          _flyToPredio(predio);
+          _flyToPredio(predio, prediosById: prediosById);
           ref.read(focusPredioIdProvider.notifier).state = null;
-          setState(() => _selectedPredio = predio);
+          setState(() {
+            _selectedPredio = predio;
+            _selectedAfectaciones = _afectacionesDeGrupo(predio, prediosById);
+          });
         });
       } else {
         // Predio no en prediosMapaProvider (ej: recién importado) →
@@ -183,19 +228,16 @@ class _MapaScreenState extends ConsumerState<MapaScreen> {
     final manualVincularPredioId = ref.watch(manualVincularPredioIdProvider);
     if (manualVincularPredioId != null) {
       prediosAsync.whenData((predios) {
-        final target = predios.cast<Predio?>().firstWhere(
-              (p) => p?.id == manualVincularPredioId,
-              orElse: () => null,
-            );
         WidgetsBinding.instance.addPostFrameCallback((_) {
           if (!mounted) return;
           setState(() {
             _showCapturaModal = true;
             _isManualLinkMode = true;
             _isDrawing = false;
-            _manualSelectedPredioId = manualVincularPredioId;
-            _manualPredioSearchCtrl.text =
-                target != null ? _manualPredioLabel(target) : '';
+            _manualSelectedPredioIds
+              ..clear()
+              ..add(manualVincularPredioId);
+            _manualPredioSearchCtrl.clear();
           });
           ref.read(manualVincularPredioIdProvider.notifier).state = null;
           ScaffoldMessenger.of(context).showSnackBar(
@@ -384,6 +426,7 @@ class _MapaScreenState extends ConsumerState<MapaScreen> {
                       }
                       if (tappedVisual != null) {
                         _selectedPredio = tappedVisual.predio;
+                        _selectedAfectaciones = tappedVisual.afectaciones;
                         _importedFeatureIndex = null;
                         if (_isDrawing && tappedVisual.rings.isNotEmpty) {
                           final selectedPoints = List<LatLng>.from(tappedVisual.rings.first);
@@ -437,6 +480,7 @@ class _MapaScreenState extends ConsumerState<MapaScreen> {
                         return;
                       }
                       _selectedPredio = null;
+                      _selectedAfectaciones = const [];
                     });
                     // Abrir captura fuera del setState para evitar setState anidado
                     if (importedIdxToOpen != null) {
@@ -501,6 +545,7 @@ class _MapaScreenState extends ConsumerState<MapaScreen> {
                                 child: GestureDetector(
                                   onTap: () => setState(() {
                                     _selectedPredio = selectedVisual.predio;
+                                    _selectedAfectaciones = selectedVisual.afectaciones;
                                     _importedFeatureIndex = null;
                                   }),
                                   child: _buildMarkerDot(selectedVisual.color),
@@ -717,6 +762,8 @@ class _MapaScreenState extends ConsumerState<MapaScreen> {
                 const SizedBox(width: 8),
                 _buildCapturaPantallaButton(),
                 const SizedBox(width: 8),
+                _buildVistasMapaButton(),
+                const SizedBox(width: 8),
                 _buildPksLabelsToggleButton(),
                 const SizedBox(width: 8),
                 _buildClaveLabelsToggleButton(),
@@ -728,6 +775,12 @@ class _MapaScreenState extends ConsumerState<MapaScreen> {
             bottom: 24,
             right: 16,
             child: _buildCompassRose(),
+          ),
+          // Leyenda de simbologia de colores segun "Visualizar poligonos por" - parte inferior izquierda
+          Positioned(
+            bottom: 24,
+            left: 16,
+            child: _buildLeyendaColores(colorMode),
           ),
           if (_showCapturaModal)
             Positioned(
@@ -743,7 +796,11 @@ class _MapaScreenState extends ConsumerState<MapaScreen> {
               child: Builder(
                 builder: (context) {
                   final screenWidth = MediaQuery.of(context).size.width;
-                  final cardWidth = screenWidth < 700 ? screenWidth - 32 : 280.0;
+                  // Ficha más ancha cuando el predio tiene varias
+                  // afectaciones (1:N) para poder listar la información de
+                  // cada una, no solo la del registro seleccionado.
+                  final anchoBase = _selectedAfectaciones.length > 1 ? 380.0 : 280.0;
+                  final cardWidth = screenWidth < 700 ? screenWidth - 32 : anchoBase;
                   return SizedBox(
                     width: cardWidth,
                     child: Align(
@@ -792,6 +849,7 @@ class _MapaScreenState extends ConsumerState<MapaScreen> {
                 ),
               ),
             ),
+          if (_isSelectingVista) Positioned.fill(child: _buildVistaSeleccionOverlay()),
         ],
     ),
   );
@@ -811,13 +869,25 @@ class _MapaScreenState extends ConsumerState<MapaScreen> {
       _filtroEstatusMapa.isNotEmpty ||
       _filtroTipoMapa.isNotEmpty ||
       _filtroTramoMapa.isNotEmpty ||
-      _filtroEstadoMapa.isNotEmpty;
+      _filtroEstadoMapa.isNotEmpty ||
+      _filtroEstructuraMapa.isNotEmpty ||
+      _filtroTipoLiberacionMapa.isNotEmpty ||
+      _filtroRangoEstatusMapa.isNotEmpty;
+
+  /// Mismo criterio que Gestión (`tabla_screen.dart`): un tipo de
+  /// liberación vacío o "-" se agrupa como "SIN TIPO" en vez de quedar
+  /// fuera de cualquier filtro.
+  String _normalizarTipoLiberacionMapa(String? value) {
+    final text = (value ?? '').trim().toUpperCase();
+    if (text.isEmpty || text == '-') return 'SIN TIPO';
+    return text;
+  }
 
   List<Predio> _applyFiltrosMapa(List<Predio> predios) {
     if (!_tieneFiltrosMapaActivos) return predios;
     return predios.where((p) {
       if (_filtroEstatusMapa.isNotEmpty) {
-        final estatus = p.cop ? 'Liberado' : 'No liberado';
+        final estatus = Predio.estatusSimplificado(p.rangoEstatus);
         if (!_filtroEstatusMapa.contains(estatus)) return false;
       }
       if (_filtroTipoMapa.isNotEmpty && !_filtroTipoMapa.contains(p.tipoPropiedad)) {
@@ -829,6 +899,18 @@ class _MapaScreenState extends ConsumerState<MapaScreen> {
       if (_filtroEstadoMapa.isNotEmpty && !_filtroEstadoMapa.contains(p.estado ?? '')) {
         return false;
       }
+      if (_filtroEstructuraMapa.isNotEmpty &&
+          !_filtroEstructuraMapa.contains(p.estructura ?? '')) {
+        return false;
+      }
+      if (_filtroTipoLiberacionMapa.isNotEmpty) {
+        final tipoLiberacion = _normalizarTipoLiberacionMapa(p.tipoLiberacion);
+        if (!_filtroTipoLiberacionMapa.contains(tipoLiberacion)) return false;
+      }
+      if (_filtroRangoEstatusMapa.isNotEmpty &&
+          !_filtroRangoEstatusMapa.contains(p.rangoEstatus)) {
+        return false;
+      }
       return true;
     }).toList(growable: false);
   }
@@ -837,6 +919,13 @@ class _MapaScreenState extends ConsumerState<MapaScreen> {
     final tipos = predios.map((p) => p.tipoPropiedad).where((t) => t.trim().isNotEmpty).toSet().toList()..sort();
     final tramos = predios.map((p) => p.tramo).where((t) => t.trim().isNotEmpty).toSet().toList()..sort();
     final estados = predios.map((p) => p.estado ?? '').where((e) => e.trim().isNotEmpty).toSet().toList()..sort();
+    final estructuras = predios.map((p) => p.estructura ?? '').where((e) => e.trim().isNotEmpty).toSet().toList()..sort();
+    final tiposLiberacion = predios.map((p) => _normalizarTipoLiberacionMapa(p.tipoLiberacion)).toSet().toList()
+      ..sort((a, b) {
+        if (a == 'SIN TIPO') return 1;
+        if (b == 'SIN TIPO') return -1;
+        return a.compareTo(b);
+      });
 
     Widget seccion(String titulo, List<String> opciones, Set<String> seleccion, Color color) {
       if (opciones.isEmpty) return const SizedBox.shrink();
@@ -923,6 +1012,9 @@ class _MapaScreenState extends ConsumerState<MapaScreen> {
                         _filtroTipoMapa = {};
                         _filtroTramoMapa = {};
                         _filtroEstadoMapa = {};
+                        _filtroEstructuraMapa = {};
+                        _filtroTipoLiberacionMapa = {};
+                        _filtroRangoEstatusMapa = {};
                       }),
                       child: const Text('Limpiar', style: TextStyle(fontSize: 12)),
                     ),
@@ -930,7 +1022,10 @@ class _MapaScreenState extends ConsumerState<MapaScreen> {
               ),
               const SizedBox(height: 10),
               seccion('Estatus', const ['Liberado', 'No liberado'], _filtroEstatusMapa, AppColors.secondary),
+              seccion('Rango de estatus', Predio.rangoEstatusOpciones, _filtroRangoEstatusMapa, AppColors.secondary),
               seccion('Tipo de propiedad', tipos, _filtroTipoMapa, AppColors.primary),
+              seccion('Tipo de liberacion', tiposLiberacion, _filtroTipoLiberacionMapa, AppColors.info),
+              seccion('Estructura', estructuras, _filtroEstructuraMapa, AppColors.primary),
               seccion('Segmento / Frente / Tramo', tramos, _filtroTramoMapa, AppColors.info),
               seccion('Estado', estados, _filtroEstadoMapa, AppColors.primary),
             ],
@@ -945,10 +1040,32 @@ class _MapaScreenState extends ConsumerState<MapaScreen> {
     MapaColorMode mode,
     double opacity,
   ) {
-    return predios.map((predio) {
-      final color = _predioColor(predio, mode);
-      final borderColor = _predioBorderColor(predio, mode);
-      final rings = _extractRings(predio.geometry);
+    // Agrupa predios que comparten un mismo polígono: el "ancla" (con
+    // geometry propia) más cualquier afectación vinculada a él vía
+    // `polygonRefId`, para renderizar UN solo polígono por grupo aunque
+    // existan varios registros de Gestión sobre el mismo predio físico.
+    final porId = {for (final p in predios) p.id: p};
+    final grupos = <String, List<Predio>>{};
+    for (final predio in predios) {
+      String? ownerId;
+      if (predio.geometry != null) {
+        ownerId = predio.id;
+      } else if (predio.polygonRefId != null &&
+          porId.containsKey(predio.polygonRefId)) {
+        ownerId = predio.polygonRefId;
+      }
+      if (ownerId == null) continue;
+      (grupos[ownerId] ??= []).add(predio);
+    }
+
+    final visuales = <_PredioVisualData>[];
+    for (final entry in grupos.entries) {
+      final ancla = porId[entry.key];
+      if (ancla == null || ancla.geometry == null) continue;
+      final afectaciones = entry.value;
+      final color = _grupoColor(afectaciones, mode);
+      final borderColor = _grupoBorderColor(afectaciones, mode);
+      final rings = _extractRings(ancla.geometry);
       final polygon = rings.isNotEmpty
           ? Polygon(
               points: rings.first,
@@ -958,15 +1075,101 @@ class _MapaScreenState extends ConsumerState<MapaScreen> {
               borderStrokeWidth: 1.8,
             )
           : null;
-      final markerPoint = _markerPoint(predio, rings);
-      return _PredioVisualData(
-        predio: predio,
+      final markerPoint = _markerPoint(ancla, rings);
+      visuales.add(_PredioVisualData(
+        predio: ancla,
+        afectaciones: afectaciones,
         color: color,
         rings: rings,
         polygon: polygon,
         markerPoint: markerPoint,
-      );
-    }).toList();
+      ));
+    }
+    return visuales;
+  }
+
+  /// Todas las afectaciones (registros de Gestión) que comparten el mismo
+  /// polígono que `predio` -sea porque `predio` es el ancla (tiene geometry
+  /// propia) o porque está vinculado a otro predio vía `polygonRefId`-. Se
+  /// usa fuera de `_buildVisualData` (ej. al enfocar un predio desde
+  /// Gestión) para no perder el contexto de afectaciones repetidas.
+  List<Predio> _afectacionesDeGrupo(Predio predio, Map<String, Predio> prediosById) {
+    final ownerId = predio.geometry != null
+        ? predio.id
+        : (predio.polygonRefId ?? predio.id);
+    final grupo = prediosById.values
+        .where((p) => p.id == ownerId || p.polygonRefId == ownerId)
+        .toList();
+    return grupo.isEmpty ? [predio] : grupo;
+  }
+
+  /// Color "preferente" de un grupo de afectaciones que comparten un mismo
+  /// polígono: el de la clasificación (según el modo activo) con más
+  /// afectaciones; en empate, la que sume mayor superficie (m2).
+  Color _grupoColor(List<Predio> afectaciones, MapaColorMode mode) {
+    if (afectaciones.length <= 1) {
+      return _predioColor(afectaciones.first, mode);
+    }
+    return _colorParaClave(_grupoClaveGanadora(afectaciones, mode), mode);
+  }
+
+  Color _grupoBorderColor(List<Predio> afectaciones, MapaColorMode mode) {
+    if (afectaciones.length <= 1) {
+      return _predioBorderColor(afectaciones.first, mode);
+    }
+    return _bordeParaClave(_grupoClaveGanadora(afectaciones, mode), mode);
+  }
+
+  String _claveColorDe(Predio predio, MapaColorMode mode) {
+    switch (mode) {
+      case MapaColorMode.tipoPropiedad:
+        return predio.tipoPropiedad;
+      case MapaColorMode.rangoEstatus:
+        return predio.rangoEstatus;
+      case MapaColorMode.estatusPredio:
+        return _predioEstatus(predio);
+    }
+  }
+
+  String _grupoClaveGanadora(List<Predio> afectaciones, MapaColorMode mode) {
+    final conteo = <String, int>{};
+    final superficieTotal = <String, double>{};
+    for (final p in afectaciones) {
+      final k = _claveColorDe(p, mode);
+      conteo[k] = (conteo[k] ?? 0) + 1;
+      superficieTotal[k] = (superficieTotal[k] ?? 0) + (p.superficie ?? 0);
+    }
+
+    var mejorClave = _claveColorDe(afectaciones.first, mode);
+    var mejorConteo = -1;
+    var mejorSuperficie = -1.0;
+    conteo.forEach((k, c) {
+      final sup = superficieTotal[k] ?? 0;
+      if (c > mejorConteo || (c == mejorConteo && sup > mejorSuperficie)) {
+        mejorClave = k;
+        mejorConteo = c;
+        mejorSuperficie = sup;
+      }
+    });
+    return mejorClave;
+  }
+
+  Color _colorParaClave(String clave, MapaColorMode mode) {
+    switch (mode) {
+      case MapaColorMode.tipoPropiedad:
+        return AppColors.tipoPropiedadColor(clave);
+      case MapaColorMode.rangoEstatus:
+        return AppColors.rangoEstatusColor(clave);
+      case MapaColorMode.estatusPredio:
+        return _estatusColor(clave);
+    }
+  }
+
+  Color _bordeParaClave(String clave, MapaColorMode mode) {
+    if (mode == MapaColorMode.rangoEstatus) {
+      return AppColors.rangoEstatusBorderColor(clave);
+    }
+    return _colorParaClave(clave, mode);
   }
   _PredioVisualData? _findVisualAtPoint(LatLng point, List<_PredioVisualData> visuals) {
     for (final visual in visuals.reversed) {
@@ -1043,7 +1246,7 @@ class _MapaScreenState extends ConsumerState<MapaScreen> {
     return _savedPolygonColor(polygon, mode);
   }
   String _predioEstatus(Predio predio) {
-    if (predio.cop) return 'Liberado';
+    if (Predio.estatusSimplificado(predio.rangoEstatus) == 'Liberado') return 'Liberado';
     if (predio.negociacion || predio.levantamiento || predio.identificacion) {
       return 'No liberado';
     }
@@ -1726,10 +1929,18 @@ class _MapaScreenState extends ConsumerState<MapaScreen> {
     final dy = p.latitude - projY;
     return (dx * dx) + (dy * dy);
   }
-  /// Centra el mapa en el predio dado (polígono o punto).
-  void _flyToPredio(Predio predio) {
+  /// Centra el mapa en el predio dado (polígono o punto). Si el predio no
+  /// tiene geometría propia (afectación vinculada por `polygonRefId` a un
+  /// predio vectorial), se usa la geometría del ancla para poder ubicarlo.
+  void _flyToPredio(Predio predio, {Map<String, Predio>? prediosById}) {
     try {
-      final rings = _extractRings(predio.geometry);
+      var geometry = predio.geometry;
+      if (geometry == null &&
+          predio.polygonRefId != null &&
+          prediosById != null) {
+        geometry = prediosById[predio.polygonRefId]?.geometry;
+      }
+      final rings = _extractRings(geometry);
       if (rings.isNotEmpty && rings.first.isNotEmpty) {
         final allPoints = <LatLng>[];
         for (final ring in rings) {
@@ -2249,6 +2460,99 @@ class _MapaScreenState extends ConsumerState<MapaScreen> {
       ),
     );
   }
+
+  /// Leyenda de simbologia de colores para el modo de "Visualizar poligonos
+  /// por" actualmente en uso. Se ubica en la parte inferior izquierda del mapa.
+  Widget _buildLeyendaColores(MapaColorMode mode) {
+    late final String titulo;
+    late final List<MapEntry<String, Color>> items;
+
+    switch (mode) {
+      case MapaColorMode.tipoPropiedad:
+        titulo = 'Tipo de propiedad';
+        items = [
+          const MapEntry('Privada', AppColors.tipoPrivada),
+          const MapEntry('Social', AppColors.tipoSocial),
+          const MapEntry('Dominio Pleno', AppColors.tipoDominioPleno),
+          const MapEntry('Gubernamental', AppColors.tipoGubernamental),
+          const MapEntry('Municipal', AppColors.tipoMunicipal),
+          const MapEntry('Estatal', AppColors.tipoEstatal),
+          const MapEntry('Federal', AppColors.tipoFederal),
+          const MapEntry('Desconocido', AppColors.tipoDesconocido),
+        ];
+        break;
+      case MapaColorMode.rangoEstatus:
+        titulo = 'Rango de estatus';
+        items = [
+          for (final opcion in Predio.rangoEstatusOpciones)
+            MapEntry(opcion, AppColors.rangoEstatusColor(opcion)),
+        ];
+        break;
+      case MapaColorMode.estatusPredio:
+        titulo = 'Estatus de predio';
+        items = [
+          MapEntry('Liberado', _estatusColor('Liberado')),
+          MapEntry('No liberado', _estatusColor('No liberado')),
+        ];
+        break;
+    }
+
+    return Card(
+      elevation: 6,
+      child: Container(
+        constraints: const BoxConstraints(maxWidth: 190),
+        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              titulo,
+              style: const TextStyle(
+                fontSize: 11,
+                fontWeight: FontWeight.w700,
+                color: Color(0xFF555555),
+              ),
+            ),
+            const SizedBox(height: 6),
+            for (final item in items)
+              Padding(
+                padding: const EdgeInsets.only(bottom: 3),
+                child: Row(
+                  children: [
+                    Container(
+                      width: 12,
+                      height: 12,
+                      decoration: BoxDecoration(
+                        color: item.value,
+                        shape: BoxShape.circle,
+                        border: Border.all(
+                          color: mode == MapaColorMode.rangoEstatus
+                              ? AppColors.rangoEstatusBorderColor(item.key)
+                              : item.value,
+                          width: 1.5,
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 6),
+                    Expanded(
+                      child: Text(
+                        item.key,
+                        style: const TextStyle(
+                          fontSize: 10.5,
+                          color: AppColors.textPrimary,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+          ],
+        ),
+      ),
+    );
+  }
+
   /// Panel de control de rotación - solo campo de texto y botón de regresar al norte.
   Widget _buildRotationPanel() {
     return Card(
@@ -2453,6 +2757,12 @@ class _MapaScreenState extends ConsumerState<MapaScreen> {
     final kmInicioText = predio.kmInicio != null ? _formatKm(predio.kmInicio!) : '';
     final kmFinText = predio.kmFin != null ? _formatKm(predio.kmFin!) : '';
     final kmEfectivoText = predio.kmEfectivos != null ? _formatKm(predio.kmEfectivos!) : '';
+    final afectaciones = _selectedAfectaciones;
+    final totalAfectaciones = afectaciones.length;
+    final afectacionesLiberadas = afectaciones
+        .where((p) => Predio.estatusSimplificado(p.rangoEstatus) == 'Liberado')
+        .length;
+    final afectacionesNoLiberadas = totalAfectaciones - afectacionesLiberadas;
 
     Widget infoRow(String label, String value) {
       return Padding(
@@ -2529,7 +2839,10 @@ class _MapaScreenState extends ConsumerState<MapaScreen> {
                 const Spacer(),
                 IconButton(
                   icon: const Icon(Icons.close, size: 18),
-                  onPressed: () => setState(() => _selectedPredio = null),
+                  onPressed: () => setState(() {
+                    _selectedPredio = null;
+                    _selectedAfectaciones = const [];
+                  }),
                   padding: EdgeInsets.zero,
                   constraints: const BoxConstraints(),
                 ),
@@ -2559,11 +2872,165 @@ class _MapaScreenState extends ConsumerState<MapaScreen> {
             ],
             const SizedBox(height: 6),
             infoRow('Propietario', predio.nombrePropietario),
+            Padding(
+              padding: const EdgeInsets.only(bottom: 4),
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const SizedBox(
+                    width: 74,
+                    child: Text(
+                      'Rango est.',
+                      style: TextStyle(
+                        fontSize: 11,
+                        color: AppColors.textSecondary,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 4),
+                  Expanded(
+                    child: Text(
+                      predio.rangoEstatus,
+                      style: TextStyle(
+                        fontSize: 12,
+                        color: AppColors.rangoEstatusColor(predio.rangoEstatus),
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
             infoRow('Estado', predio.estado ?? ''),
             infoRow('Municipio', predio.municipio ?? ''),
             infoRow('KM inicio', kmInicioText),
             infoRow('KM fin', kmFinText),
             infoRow('KM efectivo', kmEfectivoText),
+            if (totalAfectaciones > 1) ...[
+              const SizedBox(height: 4),
+              Container(
+                width: double.infinity,
+                padding: const EdgeInsets.all(8),
+                decoration: BoxDecoration(
+                  color: AppColors.surfaceVariant,
+                  borderRadius: BorderRadius.circular(6),
+                ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      'Afectaciones: $totalAfectaciones',
+                      style: const TextStyle(
+                        fontSize: 11,
+                        fontWeight: FontWeight.w700,
+                        color: AppColors.textPrimary,
+                      ),
+                    ),
+                    const SizedBox(height: 2),
+                    Text(
+                      'Afectaciones liberadas: ($afectacionesLiberadas/$totalAfectaciones)',
+                      style: const TextStyle(
+                        fontSize: 11,
+                        fontWeight: FontWeight.w600,
+                        color: Color(0xFF2E9E44),
+                      ),
+                    ),
+                    Text(
+                      'Afectaciones no liberadas: ($afectacionesNoLiberadas/$totalAfectaciones)',
+                      style: const TextStyle(
+                        fontSize: 11,
+                        fontWeight: FontWeight.w600,
+                        color: Color(0xFFD63A3A),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(height: 8),
+              const Text(
+                'DETALLE DE CADA AFECTACION',
+                style: TextStyle(
+                  fontSize: 11,
+                  color: AppColors.textSecondary,
+                  fontWeight: FontWeight.w700,
+                ),
+              ),
+              const SizedBox(height: 4),
+              ...afectaciones.map((p) {
+                final esActual = p.id == predio.id;
+                final estatusP = _predioEstatus(p);
+                final kmIniP = p.kmInicio != null ? _formatKm(p.kmInicio!) : '-';
+                final kmFinP = p.kmFin != null ? _formatKm(p.kmFin!) : '-';
+                return Container(
+                  width: double.infinity,
+                  margin: const EdgeInsets.only(bottom: 6),
+                  padding: const EdgeInsets.all(8),
+                  decoration: BoxDecoration(
+                    color: esActual
+                        ? AppColors.primary.withValues(alpha: 0.08)
+                        : AppColors.surfaceVariant,
+                    borderRadius: BorderRadius.circular(6),
+                    border: esActual ? Border.all(color: AppColors.primary) : null,
+                  ),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(
+                        children: [
+                          Expanded(
+                            child: Text(
+                              'T/F/S: ${p.tramo}',
+                              style: const TextStyle(
+                                fontSize: 11,
+                                fontWeight: FontWeight.w700,
+                                color: AppColors.textPrimary,
+                              ),
+                            ),
+                          ),
+                          Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                            decoration: BoxDecoration(
+                              color: _estatusColor(estatusP).withValues(alpha: 0.15),
+                              borderRadius: BorderRadius.circular(10),
+                            ),
+                            child: Text(
+                              estatusP,
+                              style: TextStyle(
+                                fontSize: 9,
+                                color: _estatusColor(estatusP),
+                                fontWeight: FontWeight.w700,
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 2),
+                      Text(
+                        p.nombrePropietario,
+                        style: const TextStyle(fontSize: 11, color: AppColors.textPrimary),
+                      ),
+                      Text(
+                        '${p.rangoEstatus} · KM $kmIniP - $kmFinP',
+                        style: const TextStyle(fontSize: 10, color: AppColors.textSecondary),
+                      ),
+                      Align(
+                        alignment: Alignment.centerRight,
+                        child: TextButton(
+                          style: TextButton.styleFrom(
+                            padding: EdgeInsets.zero,
+                            minimumSize: const Size(0, 0),
+                            tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                          ),
+                          onPressed: () => context.push('/predios/${p.id}'),
+                          child: const Text('Ver detalle', style: TextStyle(fontSize: 10)),
+                        ),
+                      ),
+                    ],
+                  ),
+                );
+              }),
+            ],
             const SizedBox(height: 2),
             Wrap(
               spacing: 8,
@@ -2594,8 +3061,9 @@ class _MapaScreenState extends ConsumerState<MapaScreen> {
     final prediosNoVinculados = _prediosSinPoligono(predios);
     final canAllProjects = ref.watch(canAccessAllProjectsProvider);
     final proyectosAsignados = ref.watch(currentUserAssignedProjectsProvider);
+    final proyectosVigentes = ref.watch(proyectosCodigosProvider);
     final proyectoOptions = canAllProjects
-        ? const ['Sin proyecto', 'TQI', 'TSNL', 'TQM', 'TAP']
+        ? ['Sin proyecto', ...proyectosVigentes]
         : ['Sin proyecto', ...proyectosAsignados];
     if (_proyecto != null && !proyectoOptions.contains(_proyecto)) {
       _proyecto = null;
@@ -2710,10 +3178,40 @@ class _MapaScreenState extends ConsumerState<MapaScreen> {
                       style: const TextStyle(fontSize: 11, color: Color(0xFF5E6670)),
                     ),
                     const SizedBox(height: 8),
+                    if (_manualSelectedPredioIds.isNotEmpty) ...[
+                      Wrap(
+                        spacing: 6,
+                        runSpacing: 6,
+                        children: [
+                          for (final id in _manualSelectedPredioIds)
+                            Builder(builder: (context) {
+                              final p = predios.cast<Predio?>().firstWhere(
+                                    (x) => x?.id == id,
+                                    orElse: () => null,
+                                  );
+                              final esAncla = _manualSelectedPredioIds.first == id;
+                              return Chip(
+                                label: Text(
+                                  (esAncla ? '★ ' : '') +
+                                      (p != null ? _manualPredioLabel(p) : id),
+                                  style: const TextStyle(fontSize: 11),
+                                ),
+                                visualDensity: VisualDensity.compact,
+                                materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                                onDeleted: () {
+                                  setState(() => _manualSelectedPredioIds.remove(id));
+                                },
+                              );
+                            }),
+                        ],
+                      ),
+                      const SizedBox(height: 6),
+                    ],
                     Autocomplete<Predio>(
                       optionsBuilder: (value) {
                         final query = value.text.trim().toLowerCase();
-                        final source = prediosNoVinculados;
+                        final source = prediosNoVinculados
+                            .where((p) => !_manualSelectedPredioIds.contains(p.id));
                         if (query.isEmpty) return source.take(20);
                         return source.where((p) {
                           final label = _manualPredioLabel(p).toLowerCase();
@@ -2723,8 +3221,10 @@ class _MapaScreenState extends ConsumerState<MapaScreen> {
                       displayStringForOption: _manualPredioLabel,
                       onSelected: (selected) {
                         setState(() {
-                          _manualSelectedPredioId = selected.id;
-                          _manualPredioSearchCtrl.text = _manualPredioLabel(selected);
+                          if (!_manualSelectedPredioIds.contains(selected.id)) {
+                            _manualSelectedPredioIds.add(selected.id);
+                          }
+                          _manualPredioSearchCtrl.clear();
                         });
                       },
                       fieldViewBuilder: (context, textController, focusNode, onSubmitted) {
@@ -2740,7 +3240,7 @@ class _MapaScreenState extends ConsumerState<MapaScreen> {
                           controller: textController,
                           focusNode: focusNode,
                           decoration: InputDecoration(
-                            labelText: 'Registro de Gestion (sin poligono)',
+                            labelText: 'Agregar registro de Gestion (sin poligono)',
                             labelStyle: const TextStyle(fontSize: 11),
                             hintText: 'Buscar por clave o propietario',
                             isDense: true,
@@ -2751,10 +3251,7 @@ class _MapaScreenState extends ConsumerState<MapaScreen> {
                             ),
                           ),
                           onChanged: (v) {
-                            setState(() {
-                              _manualPredioSearchCtrl.text = v;
-                              _manualSelectedPredioId = null;
-                            });
+                            setState(() => _manualPredioSearchCtrl.text = v);
                           },
                         );
                       },
@@ -2764,7 +3261,7 @@ class _MapaScreenState extends ConsumerState<MapaScreen> {
                       width: double.infinity,
                       child: ElevatedButton.icon(
                         onPressed: (_manualFeatureIndex == null ||
-                                _manualSelectedPredioId == null ||
+                                _manualSelectedPredioIds.isEmpty ||
                                 _isLinkingManual)
                             ? null
                             : () => _vincularPoligonoManual(predios),
@@ -2966,14 +3463,16 @@ class _MapaScreenState extends ConsumerState<MapaScreen> {
       _isDrawing = false;
       if (!_isManualLinkMode) {
         _manualFeatureIndex = null;
-        _manualSelectedPredioId = null;
+        _manualSelectedPredioIds.clear();
         _manualPredioSearchCtrl.clear();
       }
     });
   }
   List<Predio> _prediosSinPoligono(List<Predio> predios) {
     return predios.where((p) {
-      final vinculado = p.poligonoInsertado || p.geometry != null;
+      final vinculado = p.poligonoInsertado ||
+          p.geometry != null ||
+          (p.polygonRefId != null && p.polygonRefId!.trim().isNotEmpty);
       return !vinculado;
     }).toList(growable: false);
   }
@@ -3051,8 +3550,8 @@ class _MapaScreenState extends ConsumerState<MapaScreen> {
   }
   Future<void> _vincularPoligonoManual(List<Predio> predios) async {
     final idx = _manualFeatureIndex;
-    final predioId = _manualSelectedPredioId;
-    if (idx == null || predioId == null) return;
+    final predioIds = List<String>.from(_manualSelectedPredioIds);
+    if (idx == null || predioIds.isEmpty) return;
     final imported = ref.read(importedFeaturesProvider);
     if (idx < 0 || idx >= imported.length) return;
     final feature = imported[idx];
@@ -3065,40 +3564,64 @@ class _MapaScreenState extends ConsumerState<MapaScreen> {
       );
       return;
     }
-    final predio = predios.cast<Predio?>().firstWhere(
-          (p) => p?.id == predioId,
-          orElse: () => null,
-        );
-    if (predio == null) return;
+    final seleccionados = predioIds
+        .map((id) => predios.cast<Predio?>().firstWhere(
+              (p) => p?.id == id,
+              orElse: () => null,
+            ))
+        .whereType<Predio>()
+        .toList();
+    if (seleccionados.isEmpty) return;
+    final ancla = seleccionados.first;
+
+    if (seleccionados.length > 1 &&
+        seleccionados.any((p) => p.id.startsWith('local-'))) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text(
+            'No se pueden vincular varios registros cuando alguno aún no está sincronizado. '
+            'Espera a que sincronice o vincula solo uno a la vez.',
+          ),
+        ),
+      );
+      return;
+    }
+
     setState(() => _isLinkingManual = true);
     try {
       final idPoligono = _poligonoIdFromFeature(importedFeatures: imported, index: idx);
-      if (predio.id.startsWith('local-')) {
+      if (ancla.id.startsWith('local-')) {
         ref.read(localPrediosProvider.notifier).updatePredio(
-              predio.copyWith(
+              ancla.copyWith(
                 geometry: geometry,
                 poligonoInsertado: true,
                 updatedAt: DateTime.now(),
               ),
             );
-      } else {
+      } else if (seleccionados.length == 1) {
         await ref.read(prediosRepositoryProvider).vincularPoligonoConPredio(
               idPoligono: idPoligono,
-              idGestion: predio.id,
+              idGestion: ancla.id,
+              geometry: geometry,
+            );
+      } else {
+        await ref.read(prediosRepositoryProvider).vincularPoligonoConPredios(
+              idPoligono: idPoligono,
+              idsGestion: seleccionados.map((p) => p.id).toList(),
               geometry: geometry,
             );
       }
         final removedLocalDuplicates =
             ref.read(localPrediosProvider.notifier).removeDuplicatesAfterManualLink(
-              keepPredioId: predio.id,
+              keepPredioId: ancla.id,
               linkedGeometry: geometry,
-              keepClave: predio.claveCatastral,
-              linkedOwner: predio.nombrePropietario,
+              keepClave: ancla.claveCatastral,
+              linkedOwner: ancla.nombrePropietario,
             );
       final updatedImported = _removeImportedDuplicatesAfterLink(
         imported: imported,
         selectedIndex: idx,
-        linkedPredioId: predio.id,
+        linkedPredioId: ancla.id,
         linkedPoligonoId: idPoligono,
         linkedGeometry: geometry,
       );
@@ -3109,16 +3632,19 @@ class _MapaScreenState extends ConsumerState<MapaScreen> {
       setState(() {
         _isLinkingManual = false;
         _manualFeatureIndex = null;
-        _manualSelectedPredioId = null;
+        _manualSelectedPredioIds.clear();
         _manualPredioSearchCtrl.clear();
         _isManualLinkMode = false;
       });
+      final mensajeBase = seleccionados.length > 1
+          ? 'Vinculacion completada: ${seleccionados.length} registros comparten ahora el mismo poligono.'
+          : 'Vinculacion completada correctamente.';
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text(
             removedLocalDuplicates > 0
-                ? 'Vinculacion completada. Se eliminaron $removedLocalDuplicates duplicado(s).'
-                : 'Vinculacion completada correctamente.',
+                ? '$mensajeBase Se eliminaron $removedLocalDuplicates duplicado(s).'
+                : mensajeBase,
           ),
         ),
       );
@@ -3349,6 +3875,374 @@ class _MapaScreenState extends ConsumerState<MapaScreen> {
       );
     }
   }
+
+  /// Botón "Vistas de mapa": guarda posiciones de cámara con nombre y
+  /// proyecto (retenidas en Firestore) para reutilizarse luego como punto
+  /// de partida de un elemento de mapa en Composiciones.
+  Widget _buildVistasMapaButton() {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Material(
+          color: Colors.transparent,
+          child: InkWell(
+            onTap: () => setState(() => _showVistasMapaPanel = !_showVistasMapaPanel),
+            borderRadius: BorderRadius.circular(10),
+            child: Ink(
+              width: 40,
+              height: 40,
+              decoration: BoxDecoration(
+                color: Colors.white,
+                borderRadius: BorderRadius.circular(10),
+                border: Border.all(color: const Color(0xFFD9D9D9)),
+                boxShadow: const [
+                  BoxShadow(color: Color(0x1F000000), blurRadius: 12, offset: Offset(0, 6)),
+                ],
+              ),
+              child: const Center(
+                child: Icon(Icons.crop_free, size: 20, color: Color(0xFF2A5B52)),
+              ),
+            ),
+          ),
+        ),
+        if (_showVistasMapaPanel) ...[
+          const SizedBox(height: 6),
+          _buildVistasMapaPanel(),
+        ],
+      ],
+    );
+  }
+
+  Widget _buildVistasMapaPanel() {
+    final vistasAsync = ref.watch(vistasMapaProvider);
+    return Card(
+      elevation: 6,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+      child: Padding(
+        padding: const EdgeInsets.all(12),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Text(
+              'Vistas de mapa',
+              style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: Colors.black),
+            ),
+            const SizedBox(height: 4),
+            const Text(
+              'Guarda la posición actual del mapa para reutilizarla en Composiciones.',
+              style: TextStyle(fontSize: 11, color: Color(0xFF666666)),
+            ),
+            const SizedBox(height: 12),
+            SizedBox(
+              width: 260,
+              child: ElevatedButton.icon(
+                onPressed: () => _iniciarSeleccionVista(),
+                icon: const Icon(Icons.add, size: 18),
+                label: const Text('Nueva vista'),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: AppColors.primary,
+                  foregroundColor: Colors.white,
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                ),
+              ),
+            ),
+            const SizedBox(height: 10),
+            const Divider(height: 1),
+            const SizedBox(height: 8),
+            SizedBox(
+              width: 260,
+              height: 220,
+              child: vistasAsync.when(
+                loading: () => const Center(child: CircularProgressIndicator(strokeWidth: 2)),
+                error: (e, _) => Text('Error: $e', style: const TextStyle(fontSize: 11, color: AppColors.danger)),
+                data: (vistas) {
+                  if (vistas.isEmpty) {
+                    return const Center(
+                      child: Text(
+                        'Sin vistas guardadas todavía.',
+                        style: TextStyle(fontSize: 12, color: Color(0xFF888888)),
+                        textAlign: TextAlign.center,
+                      ),
+                    );
+                  }
+                  final ordenadas = [...vistas]..sort((a, b) => a.nombre.compareTo(b.nombre));
+                  return ListView.separated(
+                    itemCount: ordenadas.length,
+                    separatorBuilder: (_, __) => const Divider(height: 1),
+                    itemBuilder: (context, index) => _buildVistaGuardadaTile(ordenadas[index]),
+                  );
+                },
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildVistaGuardadaTile(VistaMapa vista) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 4),
+      child: Row(
+        children: [
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(vista.nombre, style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600)),
+                Text(vista.proyecto, style: const TextStyle(fontSize: 10, color: Color(0xFF888888))),
+              ],
+            ),
+          ),
+          IconButton(
+            tooltip: 'Ir a esta vista',
+            icon: const Icon(Icons.my_location, size: 16),
+            visualDensity: VisualDensity.compact,
+            onPressed: () {
+              _mapCtrl.move(LatLng(vista.lat, vista.lng), vista.zoom);
+              setState(() => _showVistasMapaPanel = false);
+            },
+          ),
+          IconButton(
+            tooltip: 'Actualizar vista',
+            icon: const Icon(Icons.edit_outlined, size: 16),
+            visualDensity: VisualDensity.compact,
+            onPressed: () => _iniciarSeleccionVista(vistaExistente: vista),
+          ),
+          IconButton(
+            tooltip: 'Eliminar vista',
+            icon: const Icon(Icons.delete_outline, size: 16, color: AppColors.danger),
+            visualDensity: VisualDensity.compact,
+            onPressed: () => _eliminarVista(vista),
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _iniciarSeleccionVista({VistaMapa? vistaExistente}) {
+    setState(() {
+      _showVistasMapaPanel = false;
+      _isSelectingVista = true;
+      _vistaEnEdicionId = vistaExistente?.id;
+      _vistaSelStart = null;
+      _vistaSelCurrent = null;
+    });
+  }
+
+  void _cancelarSeleccionVista() {
+    setState(() {
+      _isSelectingVista = false;
+      _vistaEnEdicionId = null;
+      _vistaSelStart = null;
+      _vistaSelCurrent = null;
+    });
+  }
+
+  /// Recuadro de selección arrastrable sobre el mapa EN VIVO (a diferencia
+  /// de "Captura de pantalla", que rasteriza primero y recorta después):
+  /// aquí solo hacen falta las coordenadas del recuadro para calcular qué
+  /// centro/zoom de cámara corresponde a esa área -ver
+  /// `_confirmarVistaSeleccionada`-, así que no hace falta capturar ninguna
+  /// imagen.
+  Widget _buildVistaSeleccionOverlay() {
+    return GestureDetector(
+      behavior: HitTestBehavior.opaque,
+      onPanStart: (details) => setState(() {
+        _vistaSelStart = details.localPosition;
+        _vistaSelCurrent = details.localPosition;
+      }),
+      onPanUpdate: (details) => setState(() => _vistaSelCurrent = details.localPosition),
+      child: Stack(
+        children: [
+          Positioned.fill(
+            child: IgnorePointer(
+              child: CustomPaint(
+                painter: VistaMapaSelectionPainter(start: _vistaSelStart, current: _vistaSelCurrent),
+              ),
+            ),
+          ),
+          Positioned(
+            top: 16,
+            left: 0,
+            right: 0,
+            child: Center(
+              child: Card(
+                color: Colors.black87,
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+                child: const Padding(
+                  padding: EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                  child: Text(
+                    'Arrastra sobre el mapa para marcar el área de la vista',
+                    style: TextStyle(color: Colors.white, fontSize: 12),
+                  ),
+                ),
+              ),
+            ),
+          ),
+          Positioned(
+            bottom: 24,
+            left: 0,
+            right: 0,
+            child: Center(
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  ElevatedButton.icon(
+                    onPressed: _isGuardandoVista ? null : _cancelarSeleccionVista,
+                    icon: const Icon(Icons.close, size: 18),
+                    label: const Text('Cancelar'),
+                    // El tema global fuerza minimumSize: Size(double.infinity,
+                    // 48) en todo ElevatedButton; dentro de un Row sin
+                    // Expanded eso revienta el layout (ancho infinito). Se
+                    // anula aquí con un tamaño acotado (mismo fix que en
+                    // ComposicionEditorScreen).
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: Colors.white,
+                      foregroundColor: Colors.black87,
+                      minimumSize: const Size(64, 40),
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  ElevatedButton.icon(
+                    onPressed: _seleccionValida() && !_isGuardandoVista ? _confirmarVistaSeleccionada : null,
+                    icon: _isGuardandoVista
+                        ? const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2))
+                        : const Icon(Icons.check, size: 18),
+                    label: const Text('Guardar'),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: AppColors.primary,
+                      foregroundColor: Colors.white,
+                      minimumSize: const Size(64, 40),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  bool _seleccionValida() {
+    final start = _vistaSelStart;
+    final current = _vistaSelCurrent;
+    if (start == null || current == null) return false;
+    return (start - current).distance > 24;
+  }
+
+  Future<void> _confirmarVistaSeleccionada() async {
+    final start = _vistaSelStart;
+    final current = _vistaSelCurrent;
+    if (start == null || current == null) return;
+
+    final camera = _mapCtrl.camera;
+    final esquina1 = camera.offsetToCrs(start);
+    final esquina2 = camera.offsetToCrs(current);
+    final bounds = LatLngBounds(esquina1, esquina2);
+    final ajustada = CameraFit.bounds(bounds: bounds).fit(camera);
+
+    final proyectos = ref.read(proyectosCodigosProvider);
+    VistaMapa? vistaExistente;
+    if (_vistaEnEdicionId != null) {
+      final coincidencias = (ref.read(vistasMapaProvider).valueOrNull ?? const <VistaMapa>[])
+          .where((v) => v.id == _vistaEnEdicionId)
+          .toList();
+      vistaExistente = coincidencias.isEmpty ? null : coincidencias.first;
+    }
+
+    if (!mounted) return;
+    final resultado = await mostrarGuardarVistaDialog(
+      context,
+      proyectosDisponibles: proyectos,
+      nombreInicial: vistaExistente?.nombre,
+      proyectoInicial: vistaExistente?.proyecto,
+      esActualizacion: vistaExistente != null,
+    );
+    if (resultado == null) return;
+
+    // Se retiene el tipo de mapa base y si las etiquetas de clave estaban
+    // activas al momento de capturar, para que el elemento de mapa que se
+    // inserte luego en Composiciones se vea igual que aquí (antes solo se
+    // guardaba la posición y siempre salía con mapa estándar sin etiquetas).
+    final baseLayerActual = ref.read(mapaBaseLayerProvider).name;
+    final etiquetasClaveActuales = _showClaveLabels;
+
+    setState(() => _isGuardandoVista = true);
+    try {
+      final repo = ref.read(vistasMapaRepositoryProvider);
+      if (vistaExistente != null) {
+        await repo.actualizar(
+          id: vistaExistente.id,
+          nombre: resultado.nombre,
+          proyecto: resultado.proyecto,
+          lat: ajustada.center.latitude,
+          lng: ajustada.center.longitude,
+          zoom: ajustada.zoom,
+          baseLayer: baseLayerActual,
+          mostrarEtiquetasClave: etiquetasClaveActuales,
+        );
+      } else {
+        final user = ref.read(currentUserProvider);
+        await repo.crear(
+          nombre: resultado.nombre,
+          proyecto: resultado.proyecto,
+          lat: ajustada.center.latitude,
+          lng: ajustada.center.longitude,
+          zoom: ajustada.zoom,
+          baseLayer: baseLayerActual,
+          mostrarEtiquetasClave: etiquetasClaveActuales,
+          createdByUid: user?.uid,
+          createdByEmail: user?.email,
+        );
+      }
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(vistaExistente != null ? 'Vista actualizada.' : 'Vista guardada.'),
+          backgroundColor: AppColors.secondary,
+        ),
+      );
+      _cancelarSeleccionVista();
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('No se pudo guardar la vista: $e'), backgroundColor: AppColors.danger),
+      );
+    } finally {
+      if (mounted) setState(() => _isGuardandoVista = false);
+    }
+  }
+
+  Future<void> _eliminarVista(VistaMapa vista) async {
+    final confirmado = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Eliminar vista'),
+        content: Text('¿Eliminar la vista "${vista.nombre}"? Esta acción no se puede deshacer.'),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Cancelar')),
+          TextButton(onPressed: () => Navigator.pop(ctx, true), child: const Text('Eliminar')),
+        ],
+      ),
+    );
+    if (confirmado != true) return;
+    try {
+      await ref.read(vistasMapaRepositoryProvider).eliminar(vista.id);
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Vista eliminada.'), backgroundColor: AppColors.secondary),
+      );
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('No se pudo eliminar: $e'), backgroundColor: AppColors.danger),
+      );
+    }
+  }
+
   Widget _buildTextField({
     required String label,
     required TextEditingController controller,
@@ -3487,6 +4381,9 @@ class _MapaScreenState extends ConsumerState<MapaScreen> {
     if (proyecto == null) return null;
     final normalized = proyecto.trim().toUpperCase();
     if (normalized.isEmpty || normalized == 'SIN PROYECTO') return null;
+    // 'TQM' es un alias heredado (typo histórico); el código correcto es
+    // 'TMQ' (Tren México-Querétaro).
+    if (normalized == 'TQM') return 'TMQ';
     return normalized;
   }
   String? _mergeOficioProyectoTag(String? oficioActual, String? proyecto) {
@@ -3503,10 +4400,11 @@ class _MapaScreenState extends ConsumerState<MapaScreen> {
   }
   String? _inferProyectoFromText(String text) {
     final upper = text.toUpperCase();
-    const proyectos = ['TQI', 'TSNL', 'TAP', 'TQM'];
+    final proyectos = ref.read(proyectosCodigosProvider);
     for (final proyecto in proyectos) {
       if (upper.contains(proyecto)) return proyecto;
     }
+    if (upper.contains('TQM') && proyectos.contains('TMQ')) return 'TMQ';
     return null;
   }
   String _normalizeFieldKey(String input) {
@@ -3846,6 +4744,7 @@ class _MapaScreenState extends ConsumerState<MapaScreen> {
       }
       _importedFeatureIndex = idx;
       _selectedPredio = null;
+      _selectedAfectaciones = const [];
       _draftPoints
         ..clear()
         ..addAll(points);
@@ -4247,12 +5146,17 @@ class _SavedPolygon {
 }
 class _PredioVisualData {
   final Predio predio;
+  // Todos los registros de Gestión que comparten este mismo polígono
+  // (afectaciones repetidas sobre el mismo predio físico); incluye a
+  // `predio` (el "ancla"). Longitud 1 en el caso normal (sin repetidas).
+  final List<Predio> afectaciones;
   final Color color;
   final List<List<LatLng>> rings;
   final Polygon? polygon;
   final LatLng? markerPoint;
   const _PredioVisualData({
     required this.predio,
+    required this.afectaciones,
     required this.color,
     required this.rings,
     required this.polygon,

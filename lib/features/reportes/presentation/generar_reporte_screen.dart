@@ -16,6 +16,7 @@ import '../../../core/utils/browser_download.dart';
 import '../../predios/providers/predios_provider.dart';
 import '../../predios/models/predio.dart';
 import '../../auth/providers/auth_provider.dart';
+import '../../estructura/providers/proyectos_provider.dart';
 
 // Variables para fuentes - se inicializan en el método de generación
 late pw.Font notoSansRegular;
@@ -34,8 +35,9 @@ class GenerarReporteScreen extends ConsumerStatefulWidget {
 }
 
 class _GenerarReporteScreenState extends ConsumerState<GenerarReporteScreen> {
-  static const _proyectos = ['TQI', 'TSNL', 'TAP', 'TQM'];
-  
+  /// Códigos de proyecto vigentes, dados de alta en Estructura (Firestore).
+  List<String> get _proyectos => ref.read(proyectosCodigosProvider);
+
   String _proyectoActual = 'TQI';
   String _datosNumericosDe = 'Proyecto';
   String? _segmentoSeleccionado;
@@ -57,7 +59,7 @@ class _GenerarReporteScreenState extends ConsumerState<GenerarReporteScreen> {
     'TQI': 1,
     'TSNL': 1,
     'TAP': 1,
-    'TQM': 1,
+    'TMQ': 1,
   };
   int _numeroReporte = 1;
   bool _isGenerating = false;
@@ -143,6 +145,9 @@ class _GenerarReporteScreenState extends ConsumerState<GenerarReporteScreen> {
   }
   String _predioProyecto(Predio predicado) {
     final proyectoDirecto = predicado.proyecto?.trim().toUpperCase();
+    // 'TQM' es un alias heredado (typo histórico); el código correcto es
+    // 'TMQ' (Tren México-Querétaro).
+    if (proyectoDirecto == 'TQM') return 'TMQ';
     if (proyectoDirecto != null && _proyectos.contains(proyectoDirecto)) {
       return proyectoDirecto;
     }
@@ -152,7 +157,9 @@ class _GenerarReporteScreenState extends ConsumerState<GenerarReporteScreen> {
     if (compact.startsWith('TQI') || compact.startsWith('QI')) return 'TQI';
     if (compact.startsWith('TSNL') || compact.startsWith('SNL') || compact.startsWith('SL')) return 'TSNL';
     if (compact.startsWith('TAP') || compact.startsWith('AP')) return 'TAP';
-    if (compact.startsWith('TQM') || compact.startsWith('QM')) return 'TQM';
+    if (compact.startsWith('TMQ') || compact.startsWith('TQM') || compact.startsWith('QM')) {
+      return 'TMQ';
+    }
 
     final contenido = [
       predicado.claveCatastral,
@@ -165,6 +172,7 @@ class _GenerarReporteScreenState extends ConsumerState<GenerarReporteScreen> {
     for (final proyecto in _proyectos) {
       if (contenido.contains(proyecto)) return proyecto;
     }
+    if (contenido.contains('TQM')) return 'TMQ';
 
     return 'Sin proyecto';
   }
@@ -715,6 +723,7 @@ class _GenerarReporteScreenState extends ConsumerState<GenerarReporteScreen> {
 
   @override
   Widget build(BuildContext context) {
+    ref.watch(proyectosCodigosProvider);
     final canAllProjects = ref.watch(canAccessAllProjectsProvider);
     final proyectosAsignados = ref.watch(currentUserAssignedProjectsProvider);
     final proyectosDisponibles = canAllProjects

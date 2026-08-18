@@ -50,3 +50,6 @@ app.*.map.json
 /functions/lib
 /functions/.env*
 *.serviceAccountKey.json
+
+# Python local environment
+venv/

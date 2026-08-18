@@ -7,6 +7,7 @@ import '../../../core/constants/app_colors.dart';
 import '../models/predio.dart';
 import '../../../core/constants/app_strings.dart';
 import '../../../shared/widgets/app_scaffold.dart';
+import '../../estructura/providers/proyectos_provider.dart';
 
 class PrediosListScreen extends ConsumerStatefulWidget {
   const PrediosListScreen({super.key});
@@ -306,7 +307,7 @@ class _PrediosListScreenState extends ConsumerState<PrediosListScreen> {
               const SizedBox(height: 10),
               Wrap(
                 spacing: 8,
-                children: ['TQI', 'TSNL', 'TAP', 'TQM'].map((proyecto) {
+                children: ref.read(proyectosCodigosProvider).map((proyecto) {
                   final selected = proyectoTmp == proyecto;
                   return FilterChip(
                     label: Text(proyecto),

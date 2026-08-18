@@ -23,6 +23,43 @@ void main() {
     });
   });
 
+  group('featuresIndicesSinClave', () {
+    test('returns 1-based indices of features with no resolvable clave', () {
+      final indices = featuresIndicesSinClave([
+        {
+          'properties': {'clave_catastral': 'ABC-123'},
+        },
+        {
+          'properties': {'clave_catastral': ''},
+        },
+        {
+          'properties': {'folio': 'F-456'}, // resolvable via alias
+        },
+        {
+          'properties': <String, dynamic>{},
+        },
+        {
+          'properties': null,
+        },
+      ]);
+
+      expect(indices, [2, 4, 5]);
+    });
+
+    test('returns an empty list when every feature has a clave', () {
+      final indices = featuresIndicesSinClave([
+        {
+          'properties': {'clave_catastral': 'ABC-123'},
+        },
+        {
+          'properties': {'id_sedatu': 'S-999'},
+        },
+      ]);
+
+      expect(indices, isEmpty);
+    });
+  });
+
   group('shouldClearImportedMapAfterFileDeletion', () {
     test('returns true when the same feature list instance is active', () {
       final features = [

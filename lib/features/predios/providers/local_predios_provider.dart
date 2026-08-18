@@ -4,14 +4,17 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../carga/utils/geojson_mapper.dart';
 import '../models/predio.dart';
+import '../../estructura/providers/proyectos_provider.dart';
 
 final localPrediosProvider =
     StateNotifierProvider<LocalPrediosNotifier, List<Predio>>(
-  (ref) => LocalPrediosNotifier(),
+  (ref) => LocalPrediosNotifier(ref),
 );
 
 class LocalPrediosNotifier extends StateNotifier<List<Predio>> {
-  LocalPrediosNotifier() : super(const []);
+  LocalPrediosNotifier(this._ref) : super(const []);
+
+  final Ref _ref;
 
   int removeByClaves(Set<String> clavesNormalizadas) {
     if (clavesNormalizadas.isEmpty || state.isEmpty) return 0;
@@ -94,6 +97,8 @@ class LocalPrediosNotifier extends StateNotifier<List<Predio>> {
         pdfUrl: _normalizeOptionalText(predio.pdfUrl),
         copFecha: predio.copFecha,
         poligonoDwg: _normalizeOptionalText(predio.poligonoDwg),
+        planoPdf: _normalizeOptionalText(predio.planoPdf),
+        bdt: _normalizeOptionalText(predio.bdt),
         oficio: _normalizeOptionalText(predio.oficio),
         updatedAt: now,
       );
@@ -220,6 +225,10 @@ class LocalPrediosNotifier extends StateNotifier<List<Predio>> {
       for (final p in state)
         if (p.id == updated.id) updated else p,
     ];
+  }
+
+  void removePredio(String id) {
+    state = state.where((p) => p.id != id).toList(growable: false);
   }
 
   String? _stringValue(dynamic value) {
@@ -361,6 +370,8 @@ class LocalPrediosNotifier extends StateNotifier<List<Predio>> {
       pdfUrl: _preferNullableText(existing.pdfUrl, incoming.pdfUrl),
       copFecha: incoming.copFecha ?? existing.copFecha,
       poligonoDwg: _preferNullableText(existing.poligonoDwg, incoming.poligonoDwg),
+      planoPdf: _preferNullableText(existing.planoPdf, incoming.planoPdf),
+      bdt: _preferNullableText(existing.bdt, incoming.bdt),
       oficio: _preferNullableText(existing.oficio, incoming.oficio),
       proyecto: _preferNullableText(existing.proyecto, incoming.proyecto),
       poligonoInsertado: existing.poligonoInsertado || incoming.poligonoInsertado,
@@ -533,9 +544,12 @@ class LocalPrediosNotifier extends StateNotifier<List<Predio>> {
   String? _normalizeProyecto(String? value) {
     final upper = _normalizeOptionalText(value)?.toUpperCase();
     if (upper == null) return null;
-    for (final code in const ['TQI', 'TSNL', 'TAP', 'TQM']) {
+    for (final code in _ref.read(proyectosCodigosProvider)) {
       if (upper.contains(code)) return code;
     }
+    // 'TQM' es un alias heredado (typo histórico); el código correcto es
+    // 'TMQ' (Tren México-Querétaro).
+    if (upper.contains('TQM')) return 'TMQ';
     return upper;
   }
 
@@ -551,6 +565,8 @@ class LocalPrediosNotifier extends StateNotifier<List<Predio>> {
           a.pdfUrl == b.pdfUrl &&
           a.copFecha == b.copFecha &&
         a.poligonoDwg == b.poligonoDwg &&
+        a.planoPdf == b.planoPdf &&
+        a.bdt == b.bdt &&
         a.oficio == b.oficio;
   }
 

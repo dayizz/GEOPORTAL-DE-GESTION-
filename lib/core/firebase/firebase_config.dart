@@ -18,12 +18,12 @@ class FirebaseConfig {
   static const String measurementId =
       String.fromEnvironment('FIREBASE_MEASUREMENT_ID', defaultValue: '');
 
-  static bool get isConfigured {
-    return apiKey.trim().isNotEmpty &&
-        appId.trim().isNotEmpty &&
-        messagingSenderId.trim().isNotEmpty &&
-        projectId.trim().isNotEmpty;
-  }
+  // La app real se inicializa en main.dart con
+  // `DefaultFirebaseOptions.currentPlatform` (generado por flutterfire-cli),
+  // no con estos --dart-define (que nunca se definen en el build real y
+  // por eso este check siempre daba falso en producción, aunque Firebase
+  // sí estuviera correctamente inicializado). Se verifica el estado real.
+  static bool get isConfigured => Firebase.apps.isNotEmpty;
 
   static FirebaseOptions get options {
     return FirebaseOptions(

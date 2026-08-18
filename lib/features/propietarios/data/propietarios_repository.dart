@@ -2,6 +2,7 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:uuid/uuid.dart';
 
+import '../../../core/utils/import_normalization.dart' as norm;
 import '../../predios/models/propietario.dart';
 
 final propietariosRepositoryProvider = Provider<PropietariosRepository>(
@@ -118,14 +119,14 @@ class PropietariosRepository {
     String nombre;
     String apellidos;
 
+    // Capitalización + sin acentos, para que "José"/"Jose"/"JOSE" y
+    // "María Pérez"/"MARIA PEREZ" terminen siendo el mismo propietario en
+    // vez de crear duplicados por cómo venía escrito en el archivo origen.
     if (data['nombre'] != null && data['nombre'].toString().isNotEmpty) {
-      nombre = data['nombre'].toString().trim();
-      apellidos = data['apellidos']?.toString().trim() ?? '';
+      nombre = norm.normalizeTitleCase(data['nombre'].toString()) ?? '';
+      apellidos = norm.normalizeTitleCase(data['apellidos']?.toString()) ?? '';
     } else {
-      final full = (data['nombre_completo'] ?? '')
-          .toString()
-          .trim()
-          .replaceAll(RegExp(r'\s+'), ' ');
+      final full = norm.normalizeTitleCase((data['nombre_completo'] ?? '').toString()) ?? '';
       if (full.isEmpty) throw ArgumentError('Se requiere nombre del propietario');
       final parts = full.split(' ');
       nombre = parts.first;
@@ -133,7 +134,7 @@ class PropietariosRepository {
     }
 
     final all = await getPropietarios(limit: 5000);
-    final rfc = data['rfc']?.toString().trim();
+    final rfc = norm.normalizeCode(data['rfc']?.toString());
 
     Propietario? existing;
     if (rfc != null && rfc.isNotEmpty) {
@@ -150,20 +151,21 @@ class PropietariosRepository {
           item.apellidos.trim().toUpperCase() == apellidos.toUpperCase();
     }).firstOrNull;
 
+    final curp = norm.normalizeCode(data['curp']?.toString());
+    final telefono = data['telefono']?.toString().trim();
+    final correo = data['correo']?.toString().trim().toLowerCase();
+
     if (existing != null) {
       final updates = <String, dynamic>{};
       if (rfc != null && rfc.isNotEmpty && (existing.rfc == null || existing.rfc!.isEmpty)) {
         updates['rfc'] = rfc;
       }
-      final curp = data['curp']?.toString().trim();
       if (curp != null && curp.isNotEmpty && (existing.curp == null || existing.curp!.isEmpty)) {
         updates['curp'] = curp;
       }
-      final telefono = data['telefono']?.toString().trim();
       if (telefono != null && telefono.isNotEmpty && (existing.telefono == null || existing.telefono!.isEmpty)) {
         updates['telefono'] = telefono;
       }
-      final correo = data['correo']?.toString().trim();
       if (correo != null && correo.isNotEmpty && (existing.correo == null || existing.correo!.isEmpty)) {
         updates['correo'] = correo;
       }
@@ -177,7 +179,7 @@ class PropietariosRepository {
       return existing;
     }
 
-    final razonSocial = data['razon_social']?.toString().trim();
+    final razonSocial = norm.normalizeTitleCase(data['razon_social']?.toString());
     final nombreCompleto = '$nombre $apellidos'.trim().toUpperCase();
     final tipoPersona = data['tipo_persona']?.toString() ??
         ((razonSocial != null && razonSocial.isNotEmpty) ||
@@ -194,9 +196,9 @@ class PropietariosRepository {
       'tipo_persona': tipoPersona,
       if (razonSocial != null && razonSocial.isNotEmpty) 'razon_social': razonSocial,
       if (rfc != null && rfc.isNotEmpty) 'rfc': rfc,
-      if (data['curp']?.toString().trim().isNotEmpty == true) 'curp': data['curp'].toString().trim(),
-      if (data['telefono']?.toString().trim().isNotEmpty == true) 'telefono': data['telefono'].toString().trim(),
-      if (data['correo']?.toString().trim().isNotEmpty == true) 'correo': data['correo'].toString().trim(),
+      if (curp != null && curp.isNotEmpty) 'curp': curp,
+      if (telefono != null && telefono.isNotEmpty) 'telefono': telefono,
+      if (correo != null && correo.isNotEmpty) 'correo': correo,
     };
 
     return createPropietario(insertData);

@@ -1,3 +1,5 @@
+import '../../../core/utils/import_normalization.dart' as norm;
+
 /// Normaliza las claves de un objeto `properties` de GeoJSON
 /// para que coincidan exactamente con las columnas del esquema de datos.
 ///
@@ -59,6 +61,12 @@ class GeoJsonMapper {
       'tipo_estructura', 'TIPO_ESTRUCTURA',
       'clase_estructura', 'CLASE_ESTRUCTURA',
       'estruc', 'ESTRUC',
+    ],
+    'tipo_liberacion': [
+      'tipo_liberacion', 'TIPO_LIBERACION',
+      'tipo_de_liberacion', 'TIPO_DE_LIBERACION',
+      'liberacion', 'LIBERACION',
+      'cop_dot', 'COP_DOT', 'cop_dot_aop', 'COP_DOT_AOP',
     ],
     'ejido': [
       'ejido', 'EJIDO',
@@ -147,16 +155,26 @@ class GeoJsonMapper {
       'nombre_ent', 'NOMBRE_ENT',
       'estado_nombre', 'ESTADO_NOMBRE',
     ],
-    // Status de liberación (COP)
+    // Status de liberación (COP). NOTA: 'estatus' NO es alias de 'cop' -esa
+    // palabra se reserva para 'rango_estatus' (Liberado/Negociacion/Posible
+    // DOT/...)-, para no chocar cuando un archivo trae ambas columnas.
     'cop': [
       'cop', 'COP',
-      'status', 'STATUS', 'estatus', 'ESTATUS',
+      'status', 'STATUS',
       'liberado', 'LIBERADO',
       'liberada', 'LIBERADA',
       'firmado', 'FIRMADO',
       'cop_firmado', 'COP_FIRMADO',
-      'estatus_liberacion', 'ESTATUS_LIBERACION',
       'anuencia', 'ANUENCIA',
+    ],
+    // "Estatus" / "Rango de estatus": Liberado, Negociacion, Posible DOT,
+    // Instruccion UVSR, Con ingreso, No liberado, L nueva.
+    'rango_estatus': [
+      'rango_estatus', 'RANGO_ESTATUS',
+      'rango de estatus', 'RANGO DE ESTATUS',
+      'rango_de_estatus', 'RANGO_DE_ESTATUS',
+      'estatus', 'ESTATUS',
+      'estatus_predio', 'ESTATUS_PREDIO',
     ],
     // Campos booleanos de gestión
     'identificacion': [
@@ -220,10 +238,31 @@ class GeoJsonMapper {
     'telefono': ['telefono', 'TELEFONO', 'tel', 'TEL', 'phone'],
     'correo':   ['correo', 'email', 'EMAIL', 'correo_electronico'],
     'razon_social': ['razon_social', 'RAZON_SOCIAL', 'empresa', 'EMPRESA', 'denominacion'],
+    'cop_fecha': [
+      'cop_fecha', 'COP_FECHA',
+      'fecha_liberacion', 'FECHA_LIBERACION',
+      'fecha_de_liberacion', 'FECHA_DE_LIBERACION',
+      'fecha liberacion', 'FECHA LIBERACION',
+      'fecha de liberacion', 'FECHA DE LIBERACION',
+    ],
+    'fecha_limite_pago': [
+      'fecha_limite_pago', 'FECHA_LIMITE_PAGO',
+      'fecha_limite_de_pago', 'FECHA_LIMITE_DE_PAGO',
+      'fecha limite de pago', 'FECHA LIMITE DE PAGO',
+      'fecha_limite', 'FECHA_LIMITE',
+      'fecha limite', 'FECHA LIMITE',
+      'limite_pago', 'LIMITE_PAGO',
+      'fecha_pago', 'FECHA_PAGO',
+      'fecha de pago', 'FECHA DE PAGO',
+    ],
   };
 
-  /// Proyectos conocidos para detección automática.
-  static const _proyectosConocidos = ['TQI', 'TSNL', 'TAP', 'TQM'];
+  /// Proyectos conocidos para detección automática durante la importación.
+  /// Se mantiene mutable: `carga_archivo_screen.dart` lo sincroniza con los
+  /// proyectos vigentes en Estructura (Firestore) antes de cada importación,
+  /// para que un proyecto recién creado (o eliminado) ahí se reconozca aquí
+  /// también. El valor inicial es el fallback si aún no se sincronizó.
+  static List<String> proyectosConocidos = ['TQI', 'TSNL', 'TAP', 'TMQ'];
 
   static String _normalizeKey(String input) {
     var s = input.toLowerCase();
@@ -259,7 +298,7 @@ class GeoJsonMapper {
     final upper = _normalizeSpaces(value).toUpperCase();
     if (upper.isEmpty) return null;
 
-    for (final code in _proyectosConocidos) {
+    for (final code in proyectosConocidos) {
       final regex = RegExp('(^|[^A-Z0-9])' + code + r'([^A-Z0-9]|$)');
       if (regex.hasMatch(upper) || upper.contains(code)) {
         return code;
@@ -281,7 +320,11 @@ class GeoJsonMapper {
       return 'TSNL';
     }
     if (compact.startsWith('TAP') || compact.startsWith('AP')) return 'TAP';
-    if (compact.startsWith('TQM') || compact.startsWith('QM')) return 'TQM';
+    // 'TQM' se reconoce como alias heredado (typo histórico); el código
+    // canónico correcto es 'TMQ' (Tren México-Querétaro).
+    if (compact.startsWith('TMQ') || compact.startsWith('TQM') || compact.startsWith('QM')) {
+      return 'TMQ';
+    }
 
     return null;
   }
@@ -334,26 +377,57 @@ class GeoJsonMapper {
     final text = _normalizeSpaces(value);
 
     switch (key) {
+      // Códigos: recorte + sin acentos/guiones sueltos + MAYÚSCULAS.
       case 'clave_catastral':
       case 'rfc':
       case 'curp':
-        return text.toUpperCase();
+      case 'tramo':
+        return norm.normalizeCode(text) ?? text.toUpperCase();
       case 'correo':
         return text.toLowerCase();
       case 'proyecto':
         return _normalizeProyecto(text);
       case 'tipo_propiedad':
-        return _normalizeTipoPropiedad(text);
+        return norm.normalizeTipoPropiedad(text);
+      case 'tipo_liberacion':
+        return norm.normalizeTipoLiberacion(text);
+      case 'estructura':
+        return norm.normalizeEstructura(text) ?? text;
+      // "Ejido": texto libre, salvo variantes de "no aplica" (no todos los
+      // predios pertenecen a un ejido) que se guardan como "N/A".
+      case 'ejido':
+        return norm.normalizeEjido(text) ?? text;
+      // "Estatus"/"Rango de estatus" contra el catálogo de Gestión.
+      case 'rango_estatus':
+        return norm.normalizeRangoEstatus(text);
+      // "Fecha de liberación" (COP/DOT): acepta ISO, dd/mm/aaaa y
+      // dd-mm-aaaa, siempre se guarda en ISO 8601.
+      case 'cop_fecha':
+      case 'fecha_limite_pago':
+        return norm.normalizeFechaLiberacion(text);
+      // Texto libre para mostrar: recorte + sin acentos + Capitalización.
+      case 'propietario_nombre':
+      case 'razon_social':
+      case 'estado':
+      case 'municipio':
+      case 'colonia':
+      case 'direccion':
+      case 'descripcion':
+        return norm.normalizeTitleCase(text) ?? text;
       // Para campos booleanos, convertir strings a boolean
       case 'identificacion':
       case 'levantamiento':
       case 'negociacion':
       case 'cop':
-        return _normalizeBoolean(text);
-      // Para campos numéricos, convertir strings a double
-      case 'superficie':
+        return norm.normalizeBoolean(text);
+      // "km inicio"/"km fin": aceptan formato PK ("12+359") o decimal
+      // ("12.359") -misma distancia-, siempre se guardan como el mismo
+      // número (12.359) para que Gestión los muestre en formato PK.
       case 'km_inicio':
       case 'km_fin':
+        return norm.normalizeKmValue(text);
+      // Para el resto de campos numéricos, convertir strings a double
+      case 'superficie':
       case 'km_lineales':
       case 'km_efectivos':
       case 'valor_catastral':
@@ -381,24 +455,6 @@ class GeoJsonMapper {
     'poligono_insertado',
   };
 
-  /// Convierte strings a boolean para campos de status
-  static bool _normalizeBoolean(String value) {
-    final upper = value.toUpperCase().trim();
-    // Valores que se consideran "true"
-    if (upper == 'SI' || upper == 'YES' || upper == 'S' || upper == 'Y' || 
-        upper == 'TRUE' || upper == '1' || upper == 'X' ||
-        upper == 'COMPLETADO' || upper == 'COMPLETE' || 
-        upper == 'LIBERADO' || upper == 'LIBERADA' ||
-        upper == 'IDENTIFICADO' || upper == 'LEVANTADO' || upper == 'NEGOCIADO') {
-      return true;
-    }
-    // Valores que se consideran "false"
-    if (upper == 'NO' || upper == 'FALSE' || upper == '0' || upper == '-' || upper.isEmpty) {
-      return false;
-    }
-    return false;
-  }
-
   static String _normalizeSpaces(String value) {
     return value.replaceAll(RegExp(r'\s+'), ' ').trim();
   }
@@ -407,19 +463,6 @@ class GeoJsonMapper {
     final inferred = _inferProyectoDesdeTexto(value);
     if (inferred != null) return inferred;
     return value.toUpperCase();
-  }
-
-  static String _normalizeTipoPropiedad(String value) {
-    final upper = value.toUpperCase();
-    final compact = upper.replaceAll(RegExp(r'[^A-Z0-9]'), '');
-    if (compact.contains('SOC')) return 'SOCIAL';
-    if (compact.contains('DOMINIOPLENO') || (compact.contains('DOMINIO') && compact.contains('PLENO'))) return 'DOMINIO PLENO';
-    if (upper.contains('EJI')) return 'EJIDAL';
-    if (upper.contains('MIX')) return 'MIXTO';
-    if (upper.contains('FEDERAL')) return 'FEDERAL';
-    if (upper.contains('GUBERNAMENTAL') || upper.contains('GUBERNAM') || upper.contains('GOBIERNO')) return 'GUBERNAMENTAL';
-    if (compact.contains('PRIVAD') || compact == 'PRI') return 'PRIVADA';
-    return upper.isEmpty ? 'PRIVADA' : upper;
   }
 
   /// Intenta detectar el proyecto a partir de las properties normalizadas.
@@ -491,7 +534,7 @@ class GeoJsonMapper {
 
       // Campo inyectado por SincronizacionService
       final inyectado = props['_proyecto']?.toString().trim().toUpperCase();
-      if (inyectado != null && _proyectosConocidos.contains(inyectado)) {
+      if (inyectado != null && proyectosConocidos.contains(inyectado)) {
         proyectosDetectados.add(inyectado);
         if (proyectosDetectados.length > 1) return null;
         continue;

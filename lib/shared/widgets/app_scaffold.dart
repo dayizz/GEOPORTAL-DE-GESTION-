@@ -78,6 +78,12 @@ class AppScaffold extends ConsumerWidget {
       route: '/estructura',
       isVisible: (perfil) => canAccessRouteByPerfil('/estructura', perfil),
     ),
+    _NavItem(
+      icon: Icons.image_outlined,
+      label: 'Composiciones',
+      route: '/composiciones',
+      isVisible: (perfil) => canAccessRouteByPerfil('/composiciones', perfil),
+    ),
   ];
   static const double _desktopRailWidth = 88;
 
@@ -135,7 +141,10 @@ class AppScaffold extends ConsumerWidget {
                             ),
                             label: Text(
                               item.label,
-                              style: const TextStyle(fontSize: 11),
+                              style: const TextStyle(fontSize: 10),
+                              maxLines: 1,
+                              softWrap: false,
+                              overflow: TextOverflow.ellipsis,
                             ),
                           ))
                       .toList(),

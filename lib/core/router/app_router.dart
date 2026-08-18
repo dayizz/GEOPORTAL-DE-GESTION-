@@ -18,6 +18,8 @@ import '../../features/carga/presentation/carga_archivo_screen.dart';
 import '../../features/tabla/presentation/tabla_screen.dart';
 import '../../features/perfil/presentation/perfil_screen.dart';
 import '../../features/estructura/presentation/estructura_screen.dart';
+import '../../features/composiciones/presentation/composiciones_list_screen.dart';
+import '../../features/composiciones/presentation/composicion_editor_screen.dart';
 import 'router_redirect_logic.dart';
 
 /// Notifica a GoRouter que debe reevaluar `redirect` sin recrear el router.
@@ -124,7 +126,9 @@ final routerProvider = Provider<GoRouter>((ref) {
         routes: [
           GoRoute(
             path: 'nuevo',
-            builder: (_, __) => const PredioFormScreen(),
+            builder: (_, state) => PredioFormScreen(
+              proyectoInicial: state.uri.queryParameters['proyecto'],
+            ),
           ),
           GoRoute(
             path: ':id',
@@ -206,6 +210,26 @@ final routerProvider = Provider<GoRouter>((ref) {
         pageBuilder: (_, __) => const NoTransitionPage(
           child: EstructuraScreen(),
         ),
+      ),
+      GoRoute(
+        path: '/composiciones',
+        pageBuilder: (_, __) => const NoTransitionPage(
+          child: ComposicionesListScreen(),
+        ),
+        routes: [
+          GoRoute(
+            path: 'nuevo',
+            builder: (_, state) => ComposicionEditorScreen(
+              proyectoInicial: state.uri.queryParameters['proyecto'],
+            ),
+          ),
+          GoRoute(
+            path: ':id',
+            builder: (_, state) => ComposicionEditorScreen(
+              id: state.pathParameters['id']!,
+            ),
+          ),
+        ],
       ),
     ],
   );

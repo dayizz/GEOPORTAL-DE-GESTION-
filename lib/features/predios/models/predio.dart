@@ -21,7 +21,10 @@ class Predio {
   final String? copFirmado; // Archivo PDF del COP firmado
   final String? pdfUrl; // URL publica del PDF COP/DOT en storage
   final DateTime? copFecha; // Fecha asociada al documento COP/DOT
+  final DateTime? fechaLimitePago;
   final String? poligonoDwg; // Archivo DWG del polígono
+  final String? planoPdf; // URL del plano en PDF
+  final String? bdt; // URL del archivo BDT (Base de Datos Técnica)
   final String? oficio; // Oficio entregado
   final String? proyecto;
   final bool poligonoInsertado;
@@ -39,6 +42,12 @@ class Predio {
   final DateTime? updatedAt;
   final String rangoEstatus; // Liberado, L nueva, Instruccion UVSR, Con ingreso, Negociacion, Posible DOT, No liberado
   final DateTime? rangoEstatusFecha; // fecha del último cambio de rangoEstatus
+  // Cuando varios registros de Gestión representan afectaciones distintas
+  // sobre el mismo predio físico (misma clave catastral repetida, o
+  // vinculados manualmente), solo UNO conserva su propio `geometry` (el
+  // "ancla"/predio vectorial); los demás apuntan a él con `polygonRefId`
+  // para compartir un único polígono en el mapa sin duplicar geometría.
+  final String? polygonRefId;
 
   // Aliases para compatibilidad con pantallas existentes
   String get usoSuelo => tipoPropiedad;
@@ -90,7 +99,10 @@ class Predio {
     this.copFirmado,
     this.pdfUrl,
     this.copFecha,
+    this.fechaLimitePago,
     this.poligonoDwg,
+    this.planoPdf,
+    this.bdt,
     this.oficio,
     this.proyecto,
     this.poligonoInsertado = false,
@@ -108,6 +120,7 @@ class Predio {
     this.updatedAt,
     this.rangoEstatus = 'No liberado',
     this.rangoEstatusFecha,
+    this.polygonRefId,
   });
 
   factory Predio.fromMap(Map<String, dynamic> map) {
@@ -146,35 +159,6 @@ class Predio {
       return upper.isEmpty ? 'PRIVADA' : upper;
     }
 
-    Map<String, String?> inferEstadoMunicipioDesdeClave(String? clave) {
-      if (clave == null || clave.trim().isEmpty) {
-        return {'estado': null, 'municipio': null};
-      }
-
-      final upper = clave.trim().toUpperCase();
-      final tokens = upper
-          .split(RegExp(r'[^A-Z0-9]+'))
-          .where((token) => token.isNotEmpty)
-          .toList(growable: false);
-      final code = tokens.length >= 2 ? tokens[1] : '';
-
-      const municipiosTsnl = {
-        'SLV': 'Salinas Victoria',
-        'VIL': 'Villaldama',
-        'BUS': 'Bustamante',
-        'LAM': 'Lampazos de Naranjo',
-        'ANA': 'Anahuac',
-        'SAB': 'Sabinas Hidalgo',
-      };
-
-      return {
-        'estado': upper.startsWith('SNL') || upper.startsWith('TSNL')
-            ? 'Nuevo Leon'
-            : null,
-        'municipio': municipiosTsnl[code],
-      };
-    }
-
     // Normalizar geometría: puede venir como string JSON o como Map
     Map<String, dynamic>? geometry;
     final geometryRaw = map['geometry'];
@@ -190,17 +174,6 @@ class Predio {
       }
     }
     
-    final ubicacionInferida = inferEstadoMunicipioDesdeClave(
-      pickText([
-        'clave_catastral',
-        'CLAVE_CATASTRAL',
-        'clave',
-        'CLAVE',
-        'id_sedatu',
-        'ID_SEDATU',
-      ]) ?? map['clave_catastral']?.toString() ?? map['CLAVE']?.toString(),
-    );
-
     return Predio(
       id: map['id'] as String,
       claveCatastral: map['clave_catastral'] as String? ?? map['id_sedatu'] as String? ?? '',
@@ -233,7 +206,7 @@ class Predio {
         'state', 'STATE',
         'nom_estado', 'NOM_ESTADO',
         'nombre_estado', 'NOMBRE_ESTADO',
-      ]) ?? map['estado'] as String? ?? ubicacionInferida['estado'],
+      ]) ?? map['estado'] as String?,
       municipio: pickText([
         'municipio', 'MUNICIPIO',
         'mun', 'MUN',
@@ -242,7 +215,7 @@ class Predio {
         'municipality', 'MUNICIPALITY',
         'nom_municipio', 'NOM_MUNICIPIO',
         'nombre_municipio', 'NOMBRE_MUNICIPIO',
-      ]) ?? map['municipio'] as String? ?? ubicacionInferida['municipio'],
+      ]) ?? map['municipio'] as String?,
       kmInicio: pickDouble(['km_inicio', 'KM_INICIO', 'km inicio', 'KM INICIO', 'km_ini', 'KM_INI']) ?? (map['km_inicio'] as num?)?.toDouble(),
       kmFin: pickDouble(['km_fin', 'KM_FIN', 'km fin', 'KM FIN', 'cadenamiento_final', 'CADENAMIENTO_FINAL']) ?? (map['km_fin'] as num?)?.toDouble(),
       kmLineales: pickDouble(['km_lineales', 'KM_LINEALES', 'km lineales', 'KM LINEALES', 'longitud_km', 'LONGITUD_KM']) ?? (map['km_lineales'] as num?)?.toDouble(),
@@ -254,7 +227,12 @@ class Predio {
         copFecha: map['cop_fecha'] != null
           ? DateTime.tryParse(map['cop_fecha'] as String)
           : null,
+      fechaLimitePago: map['fecha_limite_pago'] != null
+          ? DateTime.tryParse(map['fecha_limite_pago'] as String)
+          : null,
       poligonoDwg: map['poligono_dwg'] as String?,
+      planoPdf: map['plano_pdf'] as String?,
+      bdt: map['bdt'] as String?,
       oficio: map['oficio'] as String?,
       proyecto: map['proyecto'] as String?,
       poligonoInsertado: map['poligono_insertado'] as bool? ?? false,
@@ -279,6 +257,7 @@ class Predio {
       rangoEstatusFecha: map['rango_estatus_fecha'] != null
           ? DateTime.tryParse(map['rango_estatus_fecha'] as String)
           : null,
+      polygonRefId: pickText(['polygon_ref_id', 'POLYGON_REF_ID']),
     );
   }
 
@@ -301,7 +280,10 @@ class Predio {
       'cop_firmado': copFirmado,
       'pdf_url': pdfUrl,
       'cop_fecha': copFecha?.toIso8601String(),
+      'fecha_limite_pago': fechaLimitePago?.toIso8601String(),
       'poligono_dwg': poligonoDwg,
+      'plano_pdf': planoPdf,
+      'bdt': bdt,
       'oficio': oficio,
       'poligono_insertado': poligonoInsertado,
       'identificacion': identificacion,
@@ -315,6 +297,7 @@ class Predio {
       'propietario_id': propietarioId,
       'rango_estatus': rangoEstatus,
       'rango_estatus_fecha': rangoEstatusFecha?.toIso8601String(),
+      'polygon_ref_id': polygonRefId,
     };
   }
 
@@ -352,7 +335,10 @@ class Predio {
     String? copFirmado,
     String? pdfUrl,
     DateTime? copFecha,
+    DateTime? fechaLimitePago,
     String? poligonoDwg,
+    String? planoPdf,
+    String? bdt,
     String? oficio,
     String? proyecto,
     bool? poligonoInsertado,
@@ -370,6 +356,19 @@ class Predio {
     DateTime? updatedAt,
     String? rangoEstatus,
     DateTime? rangoEstatusFecha,
+    String? polygonRefId,
+    // Los campos de archivo (link) son la única forma de "borrar" un valor
+    // ya guardado: por el patrón `param ?? this.field` de copyWith, pasar
+    // `null` normalmente NO limpia el campo (se conserva el valor actual).
+    // Estas banderas permiten forzar el borrado explícito desde "Editar
+    // archivos" en Gestión.
+    bool clearPdfUrl = false,
+    bool clearCopFirmado = false,
+    bool clearCopFecha = false,
+    bool clearFechaLimitePago = false,
+    bool clearPoligonoDwg = false,
+    bool clearPlanoPdf = false,
+    bool clearBdt = false,
   }) {
     return Predio(
       id: id ?? this.id,
@@ -387,10 +386,13 @@ class Predio {
       kmEfectivos: kmEfectivos ?? this.kmEfectivos,
       superficie: superficie ?? this.superficie,
       cop: cop ?? this.cop,
-      copFirmado: copFirmado ?? this.copFirmado,
-      pdfUrl: pdfUrl ?? this.pdfUrl,
-      copFecha: copFecha ?? this.copFecha,
-      poligonoDwg: poligonoDwg ?? this.poligonoDwg,
+      copFirmado: clearCopFirmado ? null : (copFirmado ?? this.copFirmado),
+      pdfUrl: clearPdfUrl ? null : (pdfUrl ?? this.pdfUrl),
+      copFecha: clearCopFecha ? null : (copFecha ?? this.copFecha),
+      fechaLimitePago: clearFechaLimitePago ? null : (fechaLimitePago ?? this.fechaLimitePago),
+      poligonoDwg: clearPoligonoDwg ? null : (poligonoDwg ?? this.poligonoDwg),
+      planoPdf: clearPlanoPdf ? null : (planoPdf ?? this.planoPdf),
+      bdt: clearBdt ? null : (bdt ?? this.bdt),
       oficio: oficio ?? this.oficio,
       proyecto: proyecto ?? this.proyecto,
       poligonoInsertado: poligonoInsertado ?? this.poligonoInsertado,
@@ -408,6 +410,7 @@ class Predio {
       updatedAt: updatedAt ?? this.updatedAt,
       rangoEstatus: rangoEstatus ?? this.rangoEstatus,
       rangoEstatusFecha: rangoEstatusFecha ?? this.rangoEstatusFecha,
+      polygonRefId: polygonRefId ?? this.polygonRefId,
     );
   }
 }

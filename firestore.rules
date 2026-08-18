@@ -82,7 +82,7 @@ service cloud.firestore {
         && isString(request.resource.data.clave_catastral, 1, 120)
         && isString(request.resource.data.tramo, 0, 20)
         && isString(request.resource.data.tipo_propiedad, 1, 60);
-      allow delete: if isAdmin();
+      allow delete: if canWriteOperationalData() || isOperativo();
     }
 
     // Espejo público y saneado de `predios`, generado por la Cloud Function
@@ -114,12 +114,14 @@ service cloud.firestore {
         && (!('created_by_uid' in request.resource.data)
             || request.resource.data.created_by_uid == null
             || request.resource.data.created_by_uid == request.auth.uid);
-      allow delete: if isAdmin()
-        || ((isGestor() || isSupervisorInstitucional()) && (
-          resource.data.created_by_uid == request.auth.uid
-          || !('created_by_uid' in resource.data)
-          || resource.data.created_by_uid == null
-        ));
+      // Cualquier perfil con acceso a "Archivos" puede eliminar cualquier
+      // archivo, sin importar quien lo importo originalmente: en la
+      // practica, la mayoria de los archivos los sube una sola cuenta
+      // (quien hace la carga inicial del proyecto) y restringir el borrado
+      // al uid original dejaba al resto de los perfiles sin poder borrar
+      // casi nada, mostrando "permiso denegado" para archivos que si deben
+      // poder gestionar.
+      allow delete: if canWriteOperationalData() || isOperativo();
     }
 
     // Perfiles de usuarios del sistema para administración.
@@ -147,6 +149,45 @@ service cloud.firestore {
       );
 
       allow delete: if isAdmin();
+    }
+
+    // Catalogo de proyectos y su cadenamiento (Estructura > Proyectos).
+    match /proyectos/{proyectoId} {
+      allow read: if isSignedIn();
+      allow create, update: if isSignedIn() && (isAdmin() || isGestor())
+        && request.resource.data.keys().hasAll(['nombre', 'descripcion', 'activo'])
+        && isString(request.resource.data.nombre, 1, 60)
+        && isString(request.resource.data.descripcion, 0, 500);
+      allow delete: if isAdmin();
+    }
+
+    // Vista "Composiciones": por ahora solo Administrador (misma regla
+    // que canAccessComposiciones() en el cliente). El borrado no se
+    // restringe al uid que la creo -aprendiendo del bug ya corregido en
+    // archivos_geojson, donde esa restriccion dejaba a la mayoria de los
+    // perfiles sin poder borrar nada que no hubieran subido ellos mismos.
+    function puedeComposiciones() {
+      return isAdmin();
+    }
+    match /composiciones/{composicionId} {
+      allow read: if puedeComposiciones();
+      allow create, update: if puedeComposiciones()
+        && request.resource.data.keys().hasAll(['nombre', 'proyecto', 'hojas'])
+        && isString(request.resource.data.nombre, 1, 120);
+      allow delete: if puedeComposiciones();
+    }
+
+    // Vistas de mapa guardadas (icono de recuadro con esquinas en Mapa):
+    // posiciones de camara con nombre, reutilizables luego en
+    // Composiciones. Accesible a cualquier usuario autenticado -igual que
+    // la vista Mapa en si-, sin restriccion de propietario en el borrado
+    // (mismo aprendizaje que archivos_geojson/composiciones).
+    match /vistas_mapa/{vistaId} {
+      allow read: if isSignedIn();
+      allow create, update: if isSignedIn()
+        && request.resource.data.keys().hasAll(['nombre', 'proyecto', 'lat', 'lng', 'zoom'])
+        && isString(request.resource.data.nombre, 1, 120);
+      allow delete: if isSignedIn();
     }
 
     // Codigos de aprobacion para registro de usuarios.

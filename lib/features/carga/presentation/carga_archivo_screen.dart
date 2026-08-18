@@ -29,6 +29,7 @@ import '../services/xlsx_import_service.dart';
 import '../utils/archive_exporter.dart';
 import '../utils/file_download.dart';
 import '../utils/geojson_mapper.dart';
+import '../../estructura/providers/proyectos_provider.dart';
 import '../utils/imported_file_cleanup.dart';
 
 class CargaArchivoScreen extends ConsumerStatefulWidget {
@@ -52,10 +53,17 @@ class _CargaArchivoScreenState extends ConsumerState<CargaArchivoScreen> {
   Map<String, int> _camposDetectados = {};
   int _totalFeatures = 0;
 
+  /// Números de feature (GeoJSON, 1-based) sin clave catastral resoluble;
+  /// no vacío bloquea el botón de guardado (ver `_buildAvisoClaveFaltante`).
+  List<int> _geoJsonFeaturesSinClave = [];
+  /// Registros (XLSX) sin clave_catastral, con diagnóstico de encabezados
+  /// cuando toda una hoja carece de clave; no vacío bloquea el guardado.
+  ClaveFaltanteInfo? _xlsxClaveFaltante;
+
   // Encuesta previa de importacion
   String? _tipoArchivoImportacion; // geojson | xlsx
   String? _contenidoGeoJsonImportacion; // predios | envolvente | pks
-  String? _proyectoImportacion; // TQI | TSNL | TAP | TQM
+  String? _proyectoImportacion; // TQI | TSNL | TAP | TMQ
 
   void _mostrarSnackBar(String mensaje, {bool exito = true}) {
     if (!mounted) return;
@@ -343,11 +351,74 @@ class _CargaArchivoScreenState extends ConsumerState<CargaArchivoScreen> {
     }
   }
 
+  bool get _tieneRegistrosSinClave =>
+      _geoJsonFeaturesSinClave.isNotEmpty || (_xlsxClaveFaltante?.isNotEmpty ?? false);
+
+  /// Aviso bloqueante: se muestra cuando el archivo analizado trae
+  /// registros sin "clave catastral" -la columna/campo obligatorio para
+  /// identificar un predio-. Antes esto se dejaba pasar y generaba un
+  /// identificador inventado, produciendo predios fantasma o duplicados;
+  /// ahora se bloquea el guardado hasta que el usuario corrija el
+  /// archivo. Cuando TODA una hoja del XLSX carece de clave, se muestran
+  /// los encabezados detectados: casi siempre significa que la columna de
+  /// clave usa un nombre que la app no reconoce, no que el archivo venga
+  /// genuinamente incompleto.
+  Widget _buildAvisoClaveFaltante() {
+    final xlsxInfo = _xlsxClaveFaltante;
+    final esXlsx = xlsxInfo != null && xlsxInfo.isNotEmpty;
+    final cantidad = esXlsx ? xlsxInfo.registros.length : _geoJsonFeaturesSinClave.length;
+    final detalle = esXlsx
+        ? xlsxInfo.registros.take(5).join(', ')
+        : _geoJsonFeaturesSinClave.take(5).map((n) => 'Feature $n').join(', ');
+    final hayMas = cantidad > 5;
+
+    return Container(
+      padding: const EdgeInsets.all(10),
+      decoration: BoxDecoration(
+        color: AppColors.danger.withValues(alpha: 0.08),
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(color: AppColors.danger.withValues(alpha: 0.35)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const Icon(Icons.error_outline, size: 18, color: AppColors.danger),
+              const SizedBox(width: 8),
+              Expanded(
+                child: Text(
+                  'No es posible subir este archivo: $cantidad registro(s) no tienen '
+                  '"clave catastral" ($detalle${hayMas ? ', …' : ''}). '
+                  'Corrige el archivo (agrega la clave a esos registros) y vuelve a intentarlo.',
+                  style: const TextStyle(fontSize: 12, color: AppColors.danger),
+                ),
+              ),
+            ],
+          ),
+          if (esXlsx && xlsxInfo.encabezadosPorHojaSinNinguna.isNotEmpty)
+            for (final entry in xlsxInfo.encabezadosPorHojaSinNinguna.entries)
+              Padding(
+                padding: const EdgeInsets.only(top: 8, left: 26),
+                child: Text(
+                  'Ninguna fila de la hoja "${entry.key}" trajo clave catastral. '
+                  'Encabezados detectados en esa hoja: ${entry.value.isEmpty ? '(ninguno)' : entry.value.join(', ')}. '
+                  'Verifica que la columna de clave se llame "clave", "clave_catastral", "folio" o similar.',
+                  style: const TextStyle(fontSize: 11, color: AppColors.danger, fontStyle: FontStyle.italic),
+                ),
+              ),
+        ],
+      ),
+    );
+  }
+
   Future<void> _parsearXlsx(Uint8List bytes) async {
     try {
       final service = ref.read(xlsxImportServiceProvider);
       final parseResult = await service.parseInBackground(bytes);
       if (!mounted) return;
+      final sinClave = filasPrediosSinClave(parseResult);
       setState(() {
         _geoJsonData = null;
         _preview = [];
@@ -355,11 +426,16 @@ class _CargaArchivoScreenState extends ConsumerState<CargaArchivoScreen> {
         _camposDetectados = {};
         _totalFeatures = 0;
         _xlsxParseResult = parseResult;
+        _xlsxClaveFaltante = sinClave;
+        _geoJsonFeaturesSinClave = [];
       });
       _mostrarSnackBar('${parseResult.totalRows} filas detectadas en ${parseResult.hojas.length} hoja(s) compatibles.');
     } catch (e) {
       if (!mounted) return;
-      setState(() => _xlsxParseResult = null);
+      setState(() {
+        _xlsxParseResult = null;
+        _xlsxClaveFaltante = null;
+      });
       _mostrarSnackBar('No se pudo leer el XLSX: $e', exito: false);
     }
   }
@@ -372,6 +448,12 @@ class _CargaArchivoScreenState extends ConsumerState<CargaArchivoScreen> {
       );
 
       if (!mounted) return;
+      // Solo se valida clave catastral cuando el contenido declarado en la
+      // encuesta previa es "predios" -envolvente/PKs no representan
+      // predios individuales y no tienen por qué traer clave-.
+      final sinClave = _contenidoGeoJsonImportacion == 'predios'
+          ? featuresIndicesSinClave(parseResult.features)
+          : const <int>[];
       setState(() {
         _geoJsonData = {
           'type': 'FeatureCollection',
@@ -380,6 +462,8 @@ class _CargaArchivoScreenState extends ConsumerState<CargaArchivoScreen> {
         _preview = parseResult.preview;
         _totalFeatures = parseResult.totalFeatures;
         _camposDetectados = parseResult.camposDetectados;
+        _geoJsonFeaturesSinClave = sinClave;
+        _xlsxClaveFaltante = null;
       });
       _mostrarSnackBar('${parseResult.totalFeatures} features encontrados');
     } catch (e) {
@@ -392,7 +476,7 @@ class _CargaArchivoScreenState extends ConsumerState<CargaArchivoScreen> {
     final initialTipo = _tipoArchivoImportacion ?? 'geojson';
     final initialContenido = _contenidoGeoJsonImportacion ?? 'predios';
 
-    const todosLosProyectos = ['TQI', 'TSNL', 'TAP', 'TQM'];
+    final todosLosProyectos = ref.read(proyectosCodigosProvider);
     final proyectoOptions = _isAdminUser()
         ? todosLosProyectos
         : ref.read(currentUserAssignedProjectsProvider);
@@ -542,6 +626,16 @@ class _CargaArchivoScreenState extends ConsumerState<CargaArchivoScreen> {
     if (_geoJsonData == null) return;
     final features = _extraerFeatures();
     if (features.isEmpty) return;
+    // Salvaguarda: el botón ya se deshabilita con _tieneRegistrosSinClave,
+    // esto solo cubre una posible desincronización de estado.
+    if ((forcedGeoJsonContent ?? _contenidoGeoJsonImportacion) == 'predios' &&
+        _geoJsonFeaturesSinClave.isNotEmpty) {
+      _mostrarSnackBar(
+        'No se puede guardar: hay registros sin clave catastral. Corrige el archivo primero.',
+        exito: false,
+      );
+      return;
+    }
 
     final nombre = _archivoSeleccionado?.name ??
         'archivo_${DateTime.now().millisecondsSinceEpoch}';
@@ -605,8 +699,18 @@ class _CargaArchivoScreenState extends ConsumerState<CargaArchivoScreen> {
             proyecto: _proyectoImportacion,
           );
           bdId = saved['id'] as String?;
-        } catch (_) {
-          // Si falla el guardado del archivo, continuar igualmente.
+        } catch (e) {
+          // Si falla el guardado del archivo, continuar igualmente, pero
+          // avisar: sin persistir en Firestore, el archivo no aparecera en
+          // "Archivos" al reiniciar sesion.
+          if (mounted) {
+            _mostrarSnackBar(
+              'Los predios se procesaron, pero el archivo no se pudo guardar '
+              'de forma permanente en "Archivos" ($e). Podría desaparecer al '
+              'reiniciar sesión.',
+              exito: false,
+            );
+          }
         }
 
       setState(() {
@@ -768,6 +872,24 @@ class _CargaArchivoScreenState extends ConsumerState<CargaArchivoScreen> {
     if (_eliminandoFileId != null || _eliminandoTodos) return;
     setState(() => _eliminandoFileId = file.id);
     try {
+      // Borrar primero en Firestore: si falla, no se toca la UI ni Gestión,
+      // para no hacerle creer al usuario que el archivo se eliminó cuando en
+      // realidad el documento sigue existiendo (y reaparecería al recargar).
+      if (file.guardadoEnBD && file.bdId != null) {
+        try {
+          final repo = ref.read(archivosGeoJsonRepositoryProvider);
+          await repo.deleteArchivo(file.bdId!);
+        } catch (e) {
+          if (mounted) {
+            _mostrarSnackBar(
+              'No se pudo eliminar el archivo: $e',
+              exito: false,
+            );
+          }
+          return;
+        }
+      }
+
       final currentImported = ref.read(importedFeaturesProvider);
       final shouldClearMap = shouldClearImportedMapAfterFileDeletion(
         currentImported: currentImported,
@@ -778,7 +900,14 @@ class _CargaArchivoScreenState extends ConsumerState<CargaArchivoScreen> {
         currentPks: currentPks,
         fileFeatures: file.features,
       );
-      final claves = extractClavesFromFeatures(file.features);
+      // `clavesCatastrales` (guardado completo, sin el recorte de tamaño
+      // que sí sufre `features`) es la fuente confiable; solo se recurre a
+      // `features` -truncado en archivos grandes- para archivos guardados
+      // antes de que existiera ese campo, y por eso podía dejar predios sin
+      // borrar en archivos grandes (ver `saveArchivo`).
+      final claves = file.clavesCatastrales.isNotEmpty
+          ? file.clavesCatastrales.toSet()
+          : extractClavesFromFeatures(file.features);
 
       final eliminadosGestion = await _eliminarPrediosDeGestionPorClaves(claves);
 
@@ -789,15 +918,6 @@ class _CargaArchivoScreenState extends ConsumerState<CargaArchivoScreen> {
       }
       if (shouldClearPks) {
         ref.read(pksPointFeaturesProvider.notifier).state = const [];
-      }
-
-      if (file.guardadoEnBD && file.bdId != null) {
-        try {
-          final repo = ref.read(archivosGeoJsonRepositoryProvider);
-          await repo.deleteArchivo(file.bdId!);
-        } catch (_) {
-          // Error silencioso: el archivo ya fue quitado de la UI.
-        }
       }
 
       ref.invalidate(prediosListProvider);
@@ -818,9 +938,32 @@ class _CargaArchivoScreenState extends ConsumerState<CargaArchivoScreen> {
     if (_eliminandoFileId != null || _eliminandoTodos) return;
     setState(() => _eliminandoTodos = true);
     try {
+      // Borrar primero en Firestore: si falla, no se toca la UI ni Gestión,
+      // para no hacerle creer al usuario que los archivos se eliminaron
+      // cuando en realidad los documentos siguen existiendo.
+      final ids = files.map((f) => f.bdId).whereType<String>().toList();
+      if (ids.isNotEmpty) {
+        try {
+          final repo = ref.read(archivosGeoJsonRepositoryProvider);
+          await repo.deleteAll(ids);
+        } catch (e) {
+          if (mounted) {
+            _mostrarSnackBar(
+              'No se pudieron eliminar los archivos: $e',
+              exito: false,
+            );
+          }
+          return;
+        }
+      }
+
       final claves = <String>{};
       for (final file in files) {
-        claves.addAll(extractClavesFromFeatures(file.features));
+        claves.addAll(
+          file.clavesCatastrales.isNotEmpty
+              ? file.clavesCatastrales
+              : extractClavesFromFeatures(file.features),
+        );
       }
 
       final eliminadosGestion = await _eliminarPrediosDeGestionPorClaves(claves);
@@ -829,12 +972,6 @@ class _CargaArchivoScreenState extends ConsumerState<CargaArchivoScreen> {
       ref.read(importedFeaturesProvider.notifier).state = const [];
       ref.read(pksPointFeaturesProvider.notifier).state = const [];
       ref.read(importacionAsyncProvider.notifier).reset();
-
-      try {
-        final repo = ref.read(archivosGeoJsonRepositoryProvider);
-        final ids = files.map((f) => f.bdId).whereType<String>().toList();
-        await repo.deleteAll(ids);
-      } catch (_) {}
 
       ref.invalidate(prediosListProvider);
       ref.invalidate(prediosMapaProvider);
@@ -859,17 +996,19 @@ class _CargaArchivoScreenState extends ConsumerState<CargaArchivoScreen> {
         ref.read(localPrediosProvider.notifier).removeByClaves(claves);
 
     try {
-      // Se consulta el repositorio directo (sin los filtros de proyecto/
-      // búsqueda activos en la UI de Gestión) para no dejar sin eliminar
-      // predios del archivo que caen fuera del filtro seleccionado en ese
-      // momento.
+      // Se consulta el repositorio SIN restringir por proyecto asignado al
+      // usuario actual (a diferencia de la lista de Gestión): esta función
+      // borra predios que pertenecen al archivo que se está eliminando
+      // -identificados por clave catastral, no por "qué proyectos puede
+      // ver este usuario"-. Las reglas de Firestore ya permiten borrar
+      // cualquier predio a cualquier perfil con acceso de escritura
+      // operativa (ver firestore.rules, `predios.allow delete`), así que
+      // filtrar aquí solo lograba dejar huérfanos -sin ningún aviso- los
+      // predios de proyectos fuera de la asignación del usuario (ej. TQI
+      // para un Gestor no asignado a ese proyecto), aunque el archivo en
+      // sí sí se borraba.
       final repo = ref.read(prediosRepositoryProvider);
-      final canAccessAllProjects = ref.read(canAccessAllProjectsProvider);
-      final allowedProjects = ref.read(currentUserAssignedProjectsProvider);
-      final predios = await repo.getPredios(
-        proyectosPermitidos: canAccessAllProjects ? null : allowedProjects,
-        limit: 100000,
-      );
+      final predios = await repo.getPredios(limit: 100000);
       final toDelete = predios.where((p) {
         final clave = p.claveCatastral.trim().toUpperCase();
         return !p.id.startsWith('local-') && claves.contains(clave);
@@ -893,6 +1032,15 @@ class _CargaArchivoScreenState extends ConsumerState<CargaArchivoScreen> {
   Future<void> _inyectarXlsxEnTablas() async {
     final parseResult = _xlsxParseResult;
     if (parseResult == null) return;
+    // Salvaguarda: el botón ya se deshabilita con _tieneRegistrosSinClave,
+    // esto solo cubre una posible desincronización de estado.
+    if (_xlsxClaveFaltante?.isNotEmpty ?? false) {
+      _mostrarSnackBar(
+        'No se puede guardar: hay filas sin clave catastral. Corrige el archivo primero.',
+        exito: false,
+      );
+      return;
+    }
 
     if (!FirebaseConfig.isConfigured) {
       _mostrarSnackBar(
@@ -930,6 +1078,18 @@ class _CargaArchivoScreenState extends ConsumerState<CargaArchivoScreen> {
 
       // Persistir el archivo XLSX en la BD y registrarlo en la lista
       if (_archivoSeleccionado != null) {
+        // El XLSX de predios no trae `features` geográficos (los datos se
+        // escriben directo a Firestore arriba, sin geometría), así que las
+        // claves catastrales para poder borrar el archivo después se toman
+        // de las filas ya parseadas (`hoja.rows[i]['clave_catastral']`, ver
+        // `_normalizarFilaPredio`) en vez de derivarse de `features`.
+        final clavesXlsx = <String>{
+          for (final hoja in parseResult.hojas)
+            if (hoja.tabla == XlsxTargetTable.predios)
+              for (final row in hoja.rows)
+                if ((row['clave_catastral']?.toString().trim() ?? '').isNotEmpty)
+                  row['clave_catastral'].toString().trim(),
+        }.toList();
         String? bdId;
         try {
           final archivosRepo = ref.read(archivosGeoJsonRepositoryProvider);
@@ -944,10 +1104,21 @@ class _CargaArchivoScreenState extends ConsumerState<CargaArchivoScreen> {
             createdByUid: _currentUid,
             createdByEmail: _currentUserEmail,
             proyecto: _proyectoImportacion,
+            clavesCatastralesOverride: clavesXlsx,
           );
           bdId = saved['id'] as String?;
-        } catch (_) {
-          // Si falla el guardado del archivo, continuar igualmente.
+        } catch (e) {
+          // Si falla el guardado del archivo, continuar igualmente, pero
+          // avisar: sin persistir en Firestore, el archivo no aparecera en
+          // "Archivos" al reiniciar sesion.
+          if (mounted) {
+            _mostrarSnackBar(
+              'Los datos se procesaron, pero el archivo no se pudo guardar '
+              'de forma permanente en "Archivos" ($e). Podría desaparecer al '
+              'reiniciar sesión.',
+              exito: false,
+            );
+          }
         }
         ref.read(cargaProvider.notifier).addFile(
           _archivoSeleccionado!.name,
@@ -962,6 +1133,7 @@ class _CargaArchivoScreenState extends ConsumerState<CargaArchivoScreen> {
           createdByUid: _currentUid,
           createdByEmail: _currentUserEmail,
           proyecto: _proyectoImportacion,
+          clavesCatastrales: clavesXlsx,
         );
       }
 
@@ -1102,7 +1274,7 @@ class _CargaArchivoScreenState extends ConsumerState<CargaArchivoScreen> {
       ref.invalidate(propietariosListProvider);
 
       // Detectar proyecto dominante entre los predios importados
-      const codigosProyecto = ['TQI', 'TSNL', 'TAP', 'TQM'];
+      final codigosProyecto = ref.read(proyectosCodigosProvider);
       String? proyectoDetectado;
 
       // 1) Ver qué proyecto aparece más veces en el campo proyecto de los predios
@@ -1316,8 +1488,18 @@ class _CargaArchivoScreenState extends ConsumerState<CargaArchivoScreen> {
           proyecto: _proyectoImportacion,
         );
         bdId = saved['id'] as String?;
-      } catch (_) {
-        // Si falla el guardado del archivo, continuar con mapa en memoria.
+      } catch (e) {
+        // Si falla el guardado del archivo, continuar con mapa en memoria,
+        // pero avisar: sin persistir en Firestore, el archivo no aparecera
+        // en "Archivos" al reiniciar sesion.
+        if (mounted) {
+          _mostrarSnackBar(
+            'El mapa se actualizó, pero el archivo no se pudo guardar de '
+            'forma permanente en "Archivos" ($e). Podría desaparecer al '
+            'reiniciar sesión.',
+            exito: false,
+          );
+        }
       }
 
       ref.read(cargaProvider.notifier).addFile(
@@ -1381,8 +1563,18 @@ class _CargaArchivoScreenState extends ConsumerState<CargaArchivoScreen> {
           proyecto: _proyectoImportacion,
         );
         bdId = saved['id'] as String?;
-      } catch (_) {
-        // Si falla el guardado del archivo, continuar con mapa en memoria.
+      } catch (e) {
+        // Si falla el guardado del archivo, continuar con mapa en memoria,
+        // pero avisar: sin persistir en Firestore, el archivo no aparecera
+        // en "Archivos" al reiniciar sesion.
+        if (mounted) {
+          _mostrarSnackBar(
+            'El mapa se actualizó, pero el archivo no se pudo guardar de '
+            'forma permanente en "Archivos" ($e). Podría desaparecer al '
+            'reiniciar sesión.',
+            exito: false,
+          );
+        }
       }
 
       ref.read(cargaProvider.notifier).addFile(
@@ -2075,7 +2267,11 @@ class _CargaArchivoScreenState extends ConsumerState<CargaArchivoScreen> {
         file: file,
         currentPredios: predios,
         formato: formato,
-        fallbackProject: ref.read(gestionProyectoProvider),
+        // Usar el proyecto propio del archivo, no el filtro de Gestión
+        // activo en ese momento (que es un estado global compartido y puede
+        // no corresponder a este archivo, causando que se exporten datos de
+        // otro proyecto).
+        fallbackProject: file.proyecto,
       );
 
       await downloadBytes(
@@ -2101,6 +2297,15 @@ class _CargaArchivoScreenState extends ConsumerState<CargaArchivoScreen> {
 
   @override
   Widget build(BuildContext context) {
+    // Mantiene al importador (GeoJsonMapper) sincronizado con los proyectos
+    // vigentes en Estructura (Firestore): si se dio de alta o eliminó un
+    // proyecto ahí, la detección automática al importar debe reflejarlo. Se
+    // ignora mientras el stream aún no resuelve (lista vacía) para no perder
+    // el fallback por defecto.
+    final proyectosVigentes = ref.watch(proyectosCodigosProvider);
+    if (proyectosVigentes.isNotEmpty) {
+      GeoJsonMapper.proyectosConocidos = proyectosVigentes;
+    }
     final progresoImportacion = ref.watch(importacionProgresoProvider);
     final isBusy = _loading || _sincronizando;
 
@@ -2429,6 +2634,10 @@ class _CargaArchivoScreenState extends ConsumerState<CargaArchivoScreen> {
                       'Guardar e inyectar datos',
                       style: TextStyle(fontWeight: FontWeight.w600, fontSize: 13),
                     ),
+                    if (_tieneRegistrosSinClave) ...[
+                      const SizedBox(height: 10),
+                      _buildAvisoClaveFaltante(),
+                    ],
                     const SizedBox(height: 12),
                     SizedBox(
                       width: double.infinity,
@@ -2453,7 +2662,7 @@ class _CargaArchivoScreenState extends ConsumerState<CargaArchivoScreen> {
                                   : 'Guardar e ir a Gestión')),
                           style: const TextStyle(fontSize: 13),
                         ),
-                        onPressed: (_loading || _sincronizando)
+                        onPressed: (_loading || _sincronizando || _tieneRegistrosSinClave)
                             ? null
                             : (_xlsxParseResult != null
                                 ? _inyectarXlsxEnTablas
@@ -2502,6 +2711,7 @@ class _CargaArchivoScreenState extends ConsumerState<CargaArchivoScreen> {
                     isAdminApproverUser(ref.watch(currentUserProvider) ?? FirebaseAuth.instance.currentUser);
                 final uid = (ref.watch(currentUserProvider) ?? FirebaseAuth.instance.currentUser)?.uid;
                 final proyectosAsignados = ref.watch(currentUserAssignedProjectsProvider);
+                final puedeEliminar = isAdmin || isPerfilGestor(perfil) || isPerfilOperativoAuxiliar(perfil);
                 final importedFiles = _visibleFiles(
                   allFiles,
                   isAdmin: isAdmin,
@@ -2545,6 +2755,7 @@ class _CargaArchivoScreenState extends ConsumerState<CargaArchivoScreen> {
                           style: Theme.of(context).textTheme.titleMedium,
                         ),
                         const Spacer(),
+                        if (puedeEliminar)
                         TextButton.icon(
                           onPressed: (_eliminandoTodos || _eliminandoFileId != null)
                               ? null
@@ -2703,6 +2914,12 @@ class _CargaArchivoScreenState extends ConsumerState<CargaArchivoScreen> {
 
     final busy = _loading || _sincronizando;
     final eliminandoEste = _eliminandoFileId == file.id;
+    final perfilActual = ref.read(currentUserPerfilProvider);
+    final puedeEliminarArchivo = isPerfilAdministrador(perfilActual) ||
+        isPerfilGestor(perfilActual) ||
+        isPerfilSupervisorInstitucional(perfilActual) ||
+        isPerfilOperativoAuxiliar(perfilActual) ||
+        isAdminApproverUser(ref.read(currentUserProvider) ?? FirebaseAuth.instance.currentUser);
     return Stack(
       children: [
         ListTile(
@@ -2789,6 +3006,7 @@ class _CargaArchivoScreenState extends ConsumerState<CargaArchivoScreen> {
                   onPressed: () => _verEnMapaDesdeTabla(file.id),
                 ),
               ),
+              if (puedeEliminarArchivo)
               Tooltip(
                 message: eliminandoEste ? 'Eliminando...' : 'Eliminar',
                 child: IconButton(

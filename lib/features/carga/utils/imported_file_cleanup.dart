@@ -40,6 +40,25 @@ String? _extractNormalizedClave(Map<String, dynamic> props) {
   return null;
 }
 
+/// Números de feature (1-based, para mostrarle al usuario) que NO tienen
+/// ninguna clave catastral resoluble -ni por el campo canónico ni por
+/// ningún alias conocido (folio, id_sedatu, cvegeo, id, fid, etc., ver
+/// `GeoJsonMapper.normalizeProperties`)-. Se usa para bloquear la
+/// importación ANTES de escribir nada: antes, un feature sin clave se
+/// sustituía por un identificador inventado (`IMP-<timestamp>`) que
+/// parecía una clave real pero era un registro fantasma -ver
+/// `SincronizacionService._processFeature`-.
+List<int> featuresIndicesSinClave(List<Map<String, dynamic>> features) {
+  final indices = <int>[];
+  for (var i = 0; i < features.length; i++) {
+    final rawProps = features[i]['properties'];
+    final props = rawProps is Map ? Map<String, dynamic>.from(rawProps) : <String, dynamic>{};
+    final clave = _extractNormalizedClave(props);
+    if (clave == null || clave.isEmpty) indices.add(i + 1);
+  }
+  return indices;
+}
+
 bool shouldClearImportedMapAfterFileDeletion({
   required List<Map<String, dynamic>> currentImported,
   required List<Map<String, dynamic>> fileFeatures,

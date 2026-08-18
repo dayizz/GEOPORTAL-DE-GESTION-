@@ -4,6 +4,7 @@ import '../data/propietarios_repository.dart';
 import '../../../features/predios/models/propietario.dart';
 import '../../predios/models/predio.dart';
 import '../../predios/providers/predios_provider.dart';
+import '../../estructura/providers/proyectos_provider.dart';
 import 'local_propietarios_provider.dart';
 
 final propietariosFiltroProvider = StateProvider<String>((ref) => '');
@@ -60,9 +61,10 @@ final propietariosListProvider = FutureProvider<List<Propietario>>((ref) async {
 
   if (proyecto == null) return propietarios;
 
+  final proyectosValidos = ref.read(proyectosCodigosProvider);
   final predios = await ref.read(prediosListProvider.future);
   final prediosDelProyecto = predios
-      .where((predio) => _extractProyectoFromPredio(predio) == proyecto)
+      .where((predio) => _extractProyectoFromPredio(predio, proyectosValidos) == proyecto)
       .toList();
 
   final propietarioIds = prediosDelProyecto
@@ -81,10 +83,12 @@ final propietariosListProvider = FutureProvider<List<Propietario>>((ref) async {
   }).toList();
 });
 
-String _extractProyectoFromPredio(Predio predio) {
+String _extractProyectoFromPredio(Predio predio, List<String> proyectos) {
   final proyectoDirecto = predio.proyecto?.trim().toUpperCase();
-  const proyectos = ['TQI', 'TSNL', 'TAP', 'TQM'];
-  if (proyectoDirecto != null && proyectos.contains(proyectoDirecto)) {
+  // 'TQM' es un alias heredado (typo histórico); el código correcto es
+  // 'TMQ' (Tren México-Querétaro).
+  if (proyectoDirecto == 'TQM' && proyectos.contains('TMQ')) return 'TMQ';
+  if (proyectoDirecto != null && proyectoDirecto.isNotEmpty) {
     return proyectoDirecto;
   }
 
@@ -93,7 +97,9 @@ String _extractProyectoFromPredio(Predio predio) {
   if (compact.startsWith('TQI') || compact.startsWith('QI')) return 'TQI';
   if (compact.startsWith('TSNL') || compact.startsWith('SNL') || compact.startsWith('SL')) return 'TSNL';
   if (compact.startsWith('TAP') || compact.startsWith('AP')) return 'TAP';
-  if (compact.startsWith('TQM') || compact.startsWith('QM')) return 'TQM';
+  if (compact.startsWith('TMQ') || compact.startsWith('TQM') || compact.startsWith('QM')) {
+    return 'TMQ';
+  }
 
   final contenido = [
     predio.claveCatastral,
@@ -106,6 +112,7 @@ String _extractProyectoFromPredio(Predio predio) {
   for (final proyecto in proyectos) {
     if (contenido.contains(proyecto)) return proyecto;
   }
+  if (contenido.contains('TQM')) return 'TMQ';
   return 'Sin proyecto';
 }
 

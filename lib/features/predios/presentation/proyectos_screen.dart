@@ -14,7 +14,7 @@ class ProyectosScreen extends ConsumerStatefulWidget {
 }
 
 class _ProyectosScreenState extends ConsumerState<ProyectosScreen> {
-  static const _proyectos = ['Sin proyecto', 'TQI', 'TSNL', 'TAP', 'TQM'];
+  static const _proyectos = ['Sin proyecto', 'TQI', 'TSNL', 'TAP', 'TMQ'];
 
   final _searchCtrl = TextEditingController();
   final _verticalScroll = ScrollController();

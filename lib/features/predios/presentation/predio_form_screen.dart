@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:intl/intl.dart';
@@ -9,19 +10,29 @@ import '../providers/local_predios_provider.dart';
 import '../data/predios_repository.dart';
 import '../models/predio.dart';
 import '../../auth/providers/demo_provider.dart';
+import '../../estructura/providers/proyectos_provider.dart';
 import '../../../core/constants/app_colors.dart';
 import '../../../core/constants/app_strings.dart';
 
 class PredioFormScreen extends ConsumerStatefulWidget {
   final String? id; // null = nuevo predio
-  const PredioFormScreen({super.key, this.id});
+  /// Proyecto preseleccionado al crear (p.ej. desde el botón "+" de Gestión,
+  /// que pasa el proyecto actualmente activo en la pantalla).
+  final String? proyectoInicial;
+  const PredioFormScreen({super.key, this.id, this.proyectoInicial});
 
   @override
   ConsumerState<PredioFormScreen> createState() => _PredioFormScreenState();
 }
 
 class _PredioFormScreenState extends ConsumerState<PredioFormScreen> {
-  static const List<String> _tipoLiberacionOpciones = ['COP', 'DOT', 'AOP'];
+  static const List<String> _tipoLiberacionOpciones = [
+    'COP',
+    'DOT',
+    'AOP',
+    'EXPROPIACION',
+    'SIN TIPO',
+  ];
   static const List<String> _estructuraOpciones = [
     'Estacion',
     'Edificio auxiliar',
@@ -44,7 +55,6 @@ class _PredioFormScreenState extends ConsumerState<PredioFormScreen> {
   final _kmFinCtrl = TextEditingController();
   final _kmEfectivosCtrl = TextEditingController();
   final _superficieCtrl = TextEditingController();
-  final _poligonoDwgCtrl = TextEditingController();
   final _situacionSocialCtrl = TextEditingController();
   final _propietarioNombreCtrl = TextEditingController();
 
@@ -53,6 +63,7 @@ class _PredioFormScreenState extends ConsumerState<PredioFormScreen> {
   String _tramoNumero = '1';
   String _tipoPropiedad = 'PRIVADA';
   String? _estructura;
+  String? _proyecto;
   bool _cop = false;
   bool _poligonoInsertado = false;
   bool _identificacion = false;
@@ -64,6 +75,10 @@ class _PredioFormScreenState extends ConsumerState<PredioFormScreen> {
   String? _propietarioId;
   String? _pdfUrl;
   DateTime? _copFecha;
+  DateTime? _fechaLimitePago;
+  String? _poligonoDwg;
+  String? _planoPdf;
+  String? _bdt;
 
   String _buildTramoValue() {
     const prefijos = {
@@ -75,7 +90,17 @@ class _PredioFormScreenState extends ConsumerState<PredioFormScreen> {
     return '$prefijo$_tramoNumero';
   }
 
+  /// Carga el T/F/S de un predio existente SIN reescribirlo. Antes, esta
+  /// función siempre reconstruía `_tramo` como "letra+número" (vía
+  /// `_buildTramoValue`), así que abrir y guardar un predio cuyo T/F/S real
+  /// no seguía ese patrón (p.ej. "20", un segmento importado tal cual)
+  /// terminaba renombrándolo a "T20" aunque el usuario nunca tocara ese
+  /// campo. Ahora se conserva el valor real en `_tramo` -solo se usan
+  /// `_tramoTipo`/`_tramoNumero` como ayuda visual en el dropdown+número-,
+  /// y `_tramo` solo se reconstruye cuando el usuario edita esos controles
+  /// explícitamente (ver los `onChanged` en el formulario).
   void _setTramoFromValue(String valor) {
+    _tramo = valor;
     final limpio = valor.trim().toUpperCase();
     final match = RegExp(r'^([TFS])\s*(\d+)$').firstMatch(limpio);
 
@@ -88,14 +113,12 @@ class _PredioFormScreenState extends ConsumerState<PredioFormScreen> {
         _ => 'TRAMO',
       };
       _tramoNumero = numero;
-      _tramo = _buildTramoValue();
       return;
     }
 
     _tramoTipo = 'TRAMO';
     final numero = RegExp(r'(\d+)').firstMatch(limpio)?.group(1);
-    _tramoNumero = numero ?? '1';
-    _tramo = _buildTramoValue();
+    _tramoNumero = numero ?? limpio;
   }
 
   @override
@@ -104,6 +127,7 @@ class _PredioFormScreenState extends ConsumerState<PredioFormScreen> {
     if (widget.id != null) {
       _loadPredio();
     } else {
+      _proyecto = widget.proyectoInicial;
       _loadingData = false;
     }
   }
@@ -123,12 +147,16 @@ class _PredioFormScreenState extends ConsumerState<PredioFormScreen> {
         _superficieCtrl.text = predio.superficie?.toString() ?? '';
         _pdfUrl = predio.pdfUrl ?? predio.copFirmado;
         _copFecha = predio.copFecha;
-        _poligonoDwgCtrl.text = predio.poligonoDwg ?? '';
+        _fechaLimitePago = predio.fechaLimitePago;
+        _poligonoDwg = predio.poligonoDwg;
+        _planoPdf = predio.planoPdf;
+        _bdt = predio.bdt;
         _situacionSocialCtrl.text = predio.situacionSocial ?? '';
         _propietarioNombreCtrl.text = predio.propietarioNombre ?? '';
         _setTramoFromValue(predio.tramo);
         _tipoPropiedad = predio.tipoPropiedad;
         _estructura = _estructuraOpciones.contains(predio.estructura) ? predio.estructura : null;
+        _proyecto = predio.proyecto;
         _cop = predio.cop;
         _poligonoInsertado = predio.poligonoInsertado;
         _identificacion = predio.identificacion;
@@ -148,7 +176,7 @@ class _PredioFormScreenState extends ConsumerState<PredioFormScreen> {
   void dispose() {
     for (final c in [
       _claveCtrl, _ejidoCtrl, _estadoCtrl, _municipioCtrl, _tipoLiberacionCtrl, _kmInicioCtrl, _kmFinCtrl,
-      _kmEfectivosCtrl, _superficieCtrl, _poligonoDwgCtrl,
+      _kmEfectivosCtrl, _superficieCtrl,
       _situacionSocialCtrl, _propietarioNombreCtrl,
     ]) {
       c.dispose();
@@ -190,6 +218,214 @@ class _PredioFormScreenState extends ConsumerState<PredioFormScreen> {
     });
   }
 
+  Future<void> _pickFechaLimitePago() async {
+    final now = DateTime.now();
+    final initialDate = _fechaLimitePago ?? now;
+    final picked = await showDatePicker(
+      context: context,
+      initialDate: initialDate,
+      firstDate: DateTime(2000),
+      lastDate: DateTime(now.year + 10),
+      locale: const Locale('es', 'MX'),
+      helpText: 'Selecciona fecha',
+    );
+
+    if (picked == null || !mounted) return;
+    setState(() {
+      _fechaLimitePago = DateTime(picked.year, picked.month, picked.day);
+    });
+  }
+
+  /// Tarjeta de un archivo-link (COP/DOT PDF, DWG, Plano PDF, BDT) con
+  /// acciones de Abrir/Agregar/Sustituir/Eliminar. Mismo patrón que el
+  /// diálogo "Editar archivos" de la tabla de Gestión, para que el link se
+  /// pueda gestionar también desde "Editar predio".
+  Widget _buildArchivoCard(
+    String label,
+    String? url,
+    ValueChanged<String> onGuardar,
+    VoidCallback onEliminar,
+  ) {
+    final hasUrl = url != null && url.trim().isNotEmpty;
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: AppColors.surface,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: AppColors.border),
+      ),
+      child: Row(
+        children: [
+          Icon(
+            Icons.link,
+            color: hasUrl ? AppColors.secondary : Colors.grey.shade500,
+          ),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(label, style: const TextStyle(fontWeight: FontWeight.w600)),
+                const SizedBox(height: 2),
+                Text(
+                  hasUrl ? 'Vinculado' : 'Sin vincular',
+                  style: TextStyle(
+                    color: hasUrl ? AppColors.secondary : AppColors.textSecondary,
+                    fontSize: 12,
+                  ),
+                ),
+              ],
+            ),
+          ),
+          if (hasUrl)
+            IconButton(
+              tooltip: 'Abrir',
+              icon: const Icon(Icons.open_in_new),
+              onPressed: () async {
+                try {
+                  await _openPdf(url);
+                } catch (e) {
+                  if (!mounted) return;
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(content: Text('$e'), backgroundColor: AppColors.danger),
+                  );
+                }
+              },
+            ),
+          IconButton(
+            tooltip: hasUrl ? 'Sustituir' : 'Agregar',
+            icon: Icon(hasUrl ? Icons.edit_outlined : Icons.add_link),
+            onPressed: () async {
+              final nuevaUrl = await _requestArchivoUrl(
+                titulo: hasUrl ? 'Sustituir $label' : 'Agregar $label',
+                initialValue: url ?? '',
+              );
+              if (nuevaUrl == null) return;
+              onGuardar(nuevaUrl);
+            },
+          ),
+          if (hasUrl)
+            IconButton(
+              tooltip: 'Eliminar',
+              icon: const Icon(Icons.delete_outline, color: AppColors.danger),
+              onPressed: () async {
+                final confirmado = await _confirmarQuitarArchivo(label);
+                if (confirmado) onEliminar();
+              },
+            ),
+        ],
+      ),
+    );
+  }
+
+  String? _normalizedUrl(String raw) {
+    var value = raw.trim();
+    if (value.isEmpty) return null;
+    final hasScheme = RegExp(r'^[a-zA-Z][a-zA-Z0-9+.-]*://').hasMatch(value);
+    if (!hasScheme) value = 'https://$value';
+    final uri = Uri.tryParse(value);
+    if (uri == null || (uri.scheme != 'http' && uri.scheme != 'https') || uri.host.isEmpty) {
+      return null;
+    }
+    return uri.toString();
+  }
+
+  Future<String?> _requestArchivoUrl({
+    required String titulo,
+    String initialValue = '',
+  }) async {
+    final ctrl = TextEditingController(text: initialValue);
+    String? error;
+
+    final result = await showDialog<String>(
+      context: context,
+      barrierDismissible: false,
+      builder: (dialogContext) {
+        return StatefulBuilder(
+          builder: (context, setStateDialog) {
+            return AlertDialog(
+              title: Text(titulo),
+              content: TextFormField(
+                controller: ctrl,
+                autofocus: true,
+                keyboardType: TextInputType.url,
+                textInputAction: TextInputAction.done,
+                decoration: InputDecoration(
+                  labelText: 'URL',
+                  hintText: 'https://.../archivo.pdf',
+                  helperText: 'Pega o escribe el link del archivo',
+                  errorText: error,
+                  border: const OutlineInputBorder(),
+                  suffixIcon: IconButton(
+                    tooltip: 'Pegar',
+                    icon: const Icon(Icons.content_paste),
+                    onPressed: () async {
+                      final data = await Clipboard.getData(Clipboard.kTextPlain);
+                      final clip = data?.text?.trim() ?? '';
+                      if (clip.isEmpty) return;
+                      ctrl.text = clip;
+                      setStateDialog(() => error = null);
+                    },
+                  ),
+                ),
+                onFieldSubmitted: (_) {
+                  final url = _normalizedUrl(ctrl.text);
+                  if (url == null) {
+                    setStateDialog(() => error = 'Ingresa una URL valida (http o https).');
+                    return;
+                  }
+                  Navigator.of(dialogContext).pop(url);
+                },
+              ),
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.of(dialogContext).pop(),
+                  child: const Text('Cancelar'),
+                ),
+                ElevatedButton(
+                  onPressed: () {
+                    final url = _normalizedUrl(ctrl.text);
+                    if (url == null) {
+                      setStateDialog(() => error = 'Ingresa una URL valida (http o https).');
+                      return;
+                    }
+                    Navigator.of(dialogContext).pop(url);
+                  },
+                  child: const Text('Guardar URL'),
+                ),
+              ],
+            );
+          },
+        );
+      },
+    );
+
+    ctrl.dispose();
+    return result;
+  }
+
+  Future<bool> _confirmarQuitarArchivo(String label) async {
+    final result = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: const Text('Eliminar archivo'),
+        content: Text('¿Quitar el $label vinculado? Esta acción no se puede deshacer.'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(dialogContext).pop(false),
+            child: const Text('Cancelar'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.of(dialogContext).pop(true),
+            child: const Text('Eliminar', style: TextStyle(color: AppColors.danger)),
+          ),
+        ],
+      ),
+    );
+    return result ?? false;
+  }
+
   /// Etiqueta con asterisco rojo para los campos obligatorios de Gestión.
   Widget _requiredLabel(String text) {
     return Text.rich(
@@ -227,6 +463,7 @@ class _PredioFormScreenState extends ConsumerState<PredioFormScreen> {
           tramo: _tramo,
           tipoPropiedad: _tipoPropiedad,
           estructura: _estructura,
+          proyecto: _proyecto,
           ejido: _ejidoCtrl.text.isEmpty ? null : _ejidoCtrl.text.trim(),
           estado: _estadoCtrl.text.isEmpty ? null : _estadoCtrl.text.trim(),
           municipio: _municipioCtrl.text.isEmpty ? null : _municipioCtrl.text.trim(),
@@ -237,8 +474,18 @@ class _PredioFormScreenState extends ConsumerState<PredioFormScreen> {
           cop: estatusLiberado,
           copFirmado: _resolvedPdfUrl(),
           pdfUrl: _resolvedPdfUrl(),
+          clearCopFirmado: _resolvedPdfUrl() == null,
+          clearPdfUrl: _resolvedPdfUrl() == null,
           copFecha: _copFecha,
-          poligonoDwg: _poligonoDwgCtrl.text.isEmpty ? null : _poligonoDwgCtrl.text.trim(),
+          clearCopFecha: _copFecha == null,
+          fechaLimitePago: _fechaLimitePago,
+          clearFechaLimitePago: _fechaLimitePago == null,
+          poligonoDwg: _poligonoDwg,
+          clearPoligonoDwg: _poligonoDwg == null,
+          planoPdf: _planoPdf,
+          clearPlanoPdf: _planoPdf == null,
+          bdt: _bdt,
+          clearBdt: _bdt == null,
           situacionSocial: _situacionSocialCtrl.text.isEmpty ? null : _situacionSocialCtrl.text.trim(),
             tipoLiberacion:
               _tipoLiberacionCtrl.text.isEmpty ? null : _tipoLiberacionCtrl.text.trim(),
@@ -260,6 +507,7 @@ class _PredioFormScreenState extends ConsumerState<PredioFormScreen> {
           tramo: _tramo,
           tipoPropiedad: _tipoPropiedad,
           estructura: _estructura,
+          proyecto: _proyecto,
           ejido: _ejidoCtrl.text.isEmpty ? null : _ejidoCtrl.text.trim(),
           estado: _estadoCtrl.text.isEmpty ? null : _estadoCtrl.text.trim(),
           municipio: _municipioCtrl.text.isEmpty ? null : _municipioCtrl.text.trim(),
@@ -270,8 +518,18 @@ class _PredioFormScreenState extends ConsumerState<PredioFormScreen> {
           cop: estatusLiberado,
           copFirmado: _resolvedPdfUrl(),
           pdfUrl: _resolvedPdfUrl(),
+          clearCopFirmado: _resolvedPdfUrl() == null,
+          clearPdfUrl: _resolvedPdfUrl() == null,
           copFecha: _copFecha,
-          poligonoDwg: _poligonoDwgCtrl.text.isEmpty ? null : _poligonoDwgCtrl.text.trim(),
+          clearCopFecha: _copFecha == null,
+          fechaLimitePago: _fechaLimitePago,
+          clearFechaLimitePago: _fechaLimitePago == null,
+          poligonoDwg: _poligonoDwg,
+          clearPoligonoDwg: _poligonoDwg == null,
+          planoPdf: _planoPdf,
+          clearPlanoPdf: _planoPdf == null,
+          bdt: _bdt,
+          clearBdt: _bdt == null,
           situacionSocial: _situacionSocialCtrl.text.isEmpty ? null : _situacionSocialCtrl.text.trim(),
             tipoLiberacion:
               _tipoLiberacionCtrl.text.isEmpty ? null : _tipoLiberacionCtrl.text.trim(),
@@ -292,6 +550,7 @@ class _PredioFormScreenState extends ConsumerState<PredioFormScreen> {
           'tramo': _tramo,
           'tipo_propiedad': _tipoPropiedad,
           'estructura': _estructura,
+          'proyecto': _proyecto,
           'ejido': _ejidoCtrl.text.isEmpty ? null : _ejidoCtrl.text.trim(),
           'estado': _estadoCtrl.text.isEmpty ? null : _estadoCtrl.text.trim(),
           'municipio': _municipioCtrl.text.isEmpty ? null : _municipioCtrl.text.trim(),
@@ -303,7 +562,10 @@ class _PredioFormScreenState extends ConsumerState<PredioFormScreen> {
           'cop_firmado': _resolvedPdfUrl(),
           'pdf_url': _resolvedPdfUrl(),
           'cop_fecha': _copFecha?.toIso8601String(),
-          'poligono_dwg': _poligonoDwgCtrl.text.isEmpty ? null : _poligonoDwgCtrl.text.trim(),
+          'fecha_limite_pago': _fechaLimitePago?.toIso8601String(),
+          'poligono_dwg': _poligonoDwg,
+          'plano_pdf': _planoPdf,
+          'bdt': _bdt,
           'situacion_social': _situacionSocialCtrl.text.isEmpty ? null : _situacionSocialCtrl.text.trim(),
             'tipo_liberacion':
               _tipoLiberacionCtrl.text.isEmpty ? null : _tipoLiberacionCtrl.text.trim(),
@@ -398,6 +660,24 @@ class _PredioFormScreenState extends ConsumerState<PredioFormScreen> {
                 validator: (v) => (v == null || v.isEmpty) ? 'Campo requerido' : null,
                 textCapitalization: TextCapitalization.characters,
               ),
+              const SizedBox(height: 14),
+              Builder(builder: (context) {
+                final proyectos = ref.watch(proyectosCodigosProvider);
+                final value = proyectos.contains(_proyecto) ? _proyecto : null;
+                return DropdownButtonFormField<String>(
+                  value: value,
+                  decoration: InputDecoration(
+                    label: _requiredLabel('Proyecto'),
+                    prefixIcon: const Icon(Icons.folder_outlined),
+                    hintText: 'Selecciona',
+                  ),
+                  items: proyectos
+                      .map((p) => DropdownMenuItem(value: p, child: Text(p)))
+                      .toList(),
+                  validator: (v) => (v == null || v.isEmpty) ? 'Campo requerido' : null,
+                  onChanged: (v) => setState(() => _proyecto = v),
+                );
+              }),
               const SizedBox(height: 14),
               Row(children: [
                 Expanded(
@@ -498,73 +778,41 @@ class _PredioFormScreenState extends ConsumerState<PredioFormScreen> {
               const SizedBox(height: 24),
               _buildSectionTitle('Documentos', Icons.folder_outlined),
               const SizedBox(height: 12),
-              Container(
-                width: double.infinity,
-                padding: const EdgeInsets.all(14),
-                decoration: BoxDecoration(
-                  color: AppColors.surface,
-                  borderRadius: BorderRadius.circular(12),
-                  border: Border.all(color: AppColors.border),
-                ),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Row(
-                      children: [
-                        Icon(
-                          Icons.description,
-                          color: _resolvedPdfUrl() != null
-                              ? AppColors.secondary
-                              : Colors.grey.shade500,
-                        ),
-                        const SizedBox(width: 10),
-                        Expanded(
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              const Text(
-                                'COP/DOT PDF',
-                                style: TextStyle(fontWeight: FontWeight.w600),
-                              ),
-                              const SizedBox(height: 2),
-                              Text(
-                                _resolvedPdfUrl() != null
-                                    ? 'Documento vinculado al expediente.'
-                                    : 'No hay PDF cargado para este predio.',
-                                style: const TextStyle(
-                                  color: AppColors.textSecondary,
-                                  fontSize: 12,
-                                ),
-                              ),
-                            ],
-                          ),
-                        ),
-                      ],
-                    ),
-                    const SizedBox(height: 12),
-                    Text(
-                      'La URL de COP/DOT se gestiona directamente desde la tabla de Gestion.',
-                      style: const TextStyle(
-                        color: AppColors.textSecondary,
-                        fontSize: 12,
-                      ),
-                    ),
-                    if (_resolvedPdfUrl() != null) ...[
-                      const SizedBox(height: 10),
-                      OutlinedButton.icon(
-                        onPressed: () => _openPdf(_resolvedPdfUrl()!),
-                        icon: const Icon(Icons.open_in_new),
-                        label: const Text('Abrir PDF'),
-                      ),
-                    ],
-                  ],
-                ),
+              _buildArchivoCard(
+                'COP/DOT PDF',
+                _resolvedPdfUrl(),
+                // La "Fecha de liberación" es independiente del link -ya no
+                // se autocompleta al vincular el PDF-: se llena aparte, más
+                // abajo, manualmente o desde un archivo importado.
+                (url) => setState(() => _pdfUrl = url),
+                () => setState(() => _pdfUrl = null),
+              ),
+              const SizedBox(height: 10),
+              _buildArchivoCard(
+                'DWG',
+                _poligonoDwg,
+                (url) => setState(() => _poligonoDwg = url),
+                () => setState(() => _poligonoDwg = null),
+              ),
+              const SizedBox(height: 10),
+              _buildArchivoCard(
+                'Plano PDF',
+                _planoPdf,
+                (url) => setState(() => _planoPdf = url),
+                () => setState(() => _planoPdf = null),
+              ),
+              const SizedBox(height: 10),
+              _buildArchivoCard(
+                'BDT',
+                _bdt,
+                (url) => setState(() => _bdt = url),
+                () => setState(() => _bdt = null),
               ),
               const SizedBox(height: 14),
               TextFormField(
                 controller: _situacionSocialCtrl,
                 decoration: const InputDecoration(
-                  labelText: 'Situacion social',
+                  labelText: 'Observaciones',
                   prefixIcon: Icon(Icons.description_outlined),
                 ),
                 minLines: 2,
@@ -592,7 +840,7 @@ class _PredioFormScreenState extends ConsumerState<PredioFormScreen> {
                 readOnly: true,
                 onTap: _pickCopFecha,
                 decoration: InputDecoration(
-                  labelText: 'Fecha',
+                  labelText: 'Fecha de liberación',
                   prefixIcon: const Icon(Icons.calendar_today_outlined),
                   hintText: _copFecha != null
                       ? DateFormat('dd/MM/yyyy').format(_copFecha!)
@@ -603,6 +851,25 @@ class _PredioFormScreenState extends ConsumerState<PredioFormScreen> {
                           tooltip: 'Limpiar fecha',
                           icon: const Icon(Icons.clear),
                           onPressed: () => setState(() => _copFecha = null),
+                        ),
+                ),
+              ),
+              const SizedBox(height: 14),
+              TextFormField(
+                readOnly: true,
+                onTap: _pickFechaLimitePago,
+                decoration: InputDecoration(
+                  labelText: 'Fecha límite de pago',
+                  prefixIcon: const Icon(Icons.calendar_today_outlined),
+                  hintText: _fechaLimitePago != null
+                      ? DateFormat('dd/MM/yyyy').format(_fechaLimitePago!)
+                      : 'Selecciona una fecha',
+                  suffixIcon: _fechaLimitePago == null
+                      ? null
+                      : IconButton(
+                          tooltip: 'Limpiar fecha',
+                          icon: const Icon(Icons.clear),
+                          onPressed: () => setState(() => _fechaLimitePago = null),
                         ),
                 ),
               ),

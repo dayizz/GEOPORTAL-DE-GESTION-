@@ -30,6 +30,7 @@ const ALLOWED_FIELDS = [
   'tipo_liberacion',
   'rango_estatus',
   'rango_estatus_fecha',
+  'polygon_ref_id',
   'created_at',
   'updated_at',
 ];

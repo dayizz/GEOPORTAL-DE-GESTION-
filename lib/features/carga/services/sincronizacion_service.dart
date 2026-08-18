@@ -1,6 +1,7 @@
 import 'dart:convert';
 
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import '../../../core/utils/import_normalization.dart' as norm;
 import '../../predios/data/predios_repository.dart';
 import '../../propietarios/data/propietarios_repository.dart';
 import '../utils/geojson_mapper.dart';
@@ -275,43 +276,12 @@ class SincronizacionService {
       }
     }
 
-    final inferidoDesdeClave = _inferEstadoMunicipioDesdeClave(_extractId(props));
-    estado ??= inferidoDesdeClave['estado'];
-    municipio ??= inferidoDesdeClave['municipio'];
-
+    // NOTA: aquí NO se infiere estado/municipio a partir del prefijo de la
+    // clave catastral -esa auto-detección solo acertaba para TSNL con un
+    // puñado de códigos de municipio y dejaba el resto de predios sin
+    // completar, generando inconsistencia-. Solo se inyecta lo que
+    // realmente venga en el archivo importado.
     return {'estado': estado, 'municipio': municipio};
-  }
-
-  Map<String, String?> _inferEstadoMunicipioDesdeClave(String? clave) {
-    if (clave == null) return {'estado': null, 'municipio': null};
-
-    final upper = clave.trim().toUpperCase();
-    if (upper.isEmpty) return {'estado': null, 'municipio': null};
-
-    final tokens = upper
-        .split(RegExp(r'[^A-Z0-9]+'))
-        .where((token) => token.isNotEmpty)
-        .toList(growable: false);
-
-    if (tokens.isEmpty) return {'estado': null, 'municipio': null};
-
-    final code = tokens.length >= 2 ? tokens[1] : '';
-    const municipiosTsnl = {
-      'SLV': 'Salinas Victoria',
-      'VIL': 'Villaldama',
-      'BUS': 'Bustamante',
-      'LAM': 'Lampazos de Naranjo',
-      'ANA': 'Anahuac',
-      'SAB': 'Sabinas Hidalgo',
-    };
-
-    final isTsnl = upper.startsWith('SNL') || upper.startsWith('TSNL');
-    final municipio = municipiosTsnl[code];
-
-    return {
-      'estado': isTsnl ? 'Nuevo Leon' : null,
-      'municipio': municipio,
-    };
   }
 
   bool _looksLikeEstadoName(String value) {
@@ -363,7 +333,7 @@ class SincronizacionService {
     final fromClave = GeoJsonMapper.inferProyectoDesdeClave(_extractId(props));
     if (fromClave != null) return fromClave;
 
-    return _pickFlexible(props, [
+    return norm.normalizeCode(_pickFlexible(props, [
       'proyecto',
       'PROYECTO',
       'nombre_proyecto',
@@ -374,7 +344,7 @@ class SincronizacionService {
       'CODIGO_PROYECTO',
       'obra',
       'OBRA',
-    ]);
+    ]));
   }
 
   String? _resolveTipoPropiedad(Map<String, dynamic> props) {
@@ -558,33 +528,6 @@ class SincronizacionService {
       'm2', 'M2',
     ]);
 
-    // Extraer km_inicio con más aliases
-    final kmInicio = _pickDoubleFlexible(props, [
-      'km_inicio', 'KM_INICIO',
-      'km inicio', 'KM INICIO',
-      'km iniicio', 'KM INIICIO',
-      'cadenamiento_inicial', 'CADENAMIENTO_INICIAL',
-      'cad_ini', 'CAD_INI',
-      'km_i', 'KM_I',
-      'km_ini', 'KM_INI',
-      'km0', 'KM0',
-      'cadenamiento_i', 'CADENAMIENTO_I',
-      'km_inicial', 'KM_INICIAL',
-    ]);
-
-    // Extraer km_fin con más aliases
-    final kmFin = _pickDoubleFlexible(props, [
-      'km_fin', 'KM_FIN',
-      'km fin', 'KM FIN',
-      'cadenamiento_final', 'CADENAMIENTO_FINAL',
-      'cad_fin', 'CAD_FIN',
-      'km_f', 'KM_F',
-      'km1', 'KM1',
-      'cadenamiento_f', 'CADENAMIENTO_F',
-      'cadenamiento_1',
-      'km_final', 'KM_FINAL',
-    ]);
-
     final kmLineales = _pickDoubleFlexible(props, [
       'km_lineales', 'KM_LINEALES',
       'km lineales', 'KM LINEALES',
@@ -614,55 +557,77 @@ class SincronizacionService {
       'clave_catastral': claveCatastral,
 
       // ── Clasificación ───────────────────────────────────────────────────
-      'tramo': _pick(props, [
+      // '_pickFlexible' normaliza claves y alias (sin acentos/mayúsculas/
+      // separadores) antes de comparar, para reconocer encabezados como
+      // "T/F/S", "Tramo", "Segmento" o "Frente" sin importar el símbolo
+      // exacto que use el archivo de origen.
+      'tramo': norm.normalizeCode(_pickFlexible(props, [
         'tramo', 'TRAMO', 'tramo_vial', 'seccion',
         'frente', 'FRENTE', 'segmento', 'SEGMENTO',
-        't_f_s', 'T_F_S', 'tipofs', 'TIPO_FS',
-      ]) ?? 'S/T',
+        't_f_s', 'T_F_S', 'tfs', 'tipofs', 'TIPO_FS',
+      ])) ?? 'S/T',
       'tipo_propiedad': _resolveTipoPropiedad(props),
-      'estructura': _pickFlexible(props, [
+      'estructura': norm.normalizeEstructura(_pickFlexible(props, [
         'estructura', 'ESTRUCTURA',
         'tipo_estructura', 'TIPO_ESTRUCTURA',
         'clase_estructura', 'CLASE_ESTRUCTURA',
         'estruc', 'ESTRUC',
-      ]),
-      'ejido': _pick(props, [
+      ])),
+      // No todos los predios pertenecen a un ejido: "N/A"/"NO APLICA" se
+      // reconocen y guardan como el marcador "N/A" en vez de perderse o
+      // mancharse con capitalización de título.
+      'ejido': norm.normalizeEjido(_pick(props, [
         'ejido', 'nom_ejido', 'nombre_ejido', 'NOM_EJIDO', 'EJIDO',
         'comunidad', 'localidad',
-      ]),
+      ])),
       'proyecto': _resolveProyecto(props),
-      'uso_suelo': _pick(props, [
+      'uso_suelo': norm.normalizeTitleCase(_pick(props, [
         'uso_suelo', 'USO_SUELO', 'uso', 'USO', 'land_use', 'LAND_USE',
-      ]) ?? 'Otro',
-      'zona': _pick(props, ['zona', 'ZONA', 'sector', 'SECTOR', 'region', 'REGION']),
+      ])) ?? 'Otro',
+      'zona': norm.normalizeTitleCase(_pick(props, ['zona', 'ZONA', 'sector', 'SECTOR', 'region', 'REGION'])),
       'valor_catastral': valorCatastral,
-      'descripcion': _pick(props, [
+      'descripcion': norm.normalizeTitleCase(_pick(props, [
         'descripcion', 'DESCRIPCION', 'description', 'DESCRIPTION',
-      ]),
+      ])),
+      // Texto narrativo libre (observaciones): solo se recorta, no se
+      // fuerza a Capitalización De Cada Palabra -leerían mal notas largas-.
       'situacion_social': _pickFlexible(props, [
         'situacion_social', 'SITUACION_SOCIAL',
         'observaciones', 'OBSERVACIONES',
         'observacion', 'OBSERVACION',
         'obs', 'OBS',
-      ]),
-      'direccion': _pick(props, ['direccion', 'DIRECCION', 'domicilio', 'DOMICILIO', 'calle', 'CALLE']),
-      'colonia': _pick(props, ['colonia', 'COLONIA', 'barrio', 'BARRIO']),
-      'municipio': estadoMunicipio['municipio'],
-      'estado': estadoMunicipio['estado'],
+      ])?.trim(),
+      'direccion': norm.normalizeTitleCase(_pick(props, ['direccion', 'DIRECCION', 'domicilio', 'DOMICILIO', 'calle', 'CALLE'])),
+      'colonia': norm.normalizeTitleCase(_pick(props, ['colonia', 'COLONIA', 'barrio', 'BARRIO'])),
+      'municipio': norm.normalizeTitleCase(estadoMunicipio['municipio']),
+      'estado': norm.normalizeTitleCase(estadoMunicipio['estado']),
       'codigo_postal': _pick(props, ['codigo_postal', 'CODIGO_POSTAL', 'cp', 'CP']),
       'imagen_url': _pick(props, ['imagen_url', 'IMAGEN_URL', 'foto_url', 'FOTO_URL', 'image_url', 'IMAGE_URL']),
 
       // ── Propietario (nombre directo) ─────────────────────────────────────
-      'propietario_nombre': _pick(props, [
+      'propietario_nombre': norm.normalizeTitleCase(_pick(props, [
         'propietario', 'propietario_nombre', 'nombre_propietario',
         'nom_propietario', 'PROPIETARIO', 'titular', 'TITULAR',
         'dueno', 'dueño', 'nombre',
-      ]) ?? _pickPropietarioFlexible(props),
+      ]) ?? _pickPropietarioFlexible(props)),
 
       // ── Dimensiones / Geometría ──────────────────────────────────────────
       'superficie': superficie,
-      'km_inicio': kmInicio,
-      'km_fin': kmFin,
+      // Aceptan formato PK ("12+359") o decimal ("12.359") -misma distancia,
+      // 12 km + 359 m-; siempre quedan guardados como el mismo número para
+      // que Gestión los muestre consistentemente en formato PK.
+      'km_inicio': norm.normalizeKmValue(_pickFlexible(props, [
+        'km_inicio', 'KM_INICIO', 'km inicio', 'KM INICIO', 'km iniicio',
+        'cadenamiento_inicial', 'CADENAMIENTO_INICIAL', 'cad_ini', 'CAD_INI',
+        'km_i', 'KM_I', 'km_ini', 'KM_INI', 'km0', 'KM0',
+        'cadenamiento_i', 'CADENAMIENTO_I', 'km_inicial', 'KM_INICIAL',
+      ])),
+      'km_fin': norm.normalizeKmValue(_pickFlexible(props, [
+        'km_fin', 'KM_FIN', 'km fin', 'KM FIN',
+        'cadenamiento_final', 'CADENAMIENTO_FINAL', 'cad_fin', 'CAD_FIN',
+        'km_f', 'KM_F', 'km1', 'KM1', 'cadenamiento_f', 'CADENAMIENTO_F',
+        'cadenamiento_1', 'km_final', 'KM_FINAL',
+      ])),
       'km_lineales': kmLineales,
       'km_efectivos': kmEfectivos,
 
@@ -680,23 +645,94 @@ class SincronizacionService {
       'poligono_insertado': geometry != null,
 
       // ── Gestión (estado inicial) ─────────────────────────────────────────
-      // Convierte valores booleanos o strings a boolean
-      'cop': _toBool(props['cop']),
-      'identificacion': _toBool(props['identificacion']),
-      'levantamiento': _toBool(props['levantamiento']),
-      'negociacion': _toBool(props['negociacion']),
+      // Convierte valores booleanos o strings a boolean. Se usa
+      // '_pickFlexible' (en vez de leer 'props[key]' directo) para
+      // reconocer estas columnas sin importar acentos/mayúsculas/guiones en
+      // el encabezado del archivo importado.
+      'cop': _toBool(_pickFlexible(props, [
+        'cop', 'COP', 'status', 'STATUS', 'liberado', 'LIBERADO',
+        'liberada', 'LIBERADA', 'firmado', 'FIRMADO',
+        'cop_firmado', 'COP_FIRMADO', 'anuencia', 'ANUENCIA',
+      ])),
+      'identificacion': _toBool(_pickFlexible(props, [
+        'identificacion', 'IDENTIFICACION', 'identificado', 'IDENTIFICADO',
+        'id_status', 'ID_STATUS', 'id_realizada', 'ID_REALIZADA',
+      ])),
+      'levantamiento': _toBool(_pickFlexible(props, [
+        'levantamiento', 'LEVANTAMIENTO', 'levantado', 'LEVANTADO',
+        'lev', 'LEV', 'lev_status', 'LEV_STATUS',
+      ])),
+      'negociacion': _toBool(_pickFlexible(props, [
+        'negociacion', 'NEGOCIACION', 'negociado', 'NEGOCIADO',
+        'neg', 'NEG', 'neg_status', 'NEG_STATUS',
+      ])),
 
       // ── Tipo de Liberación ───────────────────────────────────────────────
-      'tipo_liberacion': _pickFlexible(props, [
-        'tipo_liberacion', 'TIPO_LIBERACION',
-        'tipo liberacion', 'TIPO LIBERACION',
-        'tipo_de_liberacion', 'TIPO_DE_LIBERACION',
-        'tipo de liberacion', 'TIPO DE LIBERACION',
-        'liberacion', 'LIBERACION',
-        'tipo_liber', 'TIPO_LIBER',
-        'liberacion_tipo', 'LIBERACION_TIPO',
-        'tipo_release', 'TIPO_RELEASE',
-      ]),
+      // Reconoce variantes con puntos/espacios/prefijos ("D.O.T.", "Posible
+      // DOT") y las mapea al catálogo COP/DOT/AOP/EXPROPIACION; "No"/nulo
+      // se registra como "Sin Tipo" en vez de perderse o guardarse crudo.
+      'tipo_liberacion': () {
+        final crudo = _pickFlexible(props, [
+          'tipo_liberacion', 'TIPO_LIBERACION',
+          'tipo liberacion', 'TIPO LIBERACION',
+          'tipo_de_liberacion', 'TIPO_DE_LIBERACION',
+          'tipo de liberacion', 'TIPO DE LIBERACION',
+          'liberacion', 'LIBERACION',
+          'tipo_liber', 'TIPO_LIBER',
+          'liberacion_tipo', 'LIBERACION_TIPO',
+          'tipo_release', 'TIPO_RELEASE',
+          'expropiacion', 'EXPROPIACION',
+        ]);
+        if (crudo == null) return null;
+        return norm.normalizeTipoLiberacion(crudo);
+      }(),
+
+      // "Estatus"/"Rango de estatus" contra el catálogo de Gestión
+      // (Liberado, Negociacion, Posible DOT, Instruccion UVSR, Con ingreso,
+      // No liberado, L nueva).
+      'rango_estatus': () {
+        final crudo = _pickFlexible(props, [
+          'rango_estatus', 'RANGO_ESTATUS',
+          'rango de estatus', 'RANGO DE ESTATUS',
+          'rango_de_estatus', 'RANGO_DE_ESTATUS',
+          'estatus', 'ESTATUS',
+          'estatus_predio', 'ESTATUS_PREDIO',
+        ]);
+        if (crudo == null) return null;
+        return norm.normalizeRangoEstatus(crudo);
+      }(),
+
+      // "Fecha de liberación" (COP/DOT): puede venir del archivo importado
+      // en vez de capturarse manualmente. Acepta ISO, dd/mm/aaaa y
+      // dd-mm-aaaa.
+      'cop_fecha': () {
+        final crudo = _pickFlexible(props, [
+          'cop_fecha', 'COP_FECHA',
+          'fecha_liberacion', 'FECHA_LIBERACION',
+          'fecha_de_liberacion', 'FECHA_DE_LIBERACION',
+          'fecha liberacion', 'FECHA LIBERACION',
+          'fecha de liberacion', 'FECHA DE LIBERACION',
+        ]);
+        if (crudo == null) return null;
+        return norm.normalizeFechaLiberacion(crudo);
+      }(),
+
+      // "Fecha límite de pago": puede venir del archivo importado en vez
+      // de capturarse manualmente. Acepta ISO, dd/mm/aaaa y dd-mm-aaaa.
+      'fecha_limite_pago': () {
+        final crudo = _pickFlexible(props, [
+          'fecha_limite_pago', 'FECHA_LIMITE_PAGO',
+          'fecha_limite_de_pago', 'FECHA_LIMITE_DE_PAGO',
+          'fecha limite de pago', 'FECHA LIMITE DE PAGO',
+          'fecha_limite', 'FECHA_LIMITE',
+          'fecha limite', 'FECHA LIMITE',
+          'limite_pago', 'LIMITE_PAGO',
+          'fecha_pago', 'FECHA_PAGO',
+          'fecha de pago', 'FECHA DE PAGO',
+        ]);
+        if (crudo == null) return null;
+        return norm.normalizeFechaLiberacion(crudo);
+      }(),
     };
 
     // Eliminar claves con valor null para no pisar datos existentes
@@ -720,40 +756,43 @@ class SincronizacionService {
 
   /// Extrae datos del propietario desde las properties del feature.
   Map<String, dynamic> _buildPropietarioData(Map<String, dynamic> props) {
-    final nombreCompleto = _pick(props, [
+    final nombreCompletoCrudo = _pick(props, [
       'propietario', 'propietario_nombre', 'nombre_propietario',
       'nom_propietario', 'PROPIETARIO', 'titular', 'nombre',
     ]) ?? '';
+    final nombreCompleto = norm.normalizeTitleCase(nombreCompletoCrudo) ?? '';
 
     final parts = nombreCompleto.trim().split(' ');
     final nombre = parts.isNotEmpty ? parts.first : '';
     final apellidos = parts.length > 1 ? parts.sublist(1).join(' ') : '';
 
-    final razonSocial = _pick(props, [
+    final razonSocial = norm.normalizeTitleCase(_pick(props, [
       'razon_social', 'RAZON_SOCIAL', 'empresa', 'denominacion', 'EMPRESA',
-    ]);
+    ]));
 
+    final nombreCompletoUpper = nombreCompletoCrudo.toUpperCase();
     final tipoPersona = (razonSocial != null ||
-            nombreCompleto.contains('S.A.') ||
-            nombreCompleto.contains('S.DE R.L.') ||
-            nombreCompleto.contains('SAPI') ||
-            nombreCompleto.contains('SAS'))
+            nombreCompletoUpper.contains('S.A.') ||
+            nombreCompletoUpper.contains('S.DE R.L.') ||
+            nombreCompletoUpper.contains('SAPI') ||
+            nombreCompletoUpper.contains('SAS'))
         ? 'moral'
         : 'fisica';
+
+    final rfc = norm.normalizeCode(_pick(props, ['rfc', 'RFC']));
+    final curp = norm.normalizeCode(_pick(props, ['curp', 'CURP']));
+    final telefono = _pick(props, ['telefono', 'tel', 'TEL', 'phone', 'TELEFONO'])?.trim();
+    final correo = _pick(props, ['correo', 'email', 'EMAIL', 'correo_electronico'])?.trim().toLowerCase();
 
     final data = <String, dynamic>{
       'nombre': nombre,
       'apellidos': apellidos,
       'tipo_persona': tipoPersona,
       if (razonSocial case final rs?) 'razon_social': rs,
-      if (_pick(props, ['rfc', 'RFC']) != null)
-        'rfc': _pick(props, ['rfc', 'RFC']),
-      if (_pick(props, ['curp', 'CURP']) != null)
-        'curp': _pick(props, ['curp', 'CURP']),
-      if (_pick(props, ['telefono', 'tel', 'TEL', 'phone', 'TELEFONO']) != null)
-        'telefono': _pick(props, ['telefono', 'tel', 'TEL', 'phone', 'TELEFONO']),
-      if (_pick(props, ['correo', 'email', 'EMAIL', 'correo_electronico']) != null)
-        'correo': _pick(props, ['correo', 'email', 'EMAIL', 'correo_electronico']),
+      if (rfc != null) 'rfc': rfc,
+      if (curp != null) 'curp': curp,
+      if (telefono != null && telefono.isNotEmpty) 'telefono': telefono,
+      if (correo != null && correo.isNotEmpty) 'correo': correo,
     };
 
     return data;
@@ -788,164 +827,14 @@ class SincronizacionService {
     return null;
   }
 
-  /// Convierte valores a boolean para campos de gestión
-  bool _toBool(dynamic v) {
-    if (v == null) return false;
-    if (v is bool) return v;
-    if (v is num) return v != 0;
-    if (v is String) {
-      final upper = v.toUpperCase().trim();
-      if (upper == 'SI' || upper == 'YES' || upper == 'S' || upper == 'Y' || 
-          upper == 'TRUE' || upper == '1' || upper == 'X' ||
-          upper == 'COMPLETADO' || upper == 'COMPLETE' || 
-          upper == 'LIBERADO' || upper == 'LIBERADA' ||
-          upper == 'IDENTIFICADO' || upper == 'LEVANTADO' || upper == 'NEGOCIADO') {
-        return true;
-      }
-      if (upper == 'NO' || upper == 'FALSE' || upper == '0' || upper == '-' || upper.isEmpty) {
-        return false;
-      }
-    }
-    return false;
-  }
+  /// Convierte valores a boolean para campos de gestión (checklist:
+  /// identificación/levantamiento/negociación/COP). Delegado a la
+  /// normalización compartida en `core/utils/import_normalization.dart`.
+  bool _toBool(dynamic v) => norm.normalizeBoolean(v);
 
-  /// Normaliza el valor de tipo_propiedad a los valores válidos del sistema
-  String? _normalizeTipoPropiedad(String? value) {
-    if (value == null) return 'PRIVADA';
-    final upper = value.toUpperCase().trim();
-    final compact = upper.replaceAll(RegExp(r'[^A-Z0-9]'), '');
-    if (compact.contains('SOC')) return 'SOCIAL';
-    if (compact.contains('DOMINIOPLENO') || (compact.contains('DOMINIO') && compact.contains('PLENO'))) return 'DOMINIO PLENO';
-    if (upper.contains('EJI')) return 'EJIDAL';
-    if (upper.contains('MIX')) return 'MIXTO';
-    if (upper.contains('FEDERAL')) return 'FEDERAL';
-    if (upper.contains('GUBERNAMENTAL') || upper.contains('GUBERNAM') || upper.contains('GOBIERNO')) return 'GUBERNAMENTAL';
-    if (compact.contains('PRIVAD') || compact == 'PRI') return 'PRIVADA';
-    return upper.isEmpty ? 'PRIVADA' : upper;
-  }
-
-  /// Construye los campos de Gestión para ACTUALIZAR un predio existente.
-  Map<String, dynamic> _buildGestionUpdateData(
-    Map<String, dynamic> props,
-    Map<String, dynamic>? geometry,
-    Map<String, dynamic> existente,
-  ) {
-    final updates = <String, dynamic>{};
-    final estadoMunicipio = _resolveEstadoMunicipio(props);
-
-    void trySet(String dbKey, dynamic newValue, {bool overwrite = false}) {
-      if (newValue == null) return;
-      if (newValue is String && newValue.trim().isEmpty) return;
-      final cur = existente[dbKey];
-
-      if (overwrite) {
-        if (cur != newValue) {
-          updates[dbKey] = newValue;
-        }
-        return;
-      }
-
-      if (cur == null || (cur is String && cur.trim().isEmpty)) {
-        updates[dbKey] = newValue;
-      }
-    }
-
-    trySet('tramo',      _pick(props, ['tramo', 'TRAMO', 'tramo_vial', 'seccion', 'SECCION']));
-    trySet('tipo_propiedad', _resolveTipoPropiedad(props), overwrite: true);
-    trySet('estructura', _pickFlexible(props, [
-      'estructura', 'ESTRUCTURA',
-      'tipo_estructura', 'TIPO_ESTRUCTURA',
-      'clase_estructura', 'CLASE_ESTRUCTURA',
-      'estruc', 'ESTRUC',
-    ]), overwrite: true);
-    trySet('ejido',      _pick(props, ['ejido', 'EJIDO', 'nom_ejido', 'NOM_EJIDO', 'comunidad', 'localidad']));
-    trySet('proyecto',   _resolveProyecto(props));
-    trySet('propietario_nombre', _pick(props, [
-      'propietario', 'PROPIETARIO', 'propietario_nombre', 'nombre_propietario',
-      'nom_propietario', 'NOM_PROPIETARIO', 'titular', 'TITULAR', 'dueno', 'nombre',
-    ]) ?? _pickPropietarioFlexible(props));
-    trySet('superficie',    _toDouble(props['superficie']    ?? props['SUPERFICIE']    ?? props['area'] ?? props['AREA'] ?? props['shape_area'] ?? props['SHAPE_AREA'] ?? props['superficie_m2'] ?? props['m2'] ?? props['Area']));
-    trySet('uso_suelo',     _pick(props, ['uso_suelo', 'USO_SUELO', 'uso', 'USO', 'land_use', 'LAND_USE']) ?? 'Otro');
-    trySet('zona',          _pick(props, ['zona', 'ZONA', 'sector', 'SECTOR', 'region', 'REGION']));
-    trySet('valor_catastral', _toDouble(props['valor_catastral'] ?? props['VALOR_CATASTRAL'] ?? props['valor'] ?? props['VALOR'] ?? props['avaluo'] ?? props['AVALUO']));
-    trySet('descripcion',   _pick(props, ['descripcion', 'DESCRIPCION', 'description', 'DESCRIPTION']));
-    trySet('situacion_social', _pickFlexible(props, [
-      'situacion_social', 'SITUACION_SOCIAL',
-      'observaciones', 'OBSERVACIONES',
-      'observacion', 'OBSERVACION',
-      'obs', 'OBS',
-    ]), overwrite: true);
-    trySet('direccion',     _pick(props, ['direccion', 'DIRECCION', 'domicilio', 'DOMICILIO', 'calle', 'CALLE']));
-    trySet('colonia',       _pick(props, ['colonia', 'COLONIA', 'barrio', 'BARRIO']));
-    trySet('municipio',     estadoMunicipio['municipio'], overwrite: true);
-    trySet('estado',        estadoMunicipio['estado'], overwrite: true);
-    trySet('codigo_postal', _pick(props, ['codigo_postal', 'CODIGO_POSTAL', 'cp', 'CP']));
-    trySet('km_inicio',     _pickDoubleFlexible(props, [
-      'km_inicio', 'KM_INICIO', 'km inicio', 'KM INICIO',
-      'km iniicio', 'KM INIICIO',
-      'cadenamiento_inicial', 'CADENAMIENTO_INICIAL', 'cad_ini', 'CAD_INI',
-      'km_i', 'KM_I', 'km_ini', 'KM_INI', 'km0', 'KM0',
-      'cadenamiento_i', 'CADENAMIENTO_I', 'km_inicial', 'KM_INICIAL',
-    ]), overwrite: true);
-    trySet('km_fin',        _pickDoubleFlexible(props, [
-      'km_fin', 'KM_FIN', 'km fin', 'KM FIN',
-      'cadenamiento_final', 'CADENAMIENTO_FINAL', 'cad_fin', 'CAD_FIN',
-      'km_f', 'KM_F', 'km1', 'KM1', 'cadenamiento_f', 'CADENAMIENTO_F',
-      'cadenamiento_1', 'km_final', 'KM_FINAL',
-    ]), overwrite: true);
-    trySet('km_lineales',   _pickDoubleFlexible(props, [
-      'km_lineales', 'KM_LINEALES', 'km lineales', 'KM LINEALES',
-      'longitud_km', 'LONGITUD_KM', 'longitud', 'LONGITUD', 'km', 'KM',
-    ]), overwrite: true);
-    trySet('km_efectivos',  _pickDoubleFlexible(props, [
-      'km_efectivos', 'KM_EFECTIVOS', 'km efectivos', 'KM EFECTIVOS',
-      'km_efectivo', 'KM_EFECTIVO', 'km_e', 'KM_E',
-      'longitud_efectiva', 'LONGITUD_EFECTIVA', 'longitud efectiva', 'LONGITUD EFECTIVA',
-      'kme', 'KME',
-    ]), overwrite: true);
-
-    // Campos booleanos de gestión
-    trySet('identificacion', _toBool(_pickFlexible(props, [
-      'identificacion', 'IDENTIFICACION',
-      'identificación', 'IDENTIFICACIÓN',
-      'identificado', 'IDENTIFICADO',
-    ])), overwrite: true);
-    trySet('levantamiento', _toBool(_pickFlexible(props, [
-      'levantamiento', 'LEVANTAMIENTO',
-      'levantado', 'LEVANTADO',
-    ])), overwrite: true);
-    trySet('negociacion', _toBool(_pickFlexible(props, [
-      'negociacion', 'NEGOCIACION',
-      'negociación', 'NEGOCIACIÓN',
-      'negociado', 'NEGOCIADO',
-    ])), overwrite: true);
-    trySet('cop', _toBool(_pickFlexible(props, [
-      'cop', 'COP',
-      'estatus', 'ESTATUS',
-      'status', 'STATUS',
-      'liberado', 'LIBERADO',
-      'liberada', 'LIBERADA',
-      'anuencia', 'ANUENCIA',
-    ])), overwrite: true);
-
-    // Tipo de liberación
-    trySet('tipo_liberacion', _pickFlexible(props, [
-      'tipo_liberacion', 'TIPO_LIBERACION',
-      'tipo liberacion', 'TIPO LIBERACION',
-      'tipo_de_liberacion', 'TIPO_DE_LIBERACION',
-      'tipo de liberacion', 'TIPO DE LIBERACION',
-      'liberacion', 'LIBERACION',
-      'tipo_liber', 'TIPO_LIBER',
-      'liberacion_tipo', 'LIBERACION_TIPO',
-      'tipo_release', 'TIPO_RELEASE',
-    ]), overwrite: true);
-
-    if (geometry != null && existente['geometry'] == null) {
-      updates['geometry']           = geometry;
-      updates['poligono_insertado'] = true;
-    }
-    return updates;
-  }
+  /// Normaliza el valor de tipo_propiedad a los valores válidos del sistema.
+  /// Delegado a la normalización compartida.
+  String? _normalizeTipoPropiedad(String? value) => norm.normalizeTipoPropiedad(value);
 
   /// Procesa todos los features del archivo GeoJSON de forma asíncrona.
   Future<SincronizacionResultado> sincronizar(
@@ -964,7 +853,6 @@ class SincronizacionService {
 
     final resultadosByIndex = <int, FeatureSyncResult>{};
     final mensajesError = <String>[];
-    final predioByClaveCache = <String, Map<String, dynamic>?>{};
     var encontrados = 0;
     var creados = 0;
     var errores = 0;
@@ -973,11 +861,18 @@ class SincronizacionService {
     onProgress?.call(0, features.length);
 
     final lanes = _buildLanes(features, concurrency);
+    // Cuenta cuántas veces se ha visto cada clave DENTRO de este mismo
+    // archivo: es la única señal confiable de relación 1:N real (ver
+    // comentario en `PrediosRepository.upsertPredioPorClave`). Dos features
+    // con la misma clave siempre caen en el mismo carril (mismo hash), así
+    // que este mapa compartido nunca se toca desde dos carriles a la vez
+    // para la misma clave.
+    final vecesVistaPorClave = <String, int>{};
     await Future.wait(
       lanes.map(
         (lane) => _processLane(
           lane,
-          predioByClaveCache: predioByClaveCache,
+          vecesVistaPorClave: vecesVistaPorClave,
           onOutcome: (outcome) {
             resultadosByIndex[outcome.featureIndex] = outcome.result;
             encontrados += outcome.encontrados;
@@ -1058,25 +953,44 @@ class SincronizacionService {
 
   Future<void> _processLane(
     List<MapEntry<int, Map<String, dynamic>>> lane, {
-    required Map<String, Map<String, dynamic>?> predioByClaveCache,
+    required Map<String, int> vecesVistaPorClave,
     required void Function(_FeatureSyncOutcome outcome) onOutcome,
   }) async {
     for (final item in lane) {
-      final outcome = await _processFeature(
-        item.key,
-        item.value,
-        predioByClaveCache: predioByClaveCache,
-      );
+      final outcome = await _processFeature(item.key, item.value, vecesVistaPorClave);
       onOutcome(outcome);
     }
   }
 
   Future<_FeatureSyncOutcome> _processFeature(
     int featureIndex,
-    Map<String, dynamic> feature, {
-    required Map<String, Map<String, dynamic>?> predioByClaveCache,
-  }) async {
+    Map<String, dynamic> feature,
+    Map<String, int> vecesVistaPorClave,
+  ) async {
     final featureNumber = featureIndex + 1;
+
+    final rawPropsInicial = feature['properties'];
+    final propsInicial =
+        rawPropsInicial is Map ? Map<String, dynamic>.from(rawPropsInicial) : <String, dynamic>{};
+    if (_extractId(GeoJsonMapper.normalizeProperties(propsInicial)) == null) {
+      // Sin clave catastral resoluble (ni por el campo canónico ni por
+      // ningún alias conocido -folio, id_sedatu, cvegeo, id, fid, etc.-):
+      // antes se generaba un identificador inventado (`IMP-<timestamp>`)
+      // que parecía una clave real y terminaba produciendo registros
+      // fantasma -duplicados, o predios que ya no se podían encontrar ni
+      // borrar por su clave real-. Ahora el feature se omite y se cuenta
+      // como error, sin crear ningún predio. `carga_archivo_screen.dart`
+      // ya valida esto ANTES de llegar aquí y bloquea la importación
+      // completa del archivo; esto es una salvaguarda adicional.
+      return _FeatureSyncOutcome(
+        featureIndex: featureIndex,
+        result: FeatureSyncResult(feature: feature, existia: false),
+        encontrados: 0,
+        creados: 0,
+        errores: 1,
+        mensajesError: ['Feature $featureNumber: sin clave catastral, omitido.'],
+      );
+    }
 
     try {
       final rawProps = feature['properties'];
@@ -1087,80 +1001,15 @@ class SincronizacionService {
       final geometry = feature['geometry'] is Map
           ? Map<String, dynamic>.from(feature['geometry'] as Map)
           : null;
-      final clave = _extractId(props);
+      // La clave ya se validó como resoluble arriba.
+      final claveNormalizada = _extractId(props)!.trim();
 
-      // Siempre intentar procesar el feature, sin importar si tiene clave o no
-      String? claveNormalizada;
-      Map<String, dynamic>? existente;
-
-      if (clave != null && clave.trim().isNotEmpty) {
-        final claveLookup = clave.trim();
-        claveNormalizada = claveLookup;
-        
-        if (predioByClaveCache.containsKey(claveLookup)) {
-          existente = predioByClaveCache[claveLookup];
-        } else {
-          try {
-            existente = await _withRetry(
-              () => _prediosRepo.buscarPorClaveCatastral(claveLookup),
-              operationName: 'buscarPorClaveCatastral',
-            );
-          } catch (_) {
-            // Si falla la búsqueda, continuar como si no existiera
-            existente = null;
-          }
-          predioByClaveCache[claveLookup] = existente;
-        }
-
-        // Si existe, actualizar
-        if (existente != null) {
-          var existenteActual = existente;
-          final updateData = _buildGestionUpdateData(
-            props,
-            geometry,
-            existenteActual,
-          );
-
-          if (updateData.isNotEmpty) {
-            try {
-              final updated = await _withRetry(
-                () => _prediosRepo.updatePredio(
-                  existenteActual['id'] as String,
-                  updateData,
-                ),
-                operationName: 'updatePredio',
-              );
-              final propietariosRaw = existenteActual['propietarios'];
-              existenteActual = updated.toMap()
-                ..['id'] = updated.id
-                ..['propietarios'] = propietariosRaw;
-              predioByClaveCache[claveNormalizada] = existenteActual;
-            } catch (_) {
-              // Si falla el update, continuar con los datos existentes.
-            }
-          }
-
-          final enrichedProps = _injectData(props, existenteActual);
-          return _FeatureSyncOutcome(
-            featureIndex: featureIndex,
-            result: FeatureSyncResult(
-              feature: {
-                ...feature,
-                'properties': enrichedProps,
-              },
-              existia: true,
-              predioId: existenteActual['id'] as String?,
-            ),
-            encontrados: 1,
-            creados: 0,
-            errores: 0,
-          );
-        }
-      }
-
-      // Si no hay clave o no existe, crear nuevo registro
-      final nuevaClave = claveNormalizada ?? 'IMP-${DateTime.now().microsecondsSinceEpoch}-$featureNumber';
-      final predioData = _buildNuevoPredioData(nuevaClave, props, geometry, propsOriginal: propsOriginal);
+      final predioData = _buildNuevoPredioData(
+        claveNormalizada,
+        props,
+        geometry,
+        propsOriginal: propsOriginal,
+      );
 
       final nombreProp = predioData['propietario_nombre'] as String?;
       if (nombreProp != null && nombreProp.isNotEmpty) {
@@ -1176,18 +1025,32 @@ class SincronizacionService {
         }
       }
 
-      final nuevoPredio = await _withRetry(
-        () => _prediosRepo.createPredio(predioData),
-        operationName: 'createPredio',
+      // Si ya existe EXACTAMENTE un registro con esta clave y este mismo
+      // archivo no la había traído antes, se fusiona en ese registro en vez
+      // de crear uno nuevo -join vectorial+tabular, heredando datos
+      // mutuamente-. Si este archivo YA trajo la misma clave antes
+      // (`esRepetidoEnArchivo`), es una afectación repetida real y se crea
+      // un registro nuevo vinculado al mismo polígono (ver
+      // `PrediosRepository.upsertPredioPorClave`).
+      final vecesVista = (vecesVistaPorClave[claveNormalizada] ?? 0) + 1;
+      vecesVistaPorClave[claveNormalizada] = vecesVista;
+      final esRepetidoEnArchivo = vecesVista > 1;
+
+      final resultado = await _withRetry(
+        () => _prediosRepo.upsertPredioPorClave(
+          predioData,
+          forzarNuevoRegistro: esRepetidoEnArchivo,
+        ),
+        operationName: 'upsertPredioPorClave',
       );
 
-      final nuevoMap = nuevoPredio.toMap()
-        ..['id'] = nuevoPredio.id
-        ..['created_at'] = nuevoPredio.createdAt.toIso8601String();
-      predioByClaveCache[nuevaClave.trim()] = nuevoMap;
+      final nuevoMap = resultado.predio.toMap()
+        ..['id'] = resultado.predio.id
+        ..['created_at'] = resultado.predio.createdAt.toIso8601String();
 
       final enrichedProps = _injectData(props, nuevoMap);
       enrichedProps['_predioNuevo'] = true;
+      if (resultado.fusionado) enrichedProps['_predioFusionado'] = true;
 
       return _FeatureSyncOutcome(
         featureIndex: featureIndex,
@@ -1196,11 +1059,11 @@ class SincronizacionService {
             ...feature,
             'properties': enrichedProps,
           },
-          existia: false,
-          predioId: nuevoPredio.id,
+          existia: resultado.fusionado,
+          predioId: resultado.predio.id,
         ),
-        encontrados: 0,
-        creados: 1,
+        encontrados: resultado.fusionado ? 1 : 0,
+        creados: resultado.fusionado ? 0 : 1,
         errores: 0,
       );
     } catch (e) {
@@ -1215,8 +1078,8 @@ class SincronizacionService {
         final geometry = feature['geometry'] is Map
             ? Map<String, dynamic>.from(feature['geometry'] as Map)
             : null;
-        final clave = _extractId(props) ??
-            'IMP-${DateTime.now().microsecondsSinceEpoch}-$featureNumber';
+        // La clave ya se validó como resoluble al inicio de _processFeature.
+        final clave = _extractId(props)!;
 
         // Extraer y normalizar el tipo de propiedad del archivo GeoJSON
         final tipoPropiedad = _resolveTipoPropiedad(props);
@@ -1242,7 +1105,6 @@ class SincronizacionService {
         final nuevoMap = nuevoPredio.toMap()
           ..['id'] = nuevoPredio.id
           ..['created_at'] = nuevoPredio.createdAt.toIso8601String();
-        predioByClaveCache[clave.trim()] = nuevoMap;
 
         final enrichedProps = _injectData(props, nuevoMap);
         enrichedProps['_predioNuevo'] = true;

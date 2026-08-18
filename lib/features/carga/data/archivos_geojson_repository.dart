@@ -4,6 +4,8 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:uuid/uuid.dart';
 
+import '../utils/imported_file_cleanup.dart';
+
 final archivosGeoJsonRepositoryProvider = Provider<ArchivosGeoJsonRepository>(
   (ref) => ArchivosGeoJsonRepository(FirebaseFirestore.instance),
 );
@@ -15,7 +17,12 @@ class ArchivosGeoJsonRepository {
 
   static const _uuid = Uuid();
   static const int _maxStoredFeatures = 10000;
-  static const int _maxStoredFeaturesBytes = 5000000;
+  // Firestore limita cada documento a 1 MiB (1,048,576 bytes) en total.
+  // Se deja margen para el resto de campos del documento (nombre, contadores,
+  // metadatos, etc.) para no exceder ese limite y que `saveArchivo` falle
+  // silenciosamente (el archivo quedaria solo en memoria de la sesion actual
+  // y desapareceria de "Archivos" al reiniciar sesion).
+  static const int _maxStoredFeaturesBytes = 900000;
 
   CollectionReference<Map<String, dynamic>> get _archivos =>
       _firestore.collection('archivos_geojson');
@@ -45,6 +52,19 @@ class ArchivosGeoJsonRepository {
       return v == 'true' || v == '1' || v == 'si' || v == 'sí' || v == 'yes';
     }
     return false;
+  }
+
+  List<String> _toStringList(dynamic value) {
+    if (value is List) return value.map((v) => v.toString()).toList();
+    if (value is String && value.trim().isNotEmpty) {
+      try {
+        final decoded = jsonDecode(value);
+        if (decoded is List) return decoded.map((v) => v.toString()).toList();
+      } catch (_) {
+        return const [];
+      }
+    }
+    return const [];
   }
 
   List<dynamic> _toFeatures(dynamic value) {
@@ -95,6 +115,7 @@ class ArchivosGeoJsonRepository {
         'nombre': row['nombre']?.toString() ?? 'archivo',
         'features_count': _toInt(row['features_count']),
         'features': _toFeatures(row['features']),
+        'claves_catastrales': _toStringList(row['claves_catastrales']),
         'sincronizado': _toBool(row['sincronizado']),
         'encontrados': _toInt(row['encontrados']),
         'creados': _toInt(row['creados']),
@@ -129,17 +150,43 @@ class ArchivosGeoJsonRepository {
     String? createdByUid,
     String? createdByEmail,
     String? proyecto,
+    // Los XLSX de predios escriben directo a Firestore (`XlsxImportService
+    // .importar`) y no traen `features` geográficos que guardar aquí
+    // (`features` llega vacío desde `carga_archivo_screen.dart`); sin este
+    // override, `claves_catastrales` se guardaba siempre como `[]` para
+    // TODO archivo XLSX de predios, y al borrar el archivo después
+    // `_eliminarPrediosDeGestionPorClaves` no encontraba ninguna clave que
+    // borrar -el archivo desaparecía de "Archivos" pero sus predios
+    // quedaban huérfanos en Gestión y en el mapa-.
+    List<String>? clavesCatastralesOverride,
   }) async {
     final now = DateTime.now().toIso8601String();
     final id = _uuid.v4();
     final storedFeatures = _featuresForStorage(features);
+    // Se calculan sobre `features` COMPLETO (antes del recorte de
+    // `_featuresForStorage`): las claves catastrales pesan una fracción de
+    // lo que pesa la geometría, así que caben todas aunque el archivo sea
+    // demasiado grande para guardar todos sus `features`. Es lo que usa
+    // `_eliminarPrediosDeGestionPorClaves` (carga_archivo_screen.dart) al
+    // borrar el archivo -antes de este campo, esa función dependía de
+    // `features` ya recortado y por eso un archivo grande dejaba predios
+    // huérfanos sin poder borrarse-.
+    final clavesCatastrales =
+        clavesCatastralesOverride ?? extractClavesFromFeatures(features).toList();
 
     final entry = <String, dynamic>{
       'nombre': nombre,
       'features_count': rowCount ?? features.length,
-      'features': storedFeatures,
+      // Firestore no admite arrays anidados (ej. geometry.coordinates de un
+      // Polygon: array de arrays de [lng, lat]); escribir `storedFeatures`
+      // directamente hace que el SDK lance 'Nested arrays are not
+      // supported' y la escritura del archivo falle siempre en silencio.
+      // Se serializa a String, igual que ya hace PrediosRepository con
+      // `geometry`; `getArchivos()`/`_toFeatures` ya sabe decodificarlo.
+      'features': jsonEncode(storedFeatures),
       'features_stored': storedFeatures.length,
       'features_truncated': storedFeatures.length < features.length,
+      'claves_catastrales': clavesCatastrales,
       'sincronizado': sincronizado,
       'encontrados': encontrados,
       'creados': creados,
