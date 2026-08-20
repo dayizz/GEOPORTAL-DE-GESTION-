@@ -10,7 +10,6 @@ import '../../../shared/widgets/app_scaffold.dart';
 import '../../auth/providers/auth_provider.dart';
 import '../../estructura/models/proyecto_item.dart';
 import '../../estructura/providers/proyectos_provider.dart';
-import '../../mapa/models/vista_mapa.dart';
 import '../../mapa/utils/geometry_parsing.dart';
 import '../../predios/models/predio.dart';
 import '../../predios/providers/predios_provider.dart';
@@ -23,7 +22,6 @@ import '../utils/color_hex.dart';
 import 'widgets/capas_panel.dart';
 import 'widgets/elemento_box.dart';
 import 'widgets/herramienta_hoja_dialog.dart';
-import 'widgets/lista_vistas_mapa_panel.dart';
 import 'widgets/panel_propiedades_escala.dart';
 import 'widgets/panel_propiedades_forma.dart';
 import 'widgets/panel_propiedades_grafica.dart';
@@ -908,11 +906,7 @@ class _ComposicionEditorScreenState extends ConsumerState<ComposicionEditorScree
     );
   }
 
-  /// Contenedor lateral derecho dividido en dos (pedido explícito): arriba
-  /// las funciones de edición ya existentes (propiedades del elemento
-  /// seleccionado), abajo la lista de "vistas de mapa" guardadas para el
-  /// proyecto de esta composición -tocar una la inserta como elemento de
-  /// mapa en la hoja activa (`_insertarVistaMapa`)-.
+  /// Contenedor lateral derecho de las propiedades del elemento seleccionado.
   Widget _buildPanelLateralDerecho() {
     final elemento = _elementoSeleccionado;
     return SizedBox(
@@ -937,33 +931,9 @@ class _ComposicionEditorScreenState extends ConsumerState<ComposicionEditorScree
                     child: _buildPanelPropiedadesContenido(elemento),
                   ),
           ),
-          const Divider(height: 1),
-          Padding(
-            padding: const EdgeInsets.fromLTRB(12, 8, 12, 4),
-            child: Text('Vistas de mapa', style: Theme.of(context).textTheme.titleSmall),
-          ),
-          Expanded(
-            child: ListaVistasMapaPanel(
-              proyecto: _composicion!.proyecto,
-              onSeleccionar: _insertarVistaMapa,
-            ),
-          ),
         ],
       ),
     );
-  }
-
-  void _insertarVistaMapa(VistaMapa vista) {
-    _agregarElemento((x, y) => ElementoComposicion.mapa(
-          lat: vista.lat,
-          lng: vista.lng,
-          zoom: vista.zoom,
-          proyecto: vista.proyecto,
-          x: x,
-          y: y,
-          baseLayer: vista.baseLayer,
-          mostrarClaves: vista.mostrarEtiquetasClave,
-        ));
   }
 
   Widget _buildPanelPropiedadesContenido(ElementoComposicion elemento) {

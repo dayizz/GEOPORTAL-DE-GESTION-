@@ -25,7 +25,7 @@ import '../../../predios/models/predio.dart';
 /// ('estandar'/'satelital'/'satelitalSinEtiquetas'/'sinMapa', ver
 /// `MapaBaseLayer` en `mapa_provider.dart`) y el toggle de etiquetas de
 /// clave catastral de la pantalla Mapa, para que una "vista de mapa"
-/// capturada ahí (ver `VistaMapa`) se vea igual al insertarse aquí -antes
+/// configurada en el elemento se vea igual al renderizarse aquí.
 /// siempre salía con mapa estándar y sin etiquetas, sin importar cómo se
 /// hubiera capturado la vista-.
 class MapaViewportWidget extends StatelessWidget {
