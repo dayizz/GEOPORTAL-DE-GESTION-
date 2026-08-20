@@ -571,7 +571,11 @@ class _ComposicionEditorScreenState extends ConsumerState<ComposicionEditorScree
                   onTap: () => _agregarElemento((x, y) => ElementoComposicion.texto(x: x, y: y)),
                 ),
                 const SizedBox(width: 4),
-                _herramientaNorteEscalaSimbologiaBoton(),
+                _herramientaNorteBoton(),
+                const SizedBox(width: 4),
+                _herramientaEscalaBoton(),
+                const SizedBox(width: 4),
+                _herramientaSimbologiaBoton(),
                 const SizedBox(width: 4),
                 _herramientaGraficaBoton(),
                 ],
@@ -716,43 +720,39 @@ class _ComposicionEditorScreenState extends ConsumerState<ComposicionEditorScree
     );
   }
 
-  Widget _herramientaNorteEscalaSimbologiaBoton() {
+  Widget _herramientaNorteBoton() {
+    return _herramientaBoton(
+      icon: Icons.explore_outlined,
+      tooltip: 'Norte',
+      onTap: () => _agregarElemento((x, y) => ElementoComposicion.norte(x: x, y: y)),
+    );
+  }
+
+  Widget _herramientaEscalaBoton() {
+    return _herramientaBoton(
+      icon: Icons.straighten_outlined,
+      tooltip: 'Escala gráfica',
+      onTap: () {
+        final mapasEnHoja = _hojaActiva.elementos.where((e) => e.tipo == TipoElemento.mapa);
+        final mapaId = mapasEnHoja.isEmpty ? null : mapasEnHoja.first.id;
+        _agregarElemento((x, y) => ElementoComposicion.escala(x: x, y: y, mapaId: mapaId));
+      },
+    );
+  }
+
+  Widget _herramientaSimbologiaBoton() {
     return Tooltip(
-      message: 'Norte / escala / simbología',
-      child: PopupMenuButton<String>(
+      message: 'Simbología',
+      child: PopupMenuButton<TipoSimbologia>(
         tooltip: '',
         offset: const Offset(0, 32),
-        onSelected: (opcion) {
-          switch (opcion) {
-            case 'norte':
-              _agregarElemento((x, y) => ElementoComposicion.norte(x: x, y: y));
-              break;
-            case 'escala':
-              final mapasEnHoja = _hojaActiva.elementos.where((e) => e.tipo == TipoElemento.mapa);
-              final mapaId = mapasEnHoja.isEmpty ? null : mapasEnHoja.first.id;
-              _agregarElemento((x, y) => ElementoComposicion.escala(x: x, y: y, mapaId: mapaId));
-              break;
-            case 'simbologia_estatus':
-              _agregarElemento((x, y) => ElementoComposicion.simbologia(tipo: TipoSimbologia.estatus, x: x, y: y));
-              break;
-            case 'simbologia_rango':
-              _agregarElemento(
-                  (x, y) => ElementoComposicion.simbologia(tipo: TipoSimbologia.rangoEstatus, x: x, y: y));
-              break;
-            case 'simbologia_tipo':
-              _agregarElemento(
-                  (x, y) => ElementoComposicion.simbologia(tipo: TipoSimbologia.tipoPropiedad, x: x, y: y));
-              break;
-          }
-        },
+        onSelected: (tipo) => _agregarElemento(
+          (x, y) => ElementoComposicion.simbologia(tipo: tipo, x: x, y: y),
+        ),
         itemBuilder: (context) => const [
-          PopupMenuItem(value: 'norte', child: Text('Símbolo de norte')),
-          PopupMenuItem(value: 'escala', child: Text('Escala gráfica')),
-          PopupMenuDivider(),
-          PopupMenuItem(enabled: false, child: Text('Simbología por:', style: TextStyle(fontSize: 11, color: Colors.grey))),
-          PopupMenuItem(value: 'simbologia_estatus', child: Text('Estatus')),
-          PopupMenuItem(value: 'simbologia_rango', child: Text('Rango de estatus')),
-          PopupMenuItem(value: 'simbologia_tipo', child: Text('Tipo de propiedad')),
+          PopupMenuItem(value: TipoSimbologia.estatus, child: Text('Estatus')),
+          PopupMenuItem(value: TipoSimbologia.rangoEstatus, child: Text('Rango de estatus')),
+          PopupMenuItem(value: TipoSimbologia.tipoPropiedad, child: Text('Tipo de propiedad')),
         ],
         child: Container(
           width: 32,
@@ -762,7 +762,7 @@ class _ComposicionEditorScreenState extends ConsumerState<ComposicionEditorScree
             color: AppColors.surfaceVariant,
             borderRadius: BorderRadius.circular(7),
           ),
-          child: const Icon(Icons.explore_outlined, size: 16, color: AppColors.textPrimary),
+          child: const Icon(Icons.palette_outlined, size: 16, color: AppColors.textPrimary),
         ),
       ),
     );
