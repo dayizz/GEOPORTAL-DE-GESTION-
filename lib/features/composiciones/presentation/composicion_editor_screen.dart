@@ -130,6 +130,14 @@ class _ComposicionEditorScreenState extends ConsumerState<ComposicionEditorScree
     }
   }
 
+  List<Predio> _prediosParaElementoMapa(ElementoComposicion elemento, List<Predio> todos) {
+    final proyectoMapa = elemento.mapaProyecto?.trim().toUpperCase();
+    if (proyectoMapa == null || proyectoMapa.isEmpty) {
+      return _filtrarPrediosDelProyecto(todos);
+    }
+    return todos.where((predio) => _predioPerteneceAProyecto(predio, proyectoMapa)).toList(growable: false);
+  }
+
   /// El `ProyectoItem` (Estructura > Proyectos) que corresponde al
   /// proyecto de esta composición, solo necesario para el elemento de
   /// tipo gráfica "Diagrama por cadenamiento" (mismo criterio de
@@ -409,7 +417,7 @@ class _ComposicionEditorScreenState extends ConsumerState<ComposicionEditorScree
     }
 
     final composicion = _composicion!;
-    final predios = _filtrarPrediosDelProyecto(ref.watch(prediosMapaProvider).valueOrNull ?? const []);
+    final todosLosPredios = ref.watch(prediosMapaProvider).valueOrNull ?? const <Predio>[];
     final proyectoItem = _proyectoItemDe(ref.watch(proyectosProvider).valueOrNull ?? const <ProyectoItem>[]);
 
     return AppScaffold(
@@ -483,14 +491,14 @@ class _ComposicionEditorScreenState extends ConsumerState<ComposicionEditorScree
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          _buildBarraLateral(predios),
+          _buildBarraLateral(todosLosPredios),
           const VerticalDivider(width: 1),
           Expanded(
             child: Column(
               children: [
                 _buildBarraHojas(),
                 const Divider(height: 1),
-                Expanded(child: _buildLienzo(predios, proyectoItem)),
+                Expanded(child: _buildLienzo(todosLosPredios, proyectoItem)),
               ],
             ),
           ),
@@ -842,7 +850,7 @@ class _ComposicionEditorScreenState extends ConsumerState<ComposicionEditorScree
     );
   }
 
-  Widget _buildLienzo(List<Predio> predios, ProyectoItem? proyectoItem) {
+  Widget _buildLienzo(List<Predio> todosLosPredios, ProyectoItem? proyectoItem) {
     final hoja = _hojaActiva;
     final (anchoMm, altoMm) = hoja.dimensionesMm;
 
@@ -890,8 +898,10 @@ class _ComposicionEditorScreenState extends ConsumerState<ComposicionEditorScree
                                   (e) => e.copyWith(mapaLat: lat, mapaLng: lng, mapaZoom: zoom),
                                 )
                             : null,
-                        predios: elemento.tipo == TipoElemento.mapa || elemento.tipo == TipoElemento.grafica
-                            ? predios
+                        predios: elemento.tipo == TipoElemento.mapa
+                          ? _prediosParaElementoMapa(elemento, todosLosPredios)
+                          : elemento.tipo == TipoElemento.grafica
+                            ? _filtrarPrediosDelProyecto(todosLosPredios)
                             : const [],
                         hojaElementos: elemento.tipo == TipoElemento.escala ? hoja.elementos : const [],
                         proyectoItem: elemento.tipo == TipoElemento.grafica ? proyectoItem : null,
