@@ -35,6 +35,7 @@ class MapaViewportWidget extends StatelessWidget {
     required this.lng,
     required this.zoom,
     required this.predios,
+    this.importedFeatures = const [],
     this.interactivo = false,
     this.onPosicionCambiada,
     this.baseLayer = 'estandar',
@@ -45,6 +46,7 @@ class MapaViewportWidget extends StatelessWidget {
   final double lng;
   final double zoom;
   final List<Predio> predios;
+  final List<Map<String, dynamic>> importedFeatures;
   final bool interactivo;
   final void Function(double lat, double lng, double zoom)? onPosicionCambiada;
   final String baseLayer;
@@ -74,13 +76,39 @@ class MapaViewportWidget extends StatelessWidget {
       final rings = extractRingsFromGeometry(predio.geometry);
       if (rings.isEmpty) continue;
       final color = AppColors.rangoEstatusColor(predio.rangoEstatus);
-      poligonos.add(Polygon(
-        points: rings.first,
-        holePointsList: rings.length > 1 ? rings.sublist(1) : const [],
-        color: color.withValues(alpha: 0.35),
-        borderColor: color,
-        borderStrokeWidth: 1.5,
-      ));
+      poligonos.add(
+        Polygon(
+          points: rings.first,
+          holePointsList: rings.length > 1 ? rings.sublist(1) : const [],
+          color: color.withValues(alpha: 0.35),
+          borderColor: color,
+          borderStrokeWidth: 1.5,
+        ),
+      );
+    }
+    return poligonos;
+  }
+
+  List<Polygon> _construirPoligonosImportados() {
+    final poligonos = <Polygon>[];
+    for (final feature in importedFeatures) {
+      final geometry = feature['geometry'];
+      if (geometry is! Map) continue;
+      final polygons = extractPolygonsFromGeometry(
+        Map<String, dynamic>.from(geometry),
+      );
+      for (final rings in polygons) {
+        if (rings.isEmpty || rings.first.isEmpty) continue;
+        poligonos.add(
+          Polygon(
+            points: rings.first,
+            holePointsList: rings.length > 1 ? rings.sublist(1) : const [],
+            color: AppColors.primary.withValues(alpha: 0.28),
+            borderColor: AppColors.primary,
+            borderStrokeWidth: 1.8,
+          ),
+        );
+      }
     }
     return poligonos;
   }
@@ -123,10 +151,26 @@ class MapaViewportWidget extends StatelessWidget {
                   fontWeight: FontWeight.w700,
                   color: Colors.black,
                   shadows: [
-                    Shadow(color: Colors.white, blurRadius: 3, offset: Offset(1, 1)),
-                    Shadow(color: Colors.white, blurRadius: 3, offset: Offset(-1, 1)),
-                    Shadow(color: Colors.white, blurRadius: 3, offset: Offset(1, -1)),
-                    Shadow(color: Colors.white, blurRadius: 3, offset: Offset(-1, -1)),
+                    Shadow(
+                      color: Colors.white,
+                      blurRadius: 3,
+                      offset: Offset(1, 1),
+                    ),
+                    Shadow(
+                      color: Colors.white,
+                      blurRadius: 3,
+                      offset: Offset(-1, 1),
+                    ),
+                    Shadow(
+                      color: Colors.white,
+                      blurRadius: 3,
+                      offset: Offset(1, -1),
+                    ),
+                    Shadow(
+                      color: Colors.white,
+                      blurRadius: 3,
+                      offset: Offset(-1, -1),
+                    ),
                   ],
                 ),
               ),
@@ -153,7 +197,11 @@ class MapaViewportWidget extends StatelessWidget {
           ),
           onPositionChanged: interactivo
               ? (camera, hasGesture) {
-                  onPosicionCambiada?.call(camera.center.latitude, camera.center.longitude, camera.zoom);
+                  onPosicionCambiada?.call(
+                    camera.center.latitude,
+                    camera.center.longitude,
+                    camera.zoom,
+                  );
                 }
               : null,
         ),
@@ -163,7 +211,12 @@ class MapaViewportWidget extends StatelessWidget {
               urlTemplate: tileTemplate,
               userAgentPackageName: 'com.geoportal.predios',
             ),
-          PolygonLayer(polygons: _construirPoligonos()),
+          PolygonLayer(
+            polygons: [
+              ..._construirPoligonos(),
+              ..._construirPoligonosImportados(),
+            ],
+          ),
           if (etiquetas.isNotEmpty) MarkerLayer(markers: etiquetas),
         ],
       ),

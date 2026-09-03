@@ -26,7 +26,9 @@ class ElementoBox extends StatefulWidget {
     this.predios = const [],
     this.hojaElementos = const [],
     this.proyectoItem,
+    this.importedFeatures = const [],
   });
+  final List<Map<String, dynamic>> importedFeatures;
 
   final ElementoComposicion elemento;
   final double scale;
@@ -262,6 +264,7 @@ class _ElementoBoxState extends State<ElementoBox> {
         lng: e.mapaLng ?? -100.35,
         zoom: e.mapaZoom ?? 12,
         predios: widget.predios,
+        importedFeatures: widget.importedFeatures,
         interactivo: _editandoMapa,
         onPosicionCambiada: (lat, lng, zoom) =>
             _mapaPendiente = (lat, lng, zoom),

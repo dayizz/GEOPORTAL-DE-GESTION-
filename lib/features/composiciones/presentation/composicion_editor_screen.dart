@@ -10,6 +10,7 @@ import '../../../shared/widgets/app_scaffold.dart';
 import '../../auth/providers/auth_provider.dart';
 import '../../estructura/models/proyecto_item.dart';
 import '../../estructura/providers/proyectos_provider.dart';
+import '../../mapa/providers/mapa_provider.dart';
 import '../../mapa/utils/geometry_parsing.dart';
 import '../../predios/models/predio.dart';
 import '../../predios/providers/predios_provider.dart';
@@ -107,9 +108,21 @@ class _ComposicionEditorScreenState
   /// puede llamar fuera de `build()`.
   List<Predio> _filtrarPrediosDelProyecto(List<Predio> todos) {
     final proyecto = _composicion?.proyecto.trim().toUpperCase();
-    if (proyecto == null || proyecto.isEmpty) return const [];
-    return todos
+    if (proyecto == null || proyecto.isEmpty) {
+      return todos
+          .where((predio) => predio.geometry != null)
+          .toList(growable: false);
+    }
+    final filtrados = todos
         .where((p) => _predioPerteneceAProyecto(p, proyecto))
+        .toList(growable: false);
+    if (filtrados.isNotEmpty) return filtrados;
+
+    // Los GeoJSON importados pueden no traer un código de proyecto. En ese
+    // caso se conservan sus geometrías para que el mapa de composición
+    // coincida con la vista principal de Mapa.
+    return todos
+        .where((predio) => predio.geometry != null)
         .toList(growable: false);
   }
 
@@ -150,8 +163,12 @@ class _ComposicionEditorScreenState
     if (proyectoMapa == null || proyectoMapa.isEmpty) {
       return _filtrarPrediosDelProyecto(todos);
     }
-    return todos
+    final filtrados = todos
         .where((predio) => _predioPerteneceAProyecto(predio, proyectoMapa))
+        .toList(growable: false);
+    if (filtrados.isNotEmpty) return filtrados;
+    return todos
+        .where((predio) => predio.geometry != null)
         .toList(growable: false);
   }
 
@@ -468,6 +485,7 @@ class _ComposicionEditorScreenState
     final composicion = _composicion!;
     final todosLosPredios =
         ref.watch(prediosMapaProvider).valueOrNull ?? const <Predio>[];
+    final importedFeatures = ref.watch(importedFeaturesProvider);
     final proyectoItem = _proyectoItemDe(
       ref.watch(proyectosProvider).valueOrNull ?? const <ProyectoItem>[],
     );
@@ -489,7 +507,11 @@ class _ComposicionEditorScreenState
                   child: Column(
                     children: [
                       Expanded(
-                        child: _buildLienzo(todosLosPredios, proyectoItem),
+                        child: _buildLienzo(
+                          todosLosPredios,
+                          proyectoItem,
+                          importedFeatures,
+                        ),
                       ),
                       const Divider(height: 1),
                       _buildBarraHojas(),
@@ -1060,6 +1082,7 @@ class _ComposicionEditorScreenState
   Widget _buildLienzo(
     List<Predio> todosLosPredios,
     ProyectoItem? proyectoItem,
+    List<Map<String, dynamic>> importedFeatures,
   ) {
     final hoja = _hojaActiva;
     final (anchoMm, altoMm) = hoja.dimensionesMm;
@@ -1185,6 +1208,9 @@ class _ComposicionEditorScreenState
                                   )
                                 : elemento.tipo == TipoElemento.grafica
                                 ? _filtrarPrediosDelProyecto(todosLosPredios)
+                                : const [],
+                            importedFeatures: elemento.tipo == TipoElemento.mapa
+                                ? importedFeatures
                                 : const [],
                             hojaElementos: elemento.tipo == TipoElemento.escala
                                 ? hoja.elementos
