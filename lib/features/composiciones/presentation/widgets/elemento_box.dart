@@ -32,13 +32,16 @@ class ElementoBox extends StatefulWidget {
   final double scale;
   final bool seleccionado;
   final VoidCallback onSelect;
-  final void Function(double xMm, double yMm, double wMm, double hMm) onGeometriaChanged;
+  final void Function(double xMm, double yMm, double wMm, double hMm)
+  onGeometriaChanged;
   final ValueChanged<String>? onTextoChanged;
   final void Function(double lat, double lng, double zoom)? onMapaChanged;
   final List<Predio> predios;
+
   /// Todos los elementos de la hoja activa (para [TipoElemento.escala],
   /// que necesita ubicar el elemento de mapa asociado).
   final List<ElementoComposicion> hojaElementos;
+
   /// Solo se usa para [TipoElemento.grafica] con [TipoGrafica.cadenamiento].
   final ProyectoItem? proyectoItem;
 
@@ -49,19 +52,23 @@ class ElementoBox extends StatefulWidget {
 class _ElementoBoxState extends State<ElementoBox> {
   bool _editandoTexto = false;
   bool _editandoMapa = false;
+  bool _redimensionando = false;
   late TextEditingController _textoCtrl;
   (double, double, double)? _mapaPendiente;
 
   @override
   void initState() {
     super.initState();
-    _textoCtrl = TextEditingController(text: widget.elemento.textoContenido ?? '');
+    _textoCtrl = TextEditingController(
+      text: widget.elemento.textoContenido ?? '',
+    );
   }
 
   @override
   void didUpdateWidget(covariant ElementoBox oldWidget) {
     super.didUpdateWidget(oldWidget);
-    if (!_editandoTexto && widget.elemento.textoContenido != oldWidget.elemento.textoContenido) {
+    if (!_editandoTexto &&
+        widget.elemento.textoContenido != oldWidget.elemento.textoContenido) {
       _textoCtrl.text = widget.elemento.textoContenido ?? '';
     }
     if (!widget.seleccionado && oldWidget.seleccionado) {
@@ -79,11 +86,11 @@ class _ElementoBoxState extends State<ElementoBox> {
   }
 
   _GeometriaMm _geometria() => (
-        x: widget.elemento.x,
-        y: widget.elemento.y,
-        width: widget.elemento.width,
-        height: widget.elemento.height,
-      );
+    x: widget.elemento.x,
+    y: widget.elemento.y,
+    width: widget.elemento.width,
+    height: widget.elemento.height,
+  );
 
   void _moverPor(Offset deltaPx) {
     final g = _geometria();
@@ -136,14 +143,14 @@ class _ElementoBoxState extends State<ElementoBox> {
   }
 
   bool get _interaccionBoxBloqueada =>
-      widget.elemento.bloqueado || (_editandoMapa && widget.elemento.tipo == TipoElemento.mapa);
+      widget.elemento.bloqueado ||
+      (_editandoMapa && widget.elemento.tipo == TipoElemento.mapa);
 
   @override
   Widget build(BuildContext context) {
     final e = widget.elemento;
     final wPx = e.width * widget.scale;
     final hPx = e.height * widget.scale;
-    final puedeEditarDobleTap = !e.bloqueado && (e.tipo == TipoElemento.texto || e.tipo == TipoElemento.mapa);
 
     return Positioned(
       left: e.x * widget.scale,
@@ -166,31 +173,57 @@ class _ElementoBoxState extends State<ElementoBox> {
             Transform.rotate(
               angle: e.rotacion * 3.1415926535 / 180,
               child: MouseRegion(
-                cursor: _interaccionBoxBloqueada ? SystemMouseCursors.basic : SystemMouseCursors.move,
-                child: GestureDetector(
+                cursor: _interaccionBoxBloqueada
+                    ? SystemMouseCursors.basic
+                    : SystemMouseCursors.move,
+                child: Listener(
                   behavior: HitTestBehavior.opaque,
-                  onTap: widget.onSelect,
-                  onDoubleTap: puedeEditarDobleTap
-                      ? () => setState(() {
-                            if (e.tipo == TipoElemento.texto) _editandoTexto = true;
-                            if (e.tipo == TipoElemento.mapa) _editandoMapa = true;
-                          })
+                  onPointerDown: (_) => widget.onSelect(),
+                  onPointerMove: widget.elemento.tipo == TipoElemento.mapa
+                      ? (event) {
+                          if (!_interaccionBoxBloqueada && !_redimensionando) {
+                            _moverPor(event.delta);
+                          }
+                        }
                       : null,
-                  onPanStart: _interaccionBoxBloqueada ? null : (_) => widget.onSelect(),
-                  onPanUpdate: _interaccionBoxBloqueada ? null : (details) => _moverPor(details.delta),
-                  child: Stack(
-                    clipBehavior: Clip.none,
-                    children: [
-                      Container(
-                        decoration: BoxDecoration(
-                          border: widget.seleccionado
-                              ? Border.all(color: Colors.blueAccent, width: 1.5)
-                              : null,
+                  child: GestureDetector(
+                    behavior: HitTestBehavior.opaque,
+                    onTap: widget.onSelect,
+                    onDoubleTap: widget.elemento.tipo == TipoElemento.mapa
+                        ? () {
+                            widget.onSelect();
+                            setState(() {
+                              _editandoMapa = true;
+                              _mapaPendiente = null;
+                            });
+                          }
+                        : null,
+                    onPanStart: _interaccionBoxBloqueada
+                        ? null
+                        : (_) => widget.onSelect(),
+                    onPanUpdate: _interaccionBoxBloqueada
+                        ? null
+                        : (details) => _moverPor(details.delta),
+                    child: Stack(
+                      clipBehavior: Clip.none,
+                      children: [
+                        Container(
+                          decoration: BoxDecoration(
+                            border: widget.seleccionado
+                                ? Border.all(
+                                    color: Colors.blueAccent,
+                                    width: 1.5,
+                                  )
+                                : null,
+                          ),
+                          child: _buildContenido(e),
                         ),
-                        child: _buildContenido(e),
-                      ),
-                      if (widget.seleccionado && !e.bloqueado && !_editandoMapa) ..._buildManijas(),
-                    ],
+                        if (widget.seleccionado &&
+                            !e.bloqueado &&
+                            !_editandoMapa)
+                          ..._buildManijas(),
+                      ],
+                    ),
                   ),
                 ),
               ),
@@ -213,7 +246,10 @@ class _ElementoBoxState extends State<ElementoBox> {
           autofocus: true,
           maxLines: null,
           style: textoEstiloDe(e),
-          decoration: const InputDecoration(border: InputBorder.none, isDense: true),
+          decoration: const InputDecoration(
+            border: InputBorder.none,
+            isDense: true,
+          ),
           onChanged: widget.onTextoChanged,
           onTapOutside: (_) => setState(() => _editandoTexto = false),
           onSubmitted: (_) => setState(() => _editandoTexto = false),
@@ -227,7 +263,8 @@ class _ElementoBoxState extends State<ElementoBox> {
         zoom: e.mapaZoom ?? 12,
         predios: widget.predios,
         interactivo: _editandoMapa,
-        onPosicionCambiada: (lat, lng, zoom) => _mapaPendiente = (lat, lng, zoom),
+        onPosicionCambiada: (lat, lng, zoom) =>
+            _mapaPendiente = (lat, lng, zoom),
         baseLayer: e.mapaBaseLayer ?? 'estandar',
         mostrarEtiquetasClave: e.mapaMostrarClaves ?? false,
       );
@@ -263,7 +300,11 @@ class _ElementoBoxState extends State<ElementoBox> {
         ),
         child: const Text(
           'Toca fuera para confirmar',
-          style: TextStyle(fontSize: 11, color: Colors.white, fontWeight: FontWeight.w600),
+          style: TextStyle(
+            fontSize: 11,
+            color: Colors.white,
+            fontWeight: FontWeight.w600,
+          ),
         ),
       ),
     );
@@ -282,7 +323,14 @@ class _ElementoBoxState extends State<ElementoBox> {
           cursor: cursor,
           child: GestureDetector(
             behavior: HitTestBehavior.opaque,
-            onPanUpdate: (details) => _redimensionarDesdeEsquina(esquina, details.delta),
+            onPanStart: (_) {
+              _redimensionando = true;
+              widget.onSelect();
+            },
+            onPanUpdate: (details) =>
+                _redimensionarDesdeEsquina(esquina, details.delta),
+            onPanEnd: (_) => _redimensionando = false,
+            onPanCancel: () => _redimensionando = false,
             child: Container(
               width: tam,
               height: tam,

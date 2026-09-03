@@ -18,6 +18,7 @@ class PanelPropiedadesTexto extends StatelessWidget {
   const PanelPropiedadesTexto({
     super.key,
     required this.elemento,
+    required this.onTextoContenidoChanged,
     required this.onFontFamilyChanged,
     required this.onFontSizeChanged,
     required this.onBoldChanged,
@@ -27,6 +28,7 @@ class PanelPropiedadesTexto extends StatelessWidget {
   });
 
   final ElementoComposicion elemento;
+  final ValueChanged<String> onTextoContenidoChanged;
   final ValueChanged<String> onFontFamilyChanged;
   final ValueChanged<double> onFontSizeChanged;
   final ValueChanged<bool> onBoldChanged;
@@ -39,19 +41,43 @@ class PanelPropiedadesTexto extends StatelessWidget {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        const Text('Fuente', style: TextStyle(fontSize: 11, fontWeight: FontWeight.w600)),
+        const Text(
+          'Texto',
+          style: TextStyle(fontSize: 11, fontWeight: FontWeight.w600),
+        ),
+        const SizedBox(height: 6),
+        TextFormField(
+          initialValue: elemento.textoContenido ?? '',
+          minLines: 1,
+          maxLines: 4,
+          decoration: const InputDecoration(
+            isDense: true,
+            border: OutlineInputBorder(),
+            contentPadding: EdgeInsets.symmetric(horizontal: 10, vertical: 10),
+          ),
+          onChanged: onTextoContenidoChanged,
+        ),
+        const SizedBox(height: 12),
+        const Text(
+          'Fuente',
+          style: TextStyle(fontSize: 11, fontWeight: FontWeight.w600),
+        ),
         const SizedBox(height: 6),
         DropdownButtonFormField<String>(
           initialValue: elemento.textoFontFamily ?? 'Inter',
           isDense: true,
-          items: composicionesFuentes.map((f) => DropdownMenuItem(value: f, child: Text(f))).toList(),
+          items: composicionesFuentes
+              .map((f) => DropdownMenuItem(value: f, child: Text(f)))
+              .toList(),
           onChanged: (v) {
             if (v != null) onFontFamilyChanged(v);
           },
         ),
         const SizedBox(height: 12),
-        Text('Tamaño: ${(elemento.textoFontSize ?? 16).toStringAsFixed(0)}',
-            style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w600)),
+        Text(
+          'Tamaño: ${(elemento.textoFontSize ?? 16).toStringAsFixed(0)}',
+          style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w600),
+        ),
         Slider(
           value: (elemento.textoFontSize ?? 16).clamp(8, 96),
           min: 8,
