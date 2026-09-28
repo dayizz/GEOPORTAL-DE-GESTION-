@@ -5,11 +5,10 @@ import 'package:intl/intl.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import '../../../shared/widgets/app_scaffold.dart';
 import '../../../core/constants/app_colors.dart';
+import '../../../core/auth/session_cleanup.dart';
 import '../../../core/theme/theme_mode_provider.dart';
 import '../../estructura/presentation/estructura_screen.dart';
 import '../../auth/providers/auth_provider.dart';
-import '../../mapa/providers/mapa_provider.dart';
-import '../../mapa/providers/mapa_state_cleanup.dart';
 
 // ============================================================
 // Provider para obtener el usuario actual
@@ -17,7 +16,8 @@ import '../../mapa/providers/mapa_state_cleanup.dart';
 
 /// Provider para obtener el primer usuario (simulaciรณn de usuario logueado)
 final usuarioActualProvider = Provider<Usuario?>((ref) {
-  final authUser = ref.watch(currentUserProvider) ?? FirebaseAuth.instance.currentUser;
+  final authUser =
+      ref.watch(currentUserProvider) ?? FirebaseAuth.instance.currentUser;
   final usuarios = ref.watch(usuariosProvider).valueOrNull ?? const <Usuario>[];
 
   if (usuarios.isEmpty) {
@@ -49,17 +49,7 @@ class PerfilScreen extends ConsumerWidget {
   const PerfilScreen({super.key});
 
   Future<void> _cerrarSesion(BuildContext context, WidgetRef ref) async {
-    try {
-      await ref.read(authRepositoryProvider).signOut();
-    } catch (_) {
-      // Ignorar errores remotos en logout y continuar limpieza local.
-    }
-
-    ref.read(localAuthSessionProvider.notifier).state = false;
-    ref.read(proyectoActivoProvider.notifier).state = null;
-    clearImportedMapState(ref.read);
-    ref.read(gestionProyectoProvider.notifier).state = null;
-    ref.read(importacionAsyncProvider.notifier).reset();
+    await closeSessionAndClearState(ref);
 
     if (context.mounted) {
       context.go('/login');
@@ -70,14 +60,15 @@ class PerfilScreen extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final usuario = ref.watch(usuarioActualProvider);
     final isDarkMode = ref.watch(themeModeProvider);
-    final authUser = ref.watch(currentUserProvider) ?? FirebaseAuth.instance.currentUser;
+    final authUser =
+        ref.watch(currentUserProvider) ?? FirebaseAuth.instance.currentUser;
     final correoMostrado =
-      usuario?.correo ?? authUser?.email ?? 'No disponible';
+        usuario?.correo ?? authUser?.email ?? 'No disponible';
     final nombreMostrado =
-      usuario?.nombre ?? authUser?.displayName ?? 'Usuario LDDV';
+        usuario?.nombre ?? authUser?.displayName ?? 'Usuario LDDV';
     final inicial = nombreMostrado.isNotEmpty
-      ? nombreMostrado[0].toUpperCase()
-      : '?';
+        ? nombreMostrado[0].toUpperCase()
+        : '?';
     final nf = DateFormat('dd/MM/yyyy HH:mm');
 
     return AppScaffold(
@@ -105,7 +96,7 @@ class PerfilScreen extends ConsumerWidget {
                     child: Text(
                       inicial,
                       style: const TextStyle(
-                        fontSize: 40, 
+                        fontSize: 40,
                         fontWeight: FontWeight.bold,
                         color: Colors.white,
                       ),
@@ -114,7 +105,10 @@ class PerfilScreen extends ConsumerWidget {
                   const SizedBox(height: 16),
                   Text(
                     nombreMostrado,
-                    style: const TextStyle(fontSize: 24, fontWeight: FontWeight.bold),
+                    style: const TextStyle(
+                      fontSize: 24,
+                      fontWeight: FontWeight.bold,
+                    ),
                   ),
                   const SizedBox(height: 4),
                   Text(
@@ -129,10 +123,7 @@ class PerfilScreen extends ConsumerWidget {
             // Informaciรณn del usuario
             const Text(
               'Información del Usuario',
-              style: TextStyle(
-                fontSize: 18, 
-                fontWeight: FontWeight.bold,
-              ),
+              style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
             ),
             const SizedBox(height: 16),
 
@@ -149,7 +140,7 @@ class PerfilScreen extends ConsumerWidget {
                       value: nombreMostrado,
                     ),
                     const Divider(height: 24),
-                    
+
                     // Correo electronico
                     _buildInfoRow(
                       icon: Icons.email,
@@ -157,7 +148,7 @@ class PerfilScreen extends ConsumerWidget {
                       value: correoMostrado,
                     ),
                     const Divider(height: 24),
-                    
+
                     // Tipo de perfil
                     _buildInfoRow(
                       icon: Icons.badge,
@@ -165,7 +156,7 @@ class PerfilScreen extends ConsumerWidget {
                       value: usuario?.perfil ?? 'No disponible',
                     ),
                     const Divider(height: 24),
-                    
+
                     // Proyectos asignados
                     _buildProyectosRow(
                       icon: Icons.folder_special,
@@ -173,13 +164,13 @@ class PerfilScreen extends ConsumerWidget {
                       proyectos: usuario?.proyectos ?? [],
                     ),
                     const Divider(height: 24),
-                    
+
                     // Ultima modificación
                     _buildInfoRow(
                       icon: Icons.update,
                       label: 'Ultima modificación',
-                      value: usuario?.createdAt != null 
-                          ? nf.format(usuario!.createdAt) 
+                      value: usuario?.createdAt != null
+                          ? nf.format(usuario!.createdAt)
                           : 'No disponible',
                     ),
                   ],
@@ -201,10 +192,15 @@ class PerfilScreen extends ConsumerWidget {
                     color: AppColors.primary.withValues(alpha: 0.1),
                     borderRadius: BorderRadius.circular(8),
                   ),
-                  child: const Icon(Icons.dark_mode_outlined, color: AppColors.primary),
+                  child: const Icon(
+                    Icons.dark_mode_outlined,
+                    color: AppColors.primary,
+                  ),
                 ),
                 title: const Text('Tema Oscuro'),
-                subtitle: const Text('Usar fondos grises y conservar los tonos azules'),
+                subtitle: const Text(
+                  'Usar fondos grises y conservar los tonos azules',
+                ),
                 value: isDarkMode,
                 activeThumbColor: AppColors.primary,
                 onChanged: (enabled) =>
@@ -216,10 +212,7 @@ class PerfilScreen extends ConsumerWidget {
             // Terminos y Politica de privacidad
             const Text(
               'Legal',
-              style: TextStyle(
-                fontSize: 18, 
-                fontWeight: FontWeight.bold,
-              ),
+              style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
             ),
             const SizedBox(height: 16),
             _buildTerminosPrivacidadTile(context),
@@ -271,10 +264,7 @@ class PerfilScreen extends ConsumerWidget {
             children: [
               Text(
                 label,
-                style: TextStyle(
-                  fontSize: 12,
-                  color: Colors.grey[600],
-                ),
+                style: TextStyle(fontSize: 12, color: Colors.grey[600]),
               ),
               const SizedBox(height: 4),
               Text(
@@ -315,10 +305,7 @@ class PerfilScreen extends ConsumerWidget {
             children: [
               Text(
                 label,
-                style: TextStyle(
-                  fontSize: 12,
-                  color: Colors.grey[600],
-                ),
+                style: TextStyle(fontSize: 12, color: Colors.grey[600]),
               ),
               const SizedBox(height: 8),
               if (proyectos.isEmpty)
@@ -340,7 +327,9 @@ class PerfilScreen extends ConsumerWidget {
                         proyecto,
                         style: const TextStyle(fontSize: 12),
                       ),
-                      backgroundColor: AppColors.secondary.withValues(alpha: 0.1),
+                      backgroundColor: AppColors.secondary.withValues(
+                        alpha: 0.1,
+                      ),
                       padding: EdgeInsets.zero,
                       materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
                       visualDensity: VisualDensity.compact,
@@ -379,7 +368,10 @@ class PerfilScreen extends ConsumerWidget {
             color: AppColors.primary.withValues(alpha: 0.1),
             borderRadius: BorderRadius.circular(8),
           ),
-          child: const Icon(Icons.description_outlined, color: AppColors.primary),
+          child: const Icon(
+            Icons.description_outlined,
+            color: AppColors.primary,
+          ),
         ),
         title: const Text(
           'Condiciones y Politica de privacidad',

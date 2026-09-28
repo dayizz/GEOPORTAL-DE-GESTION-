@@ -3,9 +3,8 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import '../../core/constants/app_colors.dart';
 import '../../core/constants/app_strings.dart';
+import '../../core/auth/session_cleanup.dart';
 import '../../features/auth/providers/auth_provider.dart';
-import '../../features/mapa/providers/mapa_provider.dart';
-import '../../features/mapa/providers/mapa_state_cleanup.dart';
 
 class _NavItem {
   final IconData icon;
@@ -96,7 +95,8 @@ class AppScaffold extends ConsumerWidget {
     final confirmar = await showDialog<bool>(
       context: context,
       builder: (dialogContext) {
-        final isDarkMode = Theme.of(dialogContext).brightness == Brightness.dark;
+        final isDarkMode =
+            Theme.of(dialogContext).brightness == Brightness.dark;
         final dialogTextColor = isDarkMode ? Colors.white : null;
         return AlertDialog(
           title: Text(
@@ -126,17 +126,7 @@ class AppScaffold extends ConsumerWidget {
     );
     if (confirmar != true) return;
 
-    try {
-      await ref.read(authRepositoryProvider).signOut();
-    } catch (_) {
-      // Continuar con la limpieza local aunque falle el cierre remoto.
-    }
-
-    ref.read(localAuthSessionProvider.notifier).state = false;
-    ref.read(proyectoActivoProvider.notifier).state = null;
-    clearImportedMapState(ref.read);
-    ref.read(gestionProyectoProvider.notifier).state = null;
-    ref.read(importacionAsyncProvider.notifier).reset();
+    await closeSessionAndClearState(ref);
 
     if (context.mounted) context.go('/login');
   }
@@ -146,11 +136,13 @@ class AppScaffold extends ConsumerWidget {
     final isWide = MediaQuery.of(context).size.width > 768;
     final perfil = ref.watch(currentUserPerfilProvider);
 
-    final visibleItems =
-        _navItems.where((item) => item.isVisible(perfil)).toList(growable: false);
+    final visibleItems = _navItems
+        .where((item) => item.isVisible(perfil))
+        .toList(growable: false);
     final currentRoute = _navItems[currentIndex].route;
-    final rawSelectedIndex =
-        visibleItems.indexWhere((item) => item.route == currentRoute);
+    final rawSelectedIndex = visibleItems.indexWhere(
+      (item) => item.route == currentRoute,
+    );
     final selectedIndex = rawSelectedIndex < 0 ? 0 : rawSelectedIndex;
 
     void onTapItem(int i) {
@@ -187,33 +179,40 @@ class AppScaffold extends ConsumerWidget {
                             color: AppColors.primary,
                             borderRadius: BorderRadius.circular(10),
                           ),
-                          child: const Icon(Icons.map, color: Colors.white, size: 22),
+                          child: const Icon(
+                            Icons.map,
+                            color: Colors.white,
+                            size: 22,
+                          ),
                         ),
                       ],
                     ),
                   ),
-                  destinations: visibleItems
-                      .map((item) => NavigationRailDestination(
-                            icon: Icon(item.icon),
-                            selectedIcon: Icon(
-                              item.icon,
-                              color: AppColors.primary,
+                  destinations:
+                      visibleItems
+                          .map(
+                            (item) => NavigationRailDestination(
+                              icon: Icon(item.icon),
+                              selectedIcon: Icon(
+                                item.icon,
+                                color: AppColors.primary,
+                              ),
+                              label: Text(
+                                item.label,
+                                style: const TextStyle(fontSize: 10),
+                                maxLines: 1,
+                                softWrap: false,
+                                overflow: TextOverflow.ellipsis,
+                              ),
                             ),
-                            label: Text(
-                              item.label,
-                              style: const TextStyle(fontSize: 10),
-                              maxLines: 1,
-                              softWrap: false,
-                              overflow: TextOverflow.ellipsis,
-                            ),
-                          ))
-                      .toList()
-                    ..add(
-                      const NavigationRailDestination(
-                        icon: Icon(Icons.logout),
-                        label: Text('Cerrar sesión'),
-                      ),
-                    ),
+                          )
+                          .toList()
+                        ..add(
+                          const NavigationRailDestination(
+                            icon: Icon(Icons.logout),
+                            label: Text('Cerrar sesión'),
+                          ),
+                        ),
                 ),
               ),
               const VerticalDivider(width: 1),
@@ -241,19 +240,22 @@ class AppScaffold extends ConsumerWidget {
           }
         },
         labelBehavior: NavigationDestinationLabelBehavior.onlyShowSelected,
-        destinations: visibleItems
-            .map((item) => NavigationDestination(
-                  icon: Icon(item.icon),
-                  selectedIcon: Icon(item.icon, color: AppColors.primary),
-                  label: item.label,
-                ))
-            .toList()
-          ..add(
-            const NavigationDestination(
-              icon: Icon(Icons.logout),
-              label: 'Cerrar sesión',
-            ),
-          ),
+        destinations:
+            visibleItems
+                .map(
+                  (item) => NavigationDestination(
+                    icon: Icon(item.icon),
+                    selectedIcon: Icon(item.icon, color: AppColors.primary),
+                    label: item.label,
+                  ),
+                )
+                .toList()
+              ..add(
+                const NavigationDestination(
+                  icon: Icon(Icons.logout),
+                  label: 'Cerrar sesión',
+                ),
+              ),
       ),
       floatingActionButton: floatingActionButton,
     );
