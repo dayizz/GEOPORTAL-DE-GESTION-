@@ -404,7 +404,7 @@ class _CuentasUsuarioTabState extends ConsumerState<_CuentasUsuarioTab> {
               ),
             ),
             const SizedBox(height: 8),
-            const Text(
+             Text(
               'Genera un codigo de aprobacion para habilitar el registro de un nuevo usuario. '
               'Cada codigo se puede usar una sola vez y vence 1 minuto despues de generarse.',
               style: TextStyle(fontSize: 13, color: AppColors.textSecondary),

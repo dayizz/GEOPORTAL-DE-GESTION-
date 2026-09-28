@@ -215,7 +215,7 @@ class _PrediosListScreenState extends ConsumerState<PrediosListScreen> {
                         const SizedBox(width: 8),
                         Text(
                           '$pct%',
-                          style: const TextStyle(fontSize: 11, color: AppColors.textSecondary),
+                          style:  TextStyle(fontSize: 11, color: AppColors.textSecondary),
                         ),
                       ],
                     ),
@@ -223,7 +223,7 @@ class _PrediosListScreenState extends ConsumerState<PrediosListScreen> {
                 ),
               ),
               const SizedBox(width: 8),
-              const Icon(Icons.chevron_right, color: AppColors.textLight, size: 20),
+               Icon(Icons.chevron_right, color: AppColors.textLight, size: 20),
             ],
           ),
         ),
@@ -267,7 +267,7 @@ class _PrediosListScreenState extends ConsumerState<PrediosListScreen> {
       child: Column(
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
-          const Icon(Icons.inbox_outlined, size: 64, color: AppColors.textLight),
+           Icon(Icons.inbox_outlined, size: 64, color: AppColors.textLight),
           const SizedBox(height: 16),
           Text(
             AppStrings.sinRegistros,

@@ -160,7 +160,7 @@ class _PropietariosListScreenState extends ConsumerState<PropietariosListScreen>
                           const SizedBox(width: 8),
                           Text(
                             'RFC: ${p.rfc}',
-                            style: const TextStyle(
+                            style:  TextStyle(
                               fontSize: 12,
                               color: AppColors.textSecondary,
                             ),
@@ -172,7 +172,7 @@ class _PropietariosListScreenState extends ConsumerState<PropietariosListScreen>
                       const SizedBox(height: 2),
                       Text(
                         p.correo!,
-                        style: const TextStyle(
+                        style:  TextStyle(
                           fontSize: 12,
                           color: AppColors.textSecondary,
                         ),
@@ -181,7 +181,7 @@ class _PropietariosListScreenState extends ConsumerState<PropietariosListScreen>
                   ],
                 ),
               ),
-              const Icon(Icons.chevron_right, color: AppColors.textLight),
+               Icon(Icons.chevron_right, color: AppColors.textLight),
             ],
           ),
         ),
@@ -194,7 +194,7 @@ class _PropietariosListScreenState extends ConsumerState<PropietariosListScreen>
       child: Column(
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
-          const Icon(Icons.people_outline, size: 64, color: AppColors.textLight),
+           Icon(Icons.people_outline, size: 64, color: AppColors.textLight),
           const SizedBox(height: 16),
           Text(
             AppStrings.sinRegistros,

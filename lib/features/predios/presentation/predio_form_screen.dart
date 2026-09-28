@@ -32,6 +32,7 @@ class _PredioFormScreenState extends ConsumerState<PredioFormScreen> {
     'AOP',
     'EXPROPIACION',
     'SIN TIPO',
+    'ANUENCIA POR OFICIO',
   ];
   static const List<String> _estructuraOpciones = [
     'Estacion',
@@ -40,6 +41,7 @@ class _PredioFormScreenState extends ConsumerState<PredioFormScreen> {
     'DDV Troncal',
     'Carretera',
     'SICA',
+    'Sin afectación',
   ];
 
   final _formKey = GlobalKey<FormState>();

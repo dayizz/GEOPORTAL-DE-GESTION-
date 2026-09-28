@@ -157,6 +157,7 @@ const List<String> tipoLiberacionOpciones = [
   'AOP',
   'EXPROPIACION',
   'SIN TIPO',
+  'ANUENCIA POR OFICIO',
 ];
 
 /// Normaliza "tipo_liberacion" contra COP/DOT/AOP/EXPROPIACION, ignorando
@@ -189,6 +190,7 @@ const List<String> estructuraOpciones = [
   'DDV Troncal',
   'Carretera',
   'SICA',
+  'Sin afectación',
 ];
 
 /// Normaliza "estructura" contra el catálogo vigente, sin importar

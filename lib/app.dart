@@ -3,6 +3,8 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
 import 'core/router/app_router.dart';
 import 'core/theme/app_theme.dart';
+import 'core/theme/theme_mode_provider.dart';
+import 'core/constants/app_colors.dart';
 
 class GeoportalApp extends ConsumerWidget {
   const GeoportalApp({super.key});
@@ -10,11 +12,15 @@ class GeoportalApp extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final router = ref.watch(routerProvider);
+    final isDarkMode = ref.watch(themeModeProvider);
+    AppColors.darkModeEnabled = isDarkMode;
 
     return MaterialApp.router(
       title: 'Geoportal Predios',
       debugShowCheckedModeBanner: false,
       theme: AppTheme.light,
+      darkTheme: AppTheme.dark,
+      themeMode: isDarkMode ? ThemeMode.dark : ThemeMode.light,
       locale: const Locale('es', 'MX'),
       supportedLocales: const [
         Locale('es', 'MX'),

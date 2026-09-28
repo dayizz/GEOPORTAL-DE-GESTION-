@@ -386,7 +386,7 @@ class PredioDetailScreen extends ConsumerWidget {
             value,
             style: TextStyle(fontWeight: FontWeight.bold, fontSize: 15, color: color),
           ),
-          Text(label, style: const TextStyle(fontSize: 11, color: AppColors.textSecondary)),
+          Text(label, style:  TextStyle(fontSize: 11, color: AppColors.textSecondary)),
         ],
       ),
     );
@@ -483,7 +483,7 @@ class PredioDetailScreen extends ConsumerWidget {
             width: 130,
             child: Text(
               label,
-              style: const TextStyle(color: AppColors.textSecondary, fontSize: 13),
+              style:  TextStyle(color: AppColors.textSecondary, fontSize: 13),
             ),
           ),
           Expanded(

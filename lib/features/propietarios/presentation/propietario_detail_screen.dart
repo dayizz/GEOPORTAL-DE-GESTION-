@@ -212,7 +212,7 @@ class PropietarioDetailScreen extends ConsumerWidget {
               ),
               data: (predios) {
                 if (predios.isEmpty) {
-                  return const Padding(
+                  return  Padding(
                     padding: EdgeInsets.all(16),
                     child: Text(
                       'Este propietario aún no tiene predios vinculados.',
@@ -238,7 +238,7 @@ class PropietarioDetailScreen extends ConsumerWidget {
                           ),
                           subtitle: Text(
                             '${predio.tramo} · ${predio.tipoPropiedad}',
-                            style: const TextStyle(fontSize: 12, color: AppColors.textSecondary),
+                            style:  TextStyle(fontSize: 12, color: AppColors.textSecondary),
                           ),
                           trailing: Tooltip(
                             message: tieneGeometria
@@ -281,7 +281,7 @@ class PropietarioDetailScreen extends ConsumerWidget {
           SizedBox(
             width: 120,
             child: Text(label,
-                style: const TextStyle(color: AppColors.textSecondary, fontSize: 13)),
+                style:  TextStyle(color: AppColors.textSecondary, fontSize: 13)),
           ),
           Expanded(
             child: Text(value,

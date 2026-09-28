@@ -322,7 +322,7 @@ class _TablaScreenState extends ConsumerState<TablaScreen> {
     }
     Widget content;
     if (sinProyectoAsignado) {
-      content = const Center(
+      content =  Center(
         child: Text(
           'Sin proyecto asignado',
           style: TextStyle(color: AppColors.textSecondary, fontSize: 16),
@@ -635,7 +635,7 @@ class _TablaScreenState extends ConsumerState<TablaScreen> {
 
   Widget _buildTopBar(int visible, List<Predio> allPredios, List<String> proyectosDisponibles, int camposIncompletos) {
     if (proyectosDisponibles.isEmpty) {
-      return const Padding(
+      return  Padding(
         padding: EdgeInsets.all(16),
         child: Text(
           'No hay proyectos dados de alta en Estructura.',
@@ -660,8 +660,8 @@ class _TablaScreenState extends ConsumerState<TablaScreen> {
                   spacing: 8,
                   runSpacing: 6,
                   children: [
-              const Icon(Icons.folder_outlined, size: 16, color: AppColors.textSecondary),
-              const Text(
+               Icon(Icons.folder_outlined, size: 16, color: AppColors.textSecondary),
+               Text(
                 'Proyecto:',
                 style: TextStyle(fontSize: 13, color: AppColors.textSecondary),
               ),
@@ -796,7 +796,7 @@ class _TablaScreenState extends ConsumerState<TablaScreen> {
             alignment: Alignment.centerLeft,
             child: Text(
               '$visible de ${_conteoProyecto(allPredios, _proyectoActual)} predios en $_proyectoActual',
-              style: const TextStyle(fontSize: 12, color: AppColors.textSecondary),
+              style:  TextStyle(fontSize: 12, color: AppColors.textSecondary),
             ),
           ),
           if (_tieneFiltrosActivos) ...[
@@ -959,7 +959,7 @@ class _TablaScreenState extends ConsumerState<TablaScreen> {
                   children: [
                     // Header fijo
                     _buildHeaderRow(headers, colWidths, totalWidth),
-                    const Divider(height: 1, thickness: 1.5, color: AppColors.border),
+                     Divider(height: 1, thickness: 1.5, color: AppColors.border),
                     // Filas
                     Expanded(
                       child: ListView.builder(
@@ -1093,7 +1093,7 @@ class _TablaScreenState extends ConsumerState<TablaScreen> {
           width: width,
           height: double.infinity,
           alignment: Alignment.center,
-          decoration: const BoxDecoration(
+          decoration:  BoxDecoration(
             border: Border(right: BorderSide(color: AppColors.border, width: 0.5)),
           ),
           child: Text(
@@ -1183,7 +1183,7 @@ class _TablaScreenState extends ConsumerState<TablaScreen> {
           width: width,
           height: double.infinity,
           alignment: Alignment.center,
-          decoration: const BoxDecoration(
+          decoration:  BoxDecoration(
             border: Border(right: BorderSide(color: AppColors.border, width: 0.5)),
           ),
           child: Text(
@@ -1652,8 +1652,8 @@ class _TablaScreenState extends ConsumerState<TablaScreen> {
     return Container(
       height: 38,
       decoration: BoxDecoration(
-        color: isEven ? Colors.white : const Color(0xFFF8F9FA),
-        border: const Border(bottom: BorderSide(color: AppColors.border, width: 0.5)),
+        color: isEven ? AppColors.surface : AppColors.surfaceVariant,
+        border:  Border(bottom: BorderSide(color: AppColors.border, width: 0.5)),
       ),
       child: Row(
         children: [
@@ -1661,7 +1661,7 @@ class _TablaScreenState extends ConsumerState<TablaScreen> {
           _dataCell(
             idProyecto?.toString() ?? '-',
             widths[0],
-            style: const TextStyle(fontSize: 11, color: AppColors.textSecondary),
+            style:  TextStyle(fontSize: 11, color: AppColors.textSecondary),
           ),
           // ACCIONES (ver en mapa / editar / eliminar)
           _accionesCell(p, widths[1]),
@@ -1769,7 +1769,7 @@ class _TablaScreenState extends ConsumerState<TablaScreen> {
               const SizedBox(height: 8),
               Text(
                 'Hay ${pendientes.length} predio(s) liberado(s) sin los tres campos completos.',
-                style: const TextStyle(fontSize: 12, color: AppColors.textSecondary),
+                style:  TextStyle(fontSize: 12, color: AppColors.textSecondary),
               ),
               const SizedBox(height: 10),
               Row(
@@ -1878,7 +1878,7 @@ class _TablaScreenState extends ConsumerState<TablaScreen> {
       width: width,
       height: double.infinity,
       alignment: Alignment.center,
-      decoration: const BoxDecoration(
+      decoration:  BoxDecoration(
         border: Border(right: BorderSide(color: AppColors.border, width: 0.5)),
       ),
       child: Container(
@@ -1899,19 +1899,26 @@ class _TablaScreenState extends ConsumerState<TablaScreen> {
 
   Widget _estatusCell(Predio predio, double width) {
     final estatus = Predio.estatusSimplificado(predio.rangoEstatus);
-    final color = estatus == 'Liberado' ? AppColors.secondary : AppColors.danger;
+    // El color del estatus simplificado sigue el color del rango detallado
+    // del mismo predio, manteniendo la correspondencia visual entre columnas.
+    final color = AppColors.rangoEstatusColor(predio.rangoEstatus);
+    final rangoNorm = predio.rangoEstatus.toUpperCase().trim();
+    final esAmarillo = rangoNorm == 'NEGOCIACION' || rangoNorm == 'CON INGRESO';
+    final backgroundColor = esAmarillo
+        ? Colors.grey.withValues(alpha: 0.35)
+        : color.withValues(alpha: 0.15);
 
     return Container(
       width: width,
       height: double.infinity,
       alignment: Alignment.center,
-      decoration: const BoxDecoration(
+      decoration:  BoxDecoration(
         border: Border(right: BorderSide(color: AppColors.border, width: 0.5)),
       ),
       child: Container(
         padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
         decoration: BoxDecoration(
-          color: color.withValues(alpha: 0.15),
+          color: backgroundColor,
           borderRadius: BorderRadius.circular(4),
         ),
         child: Text(
@@ -1937,7 +1944,7 @@ class _TablaScreenState extends ConsumerState<TablaScreen> {
       width: width,
       height: double.infinity,
       alignment: Alignment.center,
-      decoration: const BoxDecoration(
+      decoration:  BoxDecoration(
         border: Border(right: BorderSide(color: AppColors.border, width: 0.5)),
       ),
       child: PopupMenuButton<String>(
@@ -2074,7 +2081,7 @@ class _TablaScreenState extends ConsumerState<TablaScreen> {
       padding: const EdgeInsets.symmetric(horizontal: 6),
       decoration: BoxDecoration(
         color: color,
-        border: const Border(right: BorderSide(color: AppColors.border, width: 0.5)),
+        border:  Border(right: BorderSide(color: AppColors.border, width: 0.5)),
       ),
       child: vacio
           ? const Icon(Icons.error, color: AppColors.danger, size: 16)
@@ -2098,7 +2105,7 @@ class _TablaScreenState extends ConsumerState<TablaScreen> {
       height: double.infinity,
       alignment: Alignment.centerRight,
       padding: const EdgeInsets.symmetric(horizontal: 6),
-      decoration: const BoxDecoration(
+      decoration:  BoxDecoration(
         border: Border(right: BorderSide(color: AppColors.border, width: 0.5)),
       ),
       child: vacio
@@ -2123,7 +2130,7 @@ class _TablaScreenState extends ConsumerState<TablaScreen> {
       height: double.infinity,
       alignment: Alignment.centerRight,
       padding: const EdgeInsets.symmetric(horizontal: 6),
-      decoration: const BoxDecoration(
+      decoration:  BoxDecoration(
         border: Border(right: BorderSide(color: AppColors.border, width: 0.5)),
       ),
       child: vacio
@@ -2144,7 +2151,7 @@ class _TablaScreenState extends ConsumerState<TablaScreen> {
         width: width,
         height: double.infinity,
         alignment: Alignment.center,
-        decoration: const BoxDecoration(
+        decoration:  BoxDecoration(
           border: Border(right: BorderSide(color: AppColors.border, width: 0.5)),
         ),
         child: Icon(
@@ -2174,7 +2181,7 @@ class _TablaScreenState extends ConsumerState<TablaScreen> {
           width: width,
           height: double.infinity,
           alignment: Alignment.center,
-          decoration: const BoxDecoration(
+          decoration:  BoxDecoration(
             border: Border(right: BorderSide(color: AppColors.border, width: 0.5)),
           ),
           child: Icon(
@@ -2200,7 +2207,7 @@ class _TablaScreenState extends ConsumerState<TablaScreen> {
       width: width,
       height: double.infinity,
       alignment: Alignment.center,
-      decoration: const BoxDecoration(
+      decoration:  BoxDecoration(
         border: Border(right: BorderSide(color: AppColors.border, width: 0.5)),
       ),
       child: Container(
@@ -2223,7 +2230,7 @@ class _TablaScreenState extends ConsumerState<TablaScreen> {
       width: width,
       height: double.infinity,
       alignment: Alignment.center,
-      decoration: const BoxDecoration(
+      decoration:  BoxDecoration(
         border: Border(right: BorderSide(color: AppColors.border, width: 0.5)),
       ),
       child: Container(
@@ -2263,7 +2270,7 @@ class _TablaScreenState extends ConsumerState<TablaScreen> {
       ),
       builder: (ctx) => StatefulBuilder(
         builder: (ctx, setS) => DefaultTextStyle.merge(
-          style: const TextStyle(color: AppColors.textPrimary),
+          style:  TextStyle(color: AppColors.textPrimary),
           child: Padding(
             padding: const EdgeInsets.fromLTRB(20, 20, 20, 32),
             child: Column(
@@ -2303,7 +2310,7 @@ class _TablaScreenState extends ConsumerState<TablaScreen> {
                     ),
                   ],
                 ),
-                const Divider(color: AppColors.border),
+                 Divider(color: AppColors.border),
                 if (!tieneDatosProyecto)
                   Padding(
                     padding: const EdgeInsets.only(bottom: 12),
@@ -2329,7 +2336,7 @@ class _TablaScreenState extends ConsumerState<TablaScreen> {
                       .map(
                         (t) => FilterChip(
                           label: Text(t),
-                          labelStyle: const TextStyle(color: AppColors.textPrimary),
+                          labelStyle:  TextStyle(color: AppColors.textPrimary),
                           checkmarkColor: AppColors.primary,
                           selected: estructura.contains(t),
                           onSelected: (v) => setS(() => v ? estructura.add(t) : estructura.remove(t)),
@@ -2354,7 +2361,7 @@ class _TablaScreenState extends ConsumerState<TablaScreen> {
                       .map(
                         (t) => FilterChip(
                           label: Text(t),
-                          labelStyle: const TextStyle(color: AppColors.textPrimary),
+                          labelStyle:  TextStyle(color: AppColors.textPrimary),
                           checkmarkColor: AppColors.primary,
                           selected: tramo.contains(t),
                           onSelected: (v) => setS(() => v ? tramo.add(t) : tramo.remove(t)),
@@ -2379,7 +2386,7 @@ class _TablaScreenState extends ConsumerState<TablaScreen> {
                       .map(
                         (t) => FilterChip(
                           label: Text(t),
-                          labelStyle: const TextStyle(color: AppColors.textPrimary),
+                          labelStyle:  TextStyle(color: AppColors.textPrimary),
                           checkmarkColor: AppColors.textPrimary,
                           selected: tipo.contains(t),
                           onSelected: (v) => setS(() => v ? tipo.add(t) : tipo.remove(t)),
@@ -2404,7 +2411,7 @@ class _TablaScreenState extends ConsumerState<TablaScreen> {
                       .map(
                         (t) => FilterChip(
                           label: Text(t),
-                          labelStyle: const TextStyle(color: AppColors.textPrimary),
+                          labelStyle:  TextStyle(color: AppColors.textPrimary),
                           checkmarkColor: AppColors.info,
                           selected: tipoLiberacion.contains(t),
                           onSelected: (v) => setS(() => v ? tipoLiberacion.add(t) : tipoLiberacion.remove(t)),
@@ -2428,7 +2435,7 @@ class _TablaScreenState extends ConsumerState<TablaScreen> {
                   children: [
                     FilterChip(
                       label: const Text('Liberado'),
-                      labelStyle: const TextStyle(color: AppColors.textPrimary),
+                      labelStyle:  TextStyle(color: AppColors.textPrimary),
                       checkmarkColor: AppColors.secondary,
                       selected: estatus.contains('Liberado'),
                       onSelected: (v) => setS(() => v ? estatus.add('Liberado') : estatus.remove('Liberado')),
@@ -2436,7 +2443,7 @@ class _TablaScreenState extends ConsumerState<TablaScreen> {
                     ),
                     FilterChip(
                       label: const Text('No liberado'),
-                      labelStyle: const TextStyle(color: AppColors.textPrimary),
+                      labelStyle:  TextStyle(color: AppColors.textPrimary),
                       checkmarkColor: AppColors.danger,
                       selected: estatus.contains('No liberado'),
                       onSelected: (v) => setS(() => v ? estatus.add('No liberado') : estatus.remove('No liberado')),
@@ -2460,7 +2467,7 @@ class _TablaScreenState extends ConsumerState<TablaScreen> {
                       .map(
                         (t) => FilterChip(
                           label: Text(t),
-                          labelStyle: const TextStyle(color: AppColors.textPrimary),
+                          labelStyle:  TextStyle(color: AppColors.textPrimary),
                           checkmarkColor: AppColors.rangoEstatusColor(t),
                           selected: rangoEstatus.contains(t),
                           onSelected: (v) => setS(() => v ? rangoEstatus.add(t) : rangoEstatus.remove(t)),

@@ -836,7 +836,7 @@ class _ComposicionEditorScreenState
             color: AppColors.surfaceVariant,
             borderRadius: BorderRadius.circular(7),
           ),
-          child: const Icon(
+          child:  Icon(
             Icons.category_outlined,
             size: 16,
             color: AppColors.textPrimary,
@@ -953,7 +953,7 @@ class _ComposicionEditorScreenState
             color: AppColors.surfaceVariant,
             borderRadius: BorderRadius.circular(7),
           ),
-          child: const Icon(
+          child:  Icon(
             Icons.palette_outlined,
             size: 16,
             color: AppColors.textPrimary,
@@ -1023,7 +1023,7 @@ class _ComposicionEditorScreenState
             color: AppColors.surfaceVariant,
             borderRadius: BorderRadius.circular(7),
           ),
-          child: const Icon(
+          child:  Icon(
             Icons.bar_chart_outlined,
             size: 16,
             color: AppColors.textPrimary,

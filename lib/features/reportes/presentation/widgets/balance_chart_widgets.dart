@@ -69,7 +69,7 @@ Widget _ddvLegend(String label, Color color, String value, double pct) {
       const SizedBox(width: 6),
       Text(
         '$label: $value (${(pct * 100).toStringAsFixed(1)}%)',
-        style: const TextStyle(fontSize: 11, color: AppColors.textSecondary),
+        style:  TextStyle(fontSize: 11, color: AppColors.textSecondary),
       ),
     ],
   );
@@ -89,7 +89,7 @@ Widget buildAvanceDdvStatusBar({
   return Container(
     padding: const EdgeInsets.all(14),
     decoration: BoxDecoration(
-      color: Colors.white,
+      color: AppColors.surface,
       borderRadius: BorderRadius.circular(14),
       border: Border.all(color: AppColors.border),
     ),
@@ -100,7 +100,7 @@ Widget buildAvanceDdvStatusBar({
           mainAxisAlignment: MainAxisAlignment.spaceBetween,
           children: [
             const Text('Estatus DDV', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w700)),
-            Text('${fmt.format(total)} predios', style: const TextStyle(fontSize: 12, color: AppColors.textSecondary)),
+            Text('${fmt.format(total)} predios', style:  TextStyle(fontSize: 12, color: AppColors.textSecondary)),
           ],
         ),
         const SizedBox(height: 10),
@@ -149,7 +149,7 @@ Widget buildLegendItem(String label, Color color) {
         decoration: BoxDecoration(color: color, borderRadius: BorderRadius.circular(2)),
       ),
       const SizedBox(width: 6),
-      Text(label, style: const TextStyle(fontSize: 12, color: AppColors.textSecondary)),
+      Text(label, style:  TextStyle(fontSize: 12, color: AppColors.textSecondary)),
     ],
   );
 }
@@ -217,7 +217,7 @@ Widget buildStackedPctBarra({
         width: ancho,
         child: Text(
           label,
-          style: const TextStyle(fontSize: 9, color: AppColors.textSecondary),
+          style:  TextStyle(fontSize: 9, color: AppColors.textSecondary),
           textAlign: TextAlign.center,
           maxLines: 2,
           overflow: TextOverflow.ellipsis,
@@ -371,7 +371,7 @@ Widget buildDonaSeparada({
             style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w600),
             textAlign: TextAlign.center,
           ),
-          const Text(
+           Text(
             '0 / 0',
             style: TextStyle(fontSize: 10, color: AppColors.textSecondary),
           ),
@@ -427,7 +427,7 @@ Widget buildDonaSeparada({
         ),
         Text(
           '$completado / $total',
-          style: const TextStyle(fontSize: 10, color: AppColors.textSecondary),
+          style:  TextStyle(fontSize: 10, color: AppColors.textSecondary),
         ),
       ],
     ),
@@ -448,7 +448,7 @@ Widget buildTipoPropiedadCard({
   return Container(
     padding: const EdgeInsets.all(16),
     decoration: BoxDecoration(
-      color: Colors.white,
+      color: AppColors.surface,
       borderRadius: BorderRadius.circular(14),
       border: Border.all(color: AppColors.border),
     ),
@@ -460,7 +460,7 @@ Widget buildTipoPropiedadCard({
         Container(
           padding: const EdgeInsets.all(12),
           decoration: BoxDecoration(
-            color: const Color(0xFFF5F5F5),
+            color: AppColors.surfaceVariant,
             borderRadius: BorderRadius.circular(10),
           ),
           child: Row(
@@ -534,7 +534,7 @@ Widget buildCadenamientoCelda(CadenamientoColumna columna, double ancho) {
             child: Center(
               child: Text(
                 norm.formatKmPk(columna.km.toDouble()),
-                style: const TextStyle(fontSize: 8, color: AppColors.textSecondary),
+                style:  TextStyle(fontSize: 8, color: AppColors.textSecondary),
                 overflow: TextOverflow.ellipsis,
               ),
             ),
@@ -583,7 +583,7 @@ Widget buildCadenamientoFilaCard(CadenamientoFila fila) {
           ),
         ),
         if (fila.columnas.isEmpty)
-          const Padding(
+           Padding(
             padding: EdgeInsets.all(12),
             child: Text(
               'Sin predios con Km Inicio/Km Fin registrados para este PK.',

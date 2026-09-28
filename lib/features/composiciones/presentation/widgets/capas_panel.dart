@@ -31,7 +31,7 @@ class CapasPanel extends StatelessWidget {
     final invertidos = elementos.reversed.toList(growable: false);
 
     if (invertidos.isEmpty) {
-      return const Padding(
+      return  Padding(
         padding: EdgeInsets.all(12),
         child: Text(
           'Sin capas todavía. Usa las herramientas de arriba para agregar elementos.',
@@ -66,7 +66,7 @@ class CapasPanel extends StatelessWidget {
             visualDensity: const VisualDensity(vertical: -3),
             leading: ReorderableDragStartListener(
               index: index,
-              child: const Icon(Icons.drag_indicator, size: 16, color: AppColors.textLight),
+              child:  Icon(Icons.drag_indicator, size: 16, color: AppColors.textLight),
             ),
             title: Text(
               elemento.nombreCapa,

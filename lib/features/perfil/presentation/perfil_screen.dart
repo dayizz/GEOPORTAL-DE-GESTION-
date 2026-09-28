@@ -5,6 +5,7 @@ import 'package:intl/intl.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import '../../../shared/widgets/app_scaffold.dart';
 import '../../../core/constants/app_colors.dart';
+import '../../../core/theme/theme_mode_provider.dart';
 import '../../estructura/presentation/estructura_screen.dart';
 import '../../auth/providers/auth_provider.dart';
 import '../../mapa/providers/mapa_provider.dart';
@@ -68,6 +69,7 @@ class PerfilScreen extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final usuario = ref.watch(usuarioActualProvider);
+    final isDarkMode = ref.watch(themeModeProvider);
     final authUser = ref.watch(currentUserProvider) ?? FirebaseAuth.instance.currentUser;
     final correoMostrado =
       usuario?.correo ?? authUser?.email ?? 'No disponible';
@@ -182,6 +184,31 @@ class PerfilScreen extends ConsumerWidget {
                     ),
                   ],
                 ),
+              ),
+            ),
+            const SizedBox(height: 24),
+
+            const Text(
+              'Aspecto',
+              style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+            ),
+            const SizedBox(height: 16),
+            Card(
+              child: SwitchListTile.adaptive(
+                secondary: Container(
+                  padding: const EdgeInsets.all(8),
+                  decoration: BoxDecoration(
+                    color: AppColors.primary.withValues(alpha: 0.1),
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  child: const Icon(Icons.dark_mode_outlined, color: AppColors.primary),
+                ),
+                title: const Text('Tema Oscuro'),
+                subtitle: const Text('Usar fondos grises y conservar los tonos azules'),
+                value: isDarkMode,
+                activeThumbColor: AppColors.primary,
+                onChanged: (enabled) =>
+                    ref.read(themeModeProvider.notifier).setDarkMode(enabled),
               ),
             ),
             const SizedBox(height: 24),

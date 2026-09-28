@@ -360,7 +360,7 @@ class _BalanceScreenState extends ConsumerState<BalanceScreen> {
                                   borderRadius: BorderRadius.circular(14),
                                   border: Border.all(color: AppColors.border),
                                 ),
-                                child: const Row(
+                                child:  Row(
                                   mainAxisAlignment: MainAxisAlignment.center,
                                   children: [
                                     Icon(Icons.info_outline, color: AppColors.textSecondary, size: 20),
@@ -494,7 +494,7 @@ class _BalanceScreenState extends ConsumerState<BalanceScreen> {
                 const SizedBox(height: 16),
 
                 if (porTramo.isEmpty)
-                  const Text('Sin datos de tramos para este proyecto', style: TextStyle(color: AppColors.textSecondary))
+                   Text('Sin datos de tramos para este proyecto', style: TextStyle(color: AppColors.textSecondary))
                 else
                   buildStackedPctBars(
                     labels: porTramo.keys.toList(),
@@ -504,13 +504,13 @@ class _BalanceScreenState extends ConsumerState<BalanceScreen> {
                 const SizedBox(height: 32),
                 Text('Diagrama por Cadenamiento', style: Theme.of(context).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.bold)),
                 const SizedBox(height: 4),
-                const Text(
+                 Text(
                   'Cada celda = 1 km. Color según % liberado dentro del km, calculado en vivo desde Gestión.',
                   style: TextStyle(fontSize: 12, color: AppColors.textSecondary, fontStyle: FontStyle.italic),
                 ),
                 const SizedBox(height: 16),
                 if (filasCadenamiento.isEmpty)
-                  const Text(
+                   Text(
                     'Sin cadenamiento registrado para este proyecto (Configuración > Estructura > Proyectos).',
                     style: TextStyle(color: AppColors.textSecondary),
                   )
@@ -534,7 +534,7 @@ class _BalanceScreenState extends ConsumerState<BalanceScreen> {
                   }),
                   pctLiberadoPorBarra: pctLiberadoMensual,
                 ),
-                const Text(
+                 Text(
                   '% acumulado de predios liberados al cierre de cada mes (sobre el total del proyecto/segmento)',
                   style: TextStyle(fontSize: 11, color: AppColors.textSecondary),
                 ),
@@ -549,7 +549,7 @@ class _BalanceScreenState extends ConsumerState<BalanceScreen> {
                   labels: List.generate(sparkWeeks, (i) => DateFormat('d/MM').format(weekStart(i))),
                   pctLiberadoPorBarra: pctLiberadoSemanal,
                 ),
-                const Text(
+                 Text(
                   '% acumulado de predios liberados al cierre de cada semana (últimas 8 semanas, sobre el total del proyecto/segmento)',
                   style: TextStyle(fontSize: 11, color: AppColors.textSecondary),
                 ),

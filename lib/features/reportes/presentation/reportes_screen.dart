@@ -259,7 +259,7 @@ class _ReportesScreenState extends ConsumerState<ReportesScreen> {
                 const SizedBox(height: 4),
                 Text(
                   'Total DDV Necesario en $_proyectoActual: ${fmt.format(ddvNecesario)} m²',
-                  style: const TextStyle(fontSize: 11, color: AppColors.textSecondary),
+                  style:  TextStyle(fontSize: 11, color: AppColors.textSecondary),
                 ),
 
                 const SizedBox(height: 28),
@@ -267,7 +267,7 @@ class _ReportesScreenState extends ConsumerState<ReportesScreen> {
                 const SizedBox(height: 16),
 
                 if (porTipo.isEmpty)
-                  const Text('Sin datos para este proyecto', style: TextStyle(color: AppColors.textSecondary))
+                   Text('Sin datos para este proyecto', style: TextStyle(color: AppColors.textSecondary))
                 else ...[
                   SizedBox(
                     height: 220,
@@ -295,7 +295,7 @@ class _ReportesScreenState extends ConsumerState<ReportesScreen> {
                         const SizedBox(width: 10),
                         Expanded(child: Text(e.key, style: const TextStyle(fontSize: 13))),
                         Text('${fmtInt.format(e.value)} predios',
-                            style: const TextStyle(fontWeight: FontWeight.w600, color: AppColors.textSecondary, fontSize: 13)),
+                            style:  TextStyle(fontWeight: FontWeight.w600, color: AppColors.textSecondary, fontSize: 13)),
                         const SizedBox(width: 8),
                         SizedBox(
                           width: 40,
@@ -447,7 +447,7 @@ class _ReportesScreenState extends ConsumerState<ReportesScreen> {
               ),
               Text(
                 '${fmt.format(necesario)} m²',
-                style: const TextStyle(fontSize: 12, color: AppColors.textSecondary),
+                style:  TextStyle(fontSize: 12, color: AppColors.textSecondary),
               ),
             ],
           ),
@@ -487,7 +487,7 @@ class _ReportesScreenState extends ConsumerState<ReportesScreen> {
         const SizedBox(width: 6),
         Text(
           '$label  ${fmt.format(value)} m² (${(pct * 100).toStringAsFixed(1)}%)',
-          style: const TextStyle(fontSize: 11, color: AppColors.textSecondary),
+          style:  TextStyle(fontSize: 11, color: AppColors.textSecondary),
         ),
       ],
     );

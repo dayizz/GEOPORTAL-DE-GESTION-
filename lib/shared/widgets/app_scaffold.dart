@@ -4,6 +4,8 @@ import 'package:go_router/go_router.dart';
 import '../../core/constants/app_colors.dart';
 import '../../core/constants/app_strings.dart';
 import '../../features/auth/providers/auth_provider.dart';
+import '../../features/mapa/providers/mapa_provider.dart';
+import '../../features/mapa/providers/mapa_state_cleanup.dart';
 
 class _NavItem {
   final IconData icon;
@@ -87,6 +89,58 @@ class AppScaffold extends ConsumerWidget {
   ];
   static const double _desktopRailWidth = 88;
 
+  Future<void> _confirmarCierreSesion(
+    BuildContext context,
+    WidgetRef ref,
+  ) async {
+    final confirmar = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) {
+        final isDarkMode = Theme.of(dialogContext).brightness == Brightness.dark;
+        final dialogTextColor = isDarkMode ? Colors.white : null;
+        return AlertDialog(
+          title: Text(
+            'Cerrar sesión',
+            style: TextStyle(color: dialogTextColor),
+          ),
+          content: Text(
+            '¿Deseas cerrar sesión?',
+            style: TextStyle(color: dialogTextColor),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(dialogContext).pop(false),
+              style: TextButton.styleFrom(foregroundColor: dialogTextColor),
+              child: Text('No', style: TextStyle(color: dialogTextColor)),
+            ),
+            FilledButton(
+              onPressed: () => Navigator.of(dialogContext).pop(true),
+              style: FilledButton.styleFrom(
+                foregroundColor: isDarkMode ? Colors.white : null,
+              ),
+              child: Text('Sí', style: TextStyle(color: dialogTextColor)),
+            ),
+          ],
+        );
+      },
+    );
+    if (confirmar != true) return;
+
+    try {
+      await ref.read(authRepositoryProvider).signOut();
+    } catch (_) {
+      // Continuar con la limpieza local aunque falle el cierre remoto.
+    }
+
+    ref.read(localAuthSessionProvider.notifier).state = false;
+    ref.read(proyectoActivoProvider.notifier).state = null;
+    clearImportedMapState(ref.read);
+    ref.read(gestionProyectoProvider.notifier).state = null;
+    ref.read(importacionAsyncProvider.notifier).reset();
+
+    if (context.mounted) context.go('/login');
+  }
+
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final isWide = MediaQuery.of(context).size.width > 768;
@@ -115,7 +169,13 @@ class AppScaffold extends ConsumerWidget {
                 width: _desktopRailWidth,
                 child: NavigationRail(
                   selectedIndex: selectedIndex,
-                  onDestinationSelected: onTapItem,
+                  onDestinationSelected: (index) {
+                    if (index == visibleItems.length) {
+                      _confirmarCierreSesion(context, ref);
+                    } else {
+                      onTapItem(index);
+                    }
+                  },
                   labelType: NavigationRailLabelType.all,
                   leading: Padding(
                     padding: const EdgeInsets.symmetric(vertical: 8),
@@ -147,7 +207,13 @@ class AppScaffold extends ConsumerWidget {
                               overflow: TextOverflow.ellipsis,
                             ),
                           ))
-                      .toList(),
+                      .toList()
+                    ..add(
+                      const NavigationRailDestination(
+                        icon: Icon(Icons.logout),
+                        label: Text('Cerrar sesión'),
+                      ),
+                    ),
                 ),
               ),
               const VerticalDivider(width: 1),
@@ -167,7 +233,13 @@ class AppScaffold extends ConsumerWidget {
       body: child,
       bottomNavigationBar: NavigationBar(
         selectedIndex: selectedIndex,
-        onDestinationSelected: onTapItem,
+        onDestinationSelected: (index) {
+          if (index == visibleItems.length) {
+            _confirmarCierreSesion(context, ref);
+          } else {
+            onTapItem(index);
+          }
+        },
         labelBehavior: NavigationDestinationLabelBehavior.onlyShowSelected,
         destinations: visibleItems
             .map((item) => NavigationDestination(
@@ -175,7 +247,13 @@ class AppScaffold extends ConsumerWidget {
                   selectedIcon: Icon(item.icon, color: AppColors.primary),
                   label: item.label,
                 ))
-            .toList(),
+            .toList()
+          ..add(
+            const NavigationDestination(
+              icon: Icon(Icons.logout),
+              label: 'Cerrar sesión',
+            ),
+          ),
       ),
       floatingActionButton: floatingActionButton,
     );

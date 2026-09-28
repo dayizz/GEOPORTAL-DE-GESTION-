@@ -168,7 +168,7 @@ class _ProyectosScreenState extends ConsumerState<ProyectosScreen> {
             alignment: Alignment.centerLeft,
             child: Text(
               '$visible de ${_conteoProyecto(allProyectos, _proyectoActual)} registros en $_proyectoActual',
-              style: const TextStyle(fontSize: 12, color: AppColors.textSecondary),
+              style:  TextStyle(fontSize: 12, color: AppColors.textSecondary),
             ),
           ),
           if (_filtroTipo != null) ...[
@@ -247,7 +247,7 @@ class _ProyectosScreenState extends ConsumerState<ProyectosScreen> {
             child: Column(
               children: [
                 _buildHeaderRow(headers, colWidths, totalWidth),
-                const Divider(height: 1, thickness: 1.5, color: AppColors.border),
+                 Divider(height: 1, thickness: 1.5, color: AppColors.border),
                 Expanded(
                   child: ListView.builder(
                     controller: _verticalScroll,
@@ -305,8 +305,8 @@ class _ProyectosScreenState extends ConsumerState<ProyectosScreen> {
     return Container(
       height: 38,
       decoration: BoxDecoration(
-        color: isEven ? Colors.white : const Color(0xFFF8F9FA),
-        border: const Border(bottom: BorderSide(color: AppColors.border, width: 0.5)),
+        color: isEven ? AppColors.surface : AppColors.surfaceVariant,
+        border:  Border(bottom: BorderSide(color: AppColors.border, width: 0.5)),
       ),
       child: Row(
         children: [
@@ -341,7 +341,7 @@ class _ProyectosScreenState extends ConsumerState<ProyectosScreen> {
     return Container(
       width: width,
       height: double.infinity,
-      decoration: const BoxDecoration(
+      decoration:  BoxDecoration(
         border: Border(right: BorderSide(color: AppColors.border, width: 0.5)),
       ),
       child: Row(
@@ -395,7 +395,7 @@ class _ProyectosScreenState extends ConsumerState<ProyectosScreen> {
       padding: const EdgeInsets.symmetric(horizontal: 6),
       decoration: BoxDecoration(
         color: color,
-        border: const Border(right: BorderSide(color: AppColors.border, width: 0.5)),
+        border:  Border(right: BorderSide(color: AppColors.border, width: 0.5)),
       ),
       child: Text(
         text,
@@ -417,7 +417,7 @@ class _ProyectosScreenState extends ConsumerState<ProyectosScreen> {
       height: double.infinity,
       alignment: Alignment.centerRight,
       padding: const EdgeInsets.symmetric(horizontal: 6),
-      decoration: const BoxDecoration(
+      decoration:  BoxDecoration(
         border: Border(right: BorderSide(color: AppColors.border, width: 0.5)),
         color: Color(0xFFF8F9FA),
       ),
@@ -438,7 +438,7 @@ class _ProyectosScreenState extends ConsumerState<ProyectosScreen> {
       padding: const EdgeInsets.symmetric(horizontal: 4),
       decoration: BoxDecoration(
         color: color.withValues(alpha: 0.08),
-        border: const Border(right: BorderSide(color: AppColors.border, width: 0.5)),
+        border:  Border(right: BorderSide(color: AppColors.border, width: 0.5)),
       ),
       child: Text(
         tipo.replaceAll('Sin tipo', '—'),
@@ -467,7 +467,7 @@ class _ProyectosScreenState extends ConsumerState<ProyectosScreen> {
       padding: const EdgeInsets.symmetric(horizontal: 4),
       decoration: BoxDecoration(
         color: color.withValues(alpha: 0.08),
-        border: const Border(right: BorderSide(color: AppColors.border, width: 0.5)),
+        border:  Border(right: BorderSide(color: AppColors.border, width: 0.5)),
       ),
       child: Text(
         estatus ?? 'Sin estatus',

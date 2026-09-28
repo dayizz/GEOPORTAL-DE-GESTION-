@@ -2392,14 +2392,14 @@ class _CargaArchivoScreenState extends ConsumerState<CargaArchivoScreen> {
                       _archivoSeleccionado != null
                           ? 'Toca para cambiar el archivo'
                             : 'Formatos: .geojson  .json  .xlsx  .xlsl · Máximo 2 MB',
-                      style: const TextStyle(
+                      style:  TextStyle(
                           fontSize: 12, color: AppColors.textLight),
                     ),
                     if (_archivoSeleccionado != null && _tipoArchivoImportacion != null) ...[
                       const SizedBox(height: 8),
                       Text(
                         _buildSurveySummaryLabel(),
-                        style: const TextStyle(
+                        style:  TextStyle(
                           fontSize: 11,
                           color: AppColors.textLight,
                           fontWeight: FontWeight.w600,
@@ -2490,7 +2490,7 @@ class _CargaArchivoScreenState extends ConsumerState<CargaArchivoScreen> {
                                   '${item['superficie']} m²'  
                                       '${item['tipo_geom'] != null ? '  ·  ${item['tipo_geom']}' : ''}',
                                 ].join('  ·  '),
-                                style: const TextStyle(
+                                style:  TextStyle(
                                     fontSize: 11,
                                     color: AppColors.textSecondary),
                               ),
@@ -2548,7 +2548,7 @@ class _CargaArchivoScreenState extends ConsumerState<CargaArchivoScreen> {
                           ),
                           subtitle: Text(
                             'Hoja: $hoja  ·  Tabla detectada: $tabla',
-                            style: const TextStyle(
+                            style:  TextStyle(
                               fontSize: 11,
                               color: AppColors.textSecondary,
                             ),
@@ -2680,10 +2680,10 @@ class _CargaArchivoScreenState extends ConsumerState<CargaArchivoScreen> {
                     const SizedBox(height: 8),
                     Row(
                       children: [
-                        const Icon(Icons.info_outline,
+                         Icon(Icons.info_outline,
                             size: 12, color: AppColors.textLight),
                         const SizedBox(width: 4),
-                        const Expanded(
+                         Expanded(
                           child: Text(
                             'Para GeoJSON detecta proyecto/tramo/propietario. '
                             'Para XLSX detecta la tabla por encabezados y realiza upsert '
@@ -2726,7 +2726,7 @@ class _CargaArchivoScreenState extends ConsumerState<CargaArchivoScreen> {
                       color: AppColors.surfaceVariant,
                       borderRadius: BorderRadius.circular(10),
                     ),
-                    child: const Row(
+                    child:  Row(
                       mainAxisAlignment: MainAxisAlignment.center,
                       children: [
                         Icon(Icons.inbox_outlined, color: AppColors.textLight, size: 20),
@@ -2808,7 +2808,7 @@ class _CargaArchivoScreenState extends ConsumerState<CargaArchivoScreen> {
                         physics: const NeverScrollableScrollPhysics(),
                         itemCount: importedFiles.length,
                         separatorBuilder: (_, index) =>
-                            const Divider(height: 1, color: AppColors.border),
+                             Divider(height: 1, color: AppColors.border),
                         itemBuilder: (_, idx) =>
                             _buildArchivoTile(importedFiles[idx]),
                       ),
@@ -2886,7 +2886,7 @@ class _CargaArchivoScreenState extends ConsumerState<CargaArchivoScreen> {
                         const SizedBox(height: 4),
                         Text(
                           '${progreso.procesados} / ${progreso.total}',
-                          style: const TextStyle(
+                          style:  TextStyle(
                             fontSize: 12,
                             color: AppColors.textLight,
                           ),
@@ -2970,7 +2970,7 @@ class _CargaArchivoScreenState extends ConsumerState<CargaArchivoScreen> {
                 '${file.featureCount} features · ${file.formattedDate}'
                 '${file.createdByEmail != null && _isAdminUser() ? " · ${file.createdByEmail}" : ""}',
                 style:
-                    const TextStyle(fontSize: 11, color: AppColors.textLight),
+                     TextStyle(fontSize: 11, color: AppColors.textLight),
               ),
             ],
           ),
@@ -3103,7 +3103,7 @@ class _CargaArchivoScreenState extends ConsumerState<CargaArchivoScreen> {
                         _sincronizando
                             ? 'Esto puede tomar unos segundos'
                             : 'Por favor espera...',
-                        style: const TextStyle(
+                        style:  TextStyle(
                           fontSize: 12,
                           color: AppColors.textLight,
                         ),

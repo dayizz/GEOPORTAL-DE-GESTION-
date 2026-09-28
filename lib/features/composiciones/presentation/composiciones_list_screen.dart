@@ -105,7 +105,7 @@ class _ComposicionesListScreenState extends ConsumerState<ComposicionesListScree
                       borderRadius: BorderRadius.circular(14),
                       border: Border.all(color: AppColors.border),
                     ),
-                    child: const Center(
+                    child:  Center(
                       child: Text(
                         'Sin composiciones para este proyecto todavía.',
                         style: TextStyle(color: AppColors.textSecondary),
@@ -182,12 +182,12 @@ class _ComposicionCard extends ConsumerWidget {
             const SizedBox(height: 4),
             Text(
               '${composicion.hojas.length} hoja(s)',
-              style: const TextStyle(fontSize: 12, color: AppColors.textSecondary),
+              style:  TextStyle(fontSize: 12, color: AppColors.textSecondary),
             ),
             const SizedBox(height: 4),
             Text(
               fmt.format(fecha),
-              style: const TextStyle(fontSize: 11, color: AppColors.textLight),
+              style:  TextStyle(fontSize: 11, color: AppColors.textLight),
             ),
           ],
         ),

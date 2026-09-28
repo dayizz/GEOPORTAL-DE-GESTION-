@@ -36,6 +36,7 @@ class MapaScreen extends ConsumerStatefulWidget {
   ConsumerState<MapaScreen> createState() => _MapaScreenState();
 }
 class _MapaScreenState extends ConsumerState<MapaScreen> {
+
   final MapController _mapCtrl = MapController();
   final GeoportalScreenshotController _screenshotCtrl = GeoportalScreenshotController();
   final ScreenshotController _screenshotPackageCtrl = ScreenshotController();
@@ -357,7 +358,7 @@ class _MapaScreenState extends ConsumerState<MapaScreen> {
                 child: Screenshot(
                   controller: _screenshotPackageCtrl,
                   child: ColoredBox(
-                    color: baseLayer == MapaBaseLayer.sinMapa ? Colors.white : Colors.transparent,
+                    color: baseLayer == MapaBaseLayer.sinMapa ? AppColors.mapBackground : Colors.transparent,
                     child: FlutterMap(
                     mapController: _mapCtrl,
                     options: MapOptions(
@@ -568,7 +569,7 @@ class _MapaScreenState extends ConsumerState<MapaScreen> {
                   mainAxisSize: MainAxisSize.min,
                   children: [
                     Material(
-                      color: Colors.white,
+                      color: AppColors.surface,
                       elevation: 4,
                       borderRadius: BorderRadius.circular(10),
                       child: InkWell(
@@ -590,14 +591,14 @@ class _MapaScreenState extends ConsumerState<MapaScreen> {
                             size: 22,
                             color: _showVisualizacionPanel
                                 ? AppColors.primary
-                                : const Color(0xFF555555),
+                                : AppColors.textPrimary,
                           ),
                         ),
                       ),
                     ),
                     const SizedBox(width: 8),
                     Material(
-                      color: Colors.white,
+                      color: AppColors.surface,
                       elevation: 4,
                       borderRadius: BorderRadius.circular(10),
                       child: InkWell(
@@ -617,14 +618,14 @@ class _MapaScreenState extends ConsumerState<MapaScreen> {
                             size: 22,
                             color: _showLayersPanel
                                 ? AppColors.primary
-                                : const Color(0xFF555555),
+                                : AppColors.textPrimary,
                           ),
                         ),
                       ),
                     ),
                     const SizedBox(width: 8),
                     Material(
-                      color: Colors.white,
+                      color: AppColors.surface,
                       elevation: 4,
                       borderRadius: BorderRadius.circular(10),
                       child: InkWell(
@@ -641,14 +642,14 @@ class _MapaScreenState extends ConsumerState<MapaScreen> {
                             size: 22,
                             color: _showRotationPanel
                                 ? AppColors.primary
-                                : const Color(0xFF555555),
+                                : AppColors.textPrimary,
                           ),
                         ),
                       ),
                     ),
                     const SizedBox(width: 8),
                     Material(
-                      color: Colors.white,
+                      color: AppColors.surface,
                       elevation: 4,
                       borderRadius: BorderRadius.circular(10),
                       child: InkWell(
@@ -670,7 +671,7 @@ class _MapaScreenState extends ConsumerState<MapaScreen> {
                                 size: 22,
                                 color: _showFiltrosPanel || _tieneFiltrosMapaActivos
                                     ? AppColors.primary
-                                    : const Color(0xFF555555),
+                                    : AppColors.textPrimary,
                               ),
                               if (_tieneFiltrosMapaActivos)
                                 Positioned(
@@ -692,7 +693,7 @@ class _MapaScreenState extends ConsumerState<MapaScreen> {
                     ),
                     const SizedBox(width: 8),
                     Material(
-                      color: Colors.white,
+                      color: AppColors.surface,
                       elevation: 4,
                       borderRadius: BorderRadius.circular(10),
                       child: InkWell(
@@ -709,7 +710,7 @@ class _MapaScreenState extends ConsumerState<MapaScreen> {
                             size: 22,
                             color: _showOpacidadPanel
                                 ? AppColors.primary
-                                : const Color(0xFF555555),
+                                : AppColors.textPrimary,
                           ),
                         ),
                       ),
@@ -821,7 +822,7 @@ class _MapaScreenState extends ConsumerState<MapaScreen> {
                             style: Theme.of(context).textTheme.bodyMedium,
                           ),
                           const SizedBox(height: 4),
-                          const Text(
+                           Text(
                             'Los polígonos se pintarán cuando el backend confirme.',
                             style: TextStyle(
                                 fontSize: 12, color: AppColors.textLight),
@@ -920,10 +921,10 @@ class _MapaScreenState extends ConsumerState<MapaScreen> {
           children: [
             Text(
               titulo,
-              style: const TextStyle(
+              style: TextStyle(
                 fontSize: 12,
                 fontWeight: FontWeight.w700,
-                color: Color(0xFF333333),
+                color: AppColors.textPrimary,
               ),
             ),
             const SizedBox(height: 6),
@@ -935,9 +936,9 @@ class _MapaScreenState extends ConsumerState<MapaScreen> {
                     (o) => FilterChip(
                       label: Text(
                         o,
-                        style: const TextStyle(fontSize: 12, color: Color(0xFF333333)),
+                        style: TextStyle(fontSize: 12, color: AppColors.textPrimary),
                       ),
-                      backgroundColor: Colors.white,
+                      backgroundColor: AppColors.surfaceVariant,
                       selected: seleccion.contains(o),
                       visualDensity: VisualDensity.compact,
                       materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
@@ -960,7 +961,7 @@ class _MapaScreenState extends ConsumerState<MapaScreen> {
     }
 
     return Material(
-      color: Colors.white,
+      color: AppColors.surface,
       elevation: 4,
       borderRadius: BorderRadius.circular(10),
       child: Container(
@@ -973,13 +974,13 @@ class _MapaScreenState extends ConsumerState<MapaScreen> {
             children: [
               Row(
                 children: [
-                  const Expanded(
+                  Expanded(
                     child: Text(
                       'Filtrar predios visibles',
                       style: TextStyle(
                         fontSize: 13,
                         fontWeight: FontWeight.w700,
-                        color: Color(0xFF333333),
+                        color: AppColors.textPrimary,
                       ),
                     ),
                   ),
@@ -1638,11 +1639,11 @@ class _MapaScreenState extends ConsumerState<MapaScreen> {
 
   Widget _buildClaveLabelsToggleButton() {
     final active = _showClaveLabels;
-    final borderColor = active ? AppColors.primary : const Color(0xFFD9D9D9);
-    final iconColor = active ? AppColors.primary : const Color(0xFF2A5B52);
+    final borderColor = active ? AppColors.primary : AppColors.border;
+    final iconColor = active ? AppColors.primary : AppColors.textPrimary;
     final fillColor = active
       ? AppColors.primary.withValues(alpha: 0.10)
-      : Colors.white;
+      : AppColors.surface;
     final tooltip = active
       ? 'Ocultar etiquetas de clave'
       : 'Mostrar etiquetas de clave';
@@ -1682,9 +1683,9 @@ class _MapaScreenState extends ConsumerState<MapaScreen> {
 
   Widget _buildPksLabelsToggleButton() {
     final active = _showPksLabels;
-    final borderColor = active ? AppColors.primary : const Color(0xFFD9D9D9);
-    final textColor = active ? AppColors.primary : const Color(0xFF2A5B52);
-    final fillColor = active ? AppColors.primary.withValues(alpha: 0.10) : Colors.white;
+    final borderColor = active ? AppColors.primary : AppColors.border;
+    final textColor = active ? AppColors.primary : AppColors.textPrimary;
+    final fillColor = active ? AppColors.primary.withValues(alpha: 0.10) : AppColors.surface;
     final tooltip = active
         ? 'Ocultar etiquetas PKS'
         : 'Mostrar etiquetas PKS';
@@ -2289,9 +2290,9 @@ class _MapaScreenState extends ConsumerState<MapaScreen> {
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              const Text(
+              Text(
                 'Tipo de mapa',
-                style: TextStyle(fontSize: 11, fontWeight: FontWeight.w700, color: Color(0xFF555555)),
+                style: TextStyle(fontSize: 11, fontWeight: FontWeight.w700, color: AppColors.textPrimary),
               ),
               const SizedBox(height: 8),
               _layerButton(
@@ -2360,9 +2361,9 @@ class _MapaScreenState extends ConsumerState<MapaScreen> {
               Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
-                  const Text(
+                  Text(
                     'Opacidad de predios',
-                    style: TextStyle(fontSize: 11, fontWeight: FontWeight.w700, color: Color(0xFF555555)),
+                    style: TextStyle(fontSize: 11, fontWeight: FontWeight.w700, color: AppColors.textPrimary),
                   ),
                   Text(
                     '$porcentaje%',
@@ -2404,12 +2405,12 @@ class _MapaScreenState extends ConsumerState<MapaScreen> {
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              const Text(
+              Text(
                 'Visualizar polígonos por',
                 style: TextStyle(
                   fontSize: 12,
                   fontWeight: FontWeight.w700,
-                  color: Color(0xFF555555),
+                  color: AppColors.textPrimary,
                 ),
               ),
               const SizedBox(height: 6),
@@ -2417,6 +2418,8 @@ class _MapaScreenState extends ConsumerState<MapaScreen> {
                 child: DropdownButton<MapaColorMode>(
                   value: mode,
                   isExpanded: true,
+                  dropdownColor: AppColors.surface,
+                  style: TextStyle(color: AppColors.textPrimary),
                   items: const [
                     DropdownMenuItem(
                       value: MapaColorMode.estatusPredio,
@@ -2492,10 +2495,10 @@ class _MapaScreenState extends ConsumerState<MapaScreen> {
           children: [
             Text(
               titulo,
-              style: const TextStyle(
+              style: TextStyle(
                 fontSize: 11,
                 fontWeight: FontWeight.w700,
-                color: Color(0xFF555555),
+                color: AppColors.textPrimary,
               ),
             ),
             const SizedBox(height: 6),
@@ -2522,7 +2525,7 @@ class _MapaScreenState extends ConsumerState<MapaScreen> {
                     Expanded(
                       child: Text(
                         item.key,
-                        style: const TextStyle(
+                        style:  TextStyle(
                           fontSize: 10.5,
                           color: AppColors.textPrimary,
                         ),
@@ -2547,11 +2550,11 @@ class _MapaScreenState extends ConsumerState<MapaScreen> {
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            const Align(
+            Align(
               alignment: Alignment.centerLeft,
               child: Text(
                 'Touchpad: mantener y desplazar\nMouse: boton medio + arrastrar o rueda',
-                style: TextStyle(fontSize: 11, color: Color(0xFF666666)),
+                style: TextStyle(fontSize: 11, color: AppColors.textSecondary),
               ),
             ),
             const SizedBox(height: 10),
@@ -2582,12 +2585,12 @@ class _MapaScreenState extends ConsumerState<MapaScreen> {
                   ),
                 ),
                 const SizedBox(width: 4),
-                const Text(
+                Text(
                   '°',
                   style: TextStyle(
                     fontSize: 16,
                     fontWeight: FontWeight.w600,
-                    color: Color(0xFF555555),
+                    color: AppColors.textPrimary,
                   ),
                 ),
                 const SizedBox(width: 12),
@@ -2658,7 +2661,7 @@ class _MapaScreenState extends ConsumerState<MapaScreen> {
   Widget _rotationPresetButton(String label, double rotation) {
     final isActive = (_currentRotation.abs() - rotation.abs()).abs() < 5;
     return Material(
-      color: isActive ? AppColors.primary.withValues(alpha: 0.1) : Colors.white,
+      color: isActive ? AppColors.primary.withValues(alpha: 0.16) : AppColors.surface,
       borderRadius: BorderRadius.circular(6),
       child: InkWell(
         borderRadius: BorderRadius.circular(6),
@@ -2684,7 +2687,7 @@ class _MapaScreenState extends ConsumerState<MapaScreen> {
             style: TextStyle(
               fontSize: 12,
               fontWeight: FontWeight.w600,
-              color: isActive ? AppColors.primary : const Color(0xFF555555),
+              color: isActive ? AppColors.primary : AppColors.textPrimary,
             ),
           ),
         ),
@@ -2706,7 +2709,7 @@ class _MapaScreenState extends ConsumerState<MapaScreen> {
         width: 210,
         padding: const EdgeInsets.all(10),
         decoration: BoxDecoration(
-          color: selected ? AppColors.primary.withValues(alpha: 0.1) : Colors.white,
+          color: selected ? AppColors.primary.withValues(alpha: 0.16) : AppColors.surface,
           borderRadius: BorderRadius.circular(12),
           border: Border.all(
             color: selected ? AppColors.primary : AppColors.border,
@@ -2724,7 +2727,7 @@ class _MapaScreenState extends ConsumerState<MapaScreen> {
                   Text(title, style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 13)),
                   Text(
                     subtitle,
-                    style: const TextStyle(fontSize: 11, color: AppColors.textSecondary),
+                    style:  TextStyle(fontSize: 11, color: AppColors.textSecondary),
                   ),
                 ],
               ),
@@ -2758,7 +2761,7 @@ class _MapaScreenState extends ConsumerState<MapaScreen> {
               width: 74,
               child: Text(
                 label,
-                style: const TextStyle(
+                style:  TextStyle(
                   fontSize: 11,
                   color: AppColors.textSecondary,
                   fontWeight: FontWeight.w600,
@@ -2769,7 +2772,7 @@ class _MapaScreenState extends ConsumerState<MapaScreen> {
             Expanded(
               child: Text(
                 value,
-                style: const TextStyle(
+                style:  TextStyle(
                   fontSize: 12,
                   color: AppColors.textPrimary,
                   fontWeight: FontWeight.w500,
@@ -2833,7 +2836,7 @@ class _MapaScreenState extends ConsumerState<MapaScreen> {
               ],
             ),
             const SizedBox(height: 4),
-            const Text(
+             Text(
               'CLAVE CATASTRAL',
               style: TextStyle(
                 fontSize: 11,
@@ -2844,7 +2847,7 @@ class _MapaScreenState extends ConsumerState<MapaScreen> {
             const SizedBox(height: 2),
             Text(
               predio.claveCatastral,
-              style: const TextStyle(
+              style:  TextStyle(
                 fontSize: 15,
                 color: AppColors.textPrimary,
                 fontWeight: FontWeight.w700,
@@ -2861,7 +2864,7 @@ class _MapaScreenState extends ConsumerState<MapaScreen> {
               child: Row(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  const SizedBox(
+                   SizedBox(
                     width: 74,
                     child: Text(
                       'Rango est.',
@@ -2905,7 +2908,7 @@ class _MapaScreenState extends ConsumerState<MapaScreen> {
                   children: [
                     Text(
                       'Afectaciones: $totalAfectaciones',
-                      style: const TextStyle(
+                      style:  TextStyle(
                         fontSize: 11,
                         fontWeight: FontWeight.w700,
                         color: AppColors.textPrimary,
@@ -2932,7 +2935,7 @@ class _MapaScreenState extends ConsumerState<MapaScreen> {
                 ),
               ),
               const SizedBox(height: 8),
-              const Text(
+               Text(
                 'DETALLE DE CADA AFECTACION',
                 style: TextStyle(
                   fontSize: 11,
@@ -2965,7 +2968,7 @@ class _MapaScreenState extends ConsumerState<MapaScreen> {
                           Expanded(
                             child: Text(
                               'T/F/S: ${p.tramo}',
-                              style: const TextStyle(
+                              style:  TextStyle(
                                 fontSize: 11,
                                 fontWeight: FontWeight.w700,
                                 color: AppColors.textPrimary,
@@ -2992,11 +2995,11 @@ class _MapaScreenState extends ConsumerState<MapaScreen> {
                       const SizedBox(height: 2),
                       Text(
                         p.nombrePropietario,
-                        style: const TextStyle(fontSize: 11, color: AppColors.textPrimary),
+                        style:  TextStyle(fontSize: 11, color: AppColors.textPrimary),
                       ),
                       Text(
                         '${p.rangoEstatus} · KM $kmIniP - $kmFinP',
-                        style: const TextStyle(fontSize: 10, color: AppColors.textSecondary),
+                        style:  TextStyle(fontSize: 10, color: AppColors.textSecondary),
                       ),
                       Align(
                         alignment: Alignment.centerRight,
@@ -3057,7 +3060,7 @@ class _MapaScreenState extends ConsumerState<MapaScreen> {
       child: Container(
         padding: const EdgeInsets.all(10),
         decoration: BoxDecoration(
-          color: Colors.white,
+          color: AppColors.surface,
           borderRadius: BorderRadius.circular(14),
           boxShadow: const [
             BoxShadow(
@@ -3072,12 +3075,12 @@ class _MapaScreenState extends ConsumerState<MapaScreen> {
           children: [
             Row(
               children: [
-                const Text(
+                Text(
                   'Captura de predio',
                   style: TextStyle(
                     fontSize: 14,
                     fontWeight: FontWeight.w600,
-                    color: Colors.black,
+                    color: AppColors.textPrimary,
                   ),
                 ),
                 const Spacer(),
@@ -3089,9 +3092,9 @@ class _MapaScreenState extends ConsumerState<MapaScreen> {
                     height: 22,
                     decoration: BoxDecoration(
                       shape: BoxShape.circle,
-                      border: Border.all(color: const Color(0xFFD9D9D9)),
+                      border: Border.all(color: AppColors.border),
                     ),
-                    child: const Icon(Icons.close, size: 13, color: Color(0xFF7A7A7A)),
+                    child: Icon(Icons.close, size: 13, color: AppColors.textSecondary),
                   ),
                 ),
               ],
@@ -3104,8 +3107,8 @@ class _MapaScreenState extends ConsumerState<MapaScreen> {
                 icon: Icon(_isDrawing ? Icons.close : Icons.gesture_outlined, size: 16),
                 label: Text(_isDrawing ? 'Cancelar seleccion' : 'Seleccionar poligono'),
                 style: OutlinedButton.styleFrom(
-                  foregroundColor: const Color(0xFF8A8A8A),
-                  side: const BorderSide(color: Color(0xFFD9D9D9)),
+                  foregroundColor: AppColors.textSecondary,
+                  side: BorderSide(color: AppColors.border),
                   shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
                 ),
               ),
@@ -3127,11 +3130,11 @@ class _MapaScreenState extends ConsumerState<MapaScreen> {
                 style: OutlinedButton.styleFrom(
                   foregroundColor: _isManualLinkMode
                       ? AppColors.secondary
-                      : const Color(0xFF8A8A8A),
+                      : AppColors.textSecondary,
                   side: BorderSide(
                     color: _isManualLinkMode
                         ? AppColors.secondary.withValues(alpha: 0.5)
-                        : const Color(0xFFD9D9D9),
+                        : AppColors.border,
                   ),
                   shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
                 ),
@@ -3143,9 +3146,9 @@ class _MapaScreenState extends ConsumerState<MapaScreen> {
                 width: double.infinity,
                 padding: const EdgeInsets.all(8),
                 decoration: BoxDecoration(
-                  color: const Color(0xFFF6F9FB),
+                  color: AppColors.surfaceVariant,
                   borderRadius: BorderRadius.circular(8),
-                  border: Border.all(color: const Color(0xFFE3E8ED)),
+                  border: Border.all(color: AppColors.border),
                 ),
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
@@ -3159,7 +3162,7 @@ class _MapaScreenState extends ConsumerState<MapaScreen> {
                       _manualFeatureIndex == null
                           ? '1) Toca un poligono huérfano en el mapa.'
                           : 'Poligono seleccionado: ${_poligonoIdFromFeature(importedFeatures: ref.read(importedFeaturesProvider), index: _manualFeatureIndex!)}',
-                      style: const TextStyle(fontSize: 11, color: Color(0xFF5E6670)),
+                      style: TextStyle(fontSize: 11, color: AppColors.textSecondary),
                     ),
                     const SizedBox(height: 8),
                     if (_manualSelectedPredioIds.isNotEmpty) ...[
@@ -3268,13 +3271,13 @@ class _MapaScreenState extends ConsumerState<MapaScreen> {
               ),
             ],
             if (_isDrawing)
-              const Padding(
+              Padding(
                 padding: EdgeInsets.only(top: 4),
                 child: Align(
                   alignment: Alignment.centerLeft,
                   child: Text(
                     'Toca un polígono en el mapa para seleccionarlo.',
-                    style: TextStyle(fontSize: 11, color: Color(0xFF6A6A6A)),
+                    style: TextStyle(fontSize: 11, color: AppColors.textSecondary),
                   ),
                 ),
               ),
@@ -3373,20 +3376,20 @@ class _MapaScreenState extends ConsumerState<MapaScreen> {
               width: double.infinity,
               padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
               decoration: BoxDecoration(
-                color: const Color(0xFFF0F5F8),
+              color: AppColors.surfaceVariant,
                 borderRadius: BorderRadius.circular(8),
               ),
               child: Row(
                 children: [
-                  const Text('Área:', style: TextStyle(fontSize: 12, color: Colors.black54)),
+                  Text('Área:', style: TextStyle(fontSize: 12, color: AppColors.textSecondary)),
                   const SizedBox(width: 6),
                   Text(
                     _formatArea(area),
-                    style: const TextStyle(fontSize: 12, color: Colors.black, fontWeight: FontWeight.w700),
+                    style: TextStyle(fontSize: 12, color: AppColors.textPrimary, fontWeight: FontWeight.w700),
                   ),
                   if (_detectingUbicacion) ...[  
                     const SizedBox(width: 8),
-                    const Text('Detectando ubicación...', style: TextStyle(fontSize: 11, color: Color(0xFF6A6A6A))),
+                    Text('Detectando ubicación...', style: TextStyle(fontSize: 11, color: AppColors.textSecondary)),
                   ],
                 ],
               ),
@@ -3650,9 +3653,9 @@ class _MapaScreenState extends ConsumerState<MapaScreen> {
           width: 40,
           height: 40,
           decoration: BoxDecoration(
-            color: Colors.white,
+            color: AppColors.surface,
             borderRadius: BorderRadius.circular(10),
-            border: Border.all(color: const Color(0xFFD9D9D9)),
+            border: Border.all(color: AppColors.border),
             boxShadow: const [
               BoxShadow(
                 color: Color(0x1F000000),
@@ -3661,11 +3664,11 @@ class _MapaScreenState extends ConsumerState<MapaScreen> {
               ),
             ],
           ),
-          child: const Center(
+          child: Center(
             child: Icon(
               Icons.add_location_alt_outlined,
               size: 20,
-              color: Color(0xFF2A5B52),
+              color: AppColors.textPrimary,
             ),
           ),
         ),
@@ -3686,9 +3689,9 @@ class _MapaScreenState extends ConsumerState<MapaScreen> {
               width: 40,
               height: 40,
               decoration: BoxDecoration(
-                color: Colors.white,
+                color: AppColors.surface,
                 borderRadius: BorderRadius.circular(10),
-                border: Border.all(color: const Color(0xFFD9D9D9)),
+                border: Border.all(color: AppColors.border),
                 boxShadow: const [
                   BoxShadow(
                     color: Color(0x1F000000),
@@ -3697,11 +3700,11 @@ class _MapaScreenState extends ConsumerState<MapaScreen> {
                   ),
                 ],
               ),
-              child: const Center(
+              child: Center(
                 child: Icon(
                   Icons.camera_alt_outlined,
                   size: 20,
-                  color: Color(0xFF2A5B52),
+                  color: AppColors.textPrimary,
                 ),
               ),
             ),
@@ -3725,20 +3728,20 @@ class _MapaScreenState extends ConsumerState<MapaScreen> {
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            const Text(
+            Text(
               'Captura de pantalla del mapa',
               style: TextStyle(
                 fontSize: 13,
                 fontWeight: FontWeight.w600,
-                color: Colors.black,
+                color: AppColors.textPrimary,
               ),
             ),
             const SizedBox(height: 4),
-            const Text(
+            Text(
               'Guarda una imagen PNG del mapa visible.',
               style: TextStyle(
                 fontSize: 11,
-                color: Color(0xFF666666),
+                color: AppColors.textSecondary,
               ),
             ),
             const SizedBox(height: 12),
@@ -3870,25 +3873,25 @@ class _MapaScreenState extends ConsumerState<MapaScreen> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Text(label, style: const TextStyle(fontSize: 11, color: Color(0xFF555555))),
+        Text(label, style: TextStyle(fontSize: 11, color: AppColors.textPrimary)),
         const SizedBox(height: 2),
         TextField(
           controller: controller,
-          style: const TextStyle(fontSize: 13),
+          style: TextStyle(fontSize: 13, color: AppColors.textPrimary),
           decoration: InputDecoration(
             hintText: hintText,
-            hintStyle: const TextStyle(color: Color(0xFFB2B2B2), fontSize: 13),
+            hintStyle: TextStyle(color: AppColors.textSecondary, fontSize: 13),
             isDense: true,
             filled: true,
-            fillColor: Colors.white,
+            fillColor: AppColors.surfaceVariant,
             contentPadding: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
             enabledBorder: OutlineInputBorder(
               borderRadius: BorderRadius.circular(10),
-              borderSide: const BorderSide(color: Color(0xFFDCDCDC)),
+              borderSide: BorderSide(color: AppColors.border),
             ),
             focusedBorder: OutlineInputBorder(
               borderRadius: BorderRadius.circular(10),
-              borderSide: const BorderSide(color: Color(0xFFBABABA)),
+              borderSide: BorderSide(color: AppColors.primary),
             ),
           ),
         ),
@@ -3905,27 +3908,28 @@ class _MapaScreenState extends ConsumerState<MapaScreen> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Text(label, style: const TextStyle(fontSize: 11, color: Color(0xFF555555))),
+        Text(label, style: TextStyle(fontSize: 11, color: AppColors.textPrimary)),
         const SizedBox(height: 2),
         DropdownButtonFormField<String>(
           initialValue: value,
-          icon: const Icon(Icons.keyboard_arrow_down_rounded, color: Color(0xFF9A9A9A), size: 18),
-          style: const TextStyle(fontSize: 13, color: Colors.black87),
+          icon: Icon(Icons.keyboard_arrow_down_rounded, color: AppColors.textPrimary, size: 18),
+          style: TextStyle(fontSize: 13, color: AppColors.textPrimary),
+          dropdownColor: AppColors.surface,
           decoration: InputDecoration(
             isDense: true,
             filled: true,
-            fillColor: Colors.white,
+            fillColor: AppColors.surfaceVariant,
             contentPadding: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
             enabledBorder: OutlineInputBorder(
               borderRadius: BorderRadius.circular(10),
-              borderSide: const BorderSide(color: Color(0xFFDCDCDC)),
+              borderSide: BorderSide(color: AppColors.border),
             ),
             focusedBorder: OutlineInputBorder(
               borderRadius: BorderRadius.circular(10),
-              borderSide: const BorderSide(color: Color(0xFFBABABA)),
+              borderSide: BorderSide(color: AppColors.primary),
             ),
           ),
-          hint: Text(placeholder, style: const TextStyle(color: Color(0xFF9D9D9D))),
+          hint: Text(placeholder, style: TextStyle(color: AppColors.textSecondary)),
           items: options
               .map(
                 (option) => DropdownMenuItem<String>(
@@ -3946,26 +3950,26 @@ class _MapaScreenState extends ConsumerState<MapaScreen> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Text(label, style: const TextStyle(fontSize: 11, color: Color(0xFF555555))),
+        Text(label, style: TextStyle(fontSize: 11, color: AppColors.textPrimary)),
         const SizedBox(height: 2),
         TextField(
           controller: controller,
-          style: const TextStyle(fontSize: 13),
+          style: TextStyle(fontSize: 13, color: AppColors.textPrimary),
           keyboardType: TextInputType.number,
           decoration: InputDecoration(
             hintText: '0+000',
-            hintStyle: const TextStyle(color: Color(0xFFB2B2B2), fontSize: 13),
+            hintStyle: TextStyle(color: AppColors.textSecondary, fontSize: 13),
             isDense: true,
             filled: true,
-            fillColor: Colors.white,
+            fillColor: AppColors.surfaceVariant,
             contentPadding: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
             enabledBorder: OutlineInputBorder(
               borderRadius: BorderRadius.circular(10),
-              borderSide: const BorderSide(color: Color(0xFFDCDCDC)),
+              borderSide: BorderSide(color: AppColors.border),
             ),
             focusedBorder: OutlineInputBorder(
               borderRadius: BorderRadius.circular(10),
-              borderSide: const BorderSide(color: Color(0xFFBABABA)),
+              borderSide: BorderSide(color: AppColors.primary),
             ),
           ),
         ),

@@ -3,6 +3,8 @@ import 'package:flutter/material.dart';
 class AppColors {
   AppColors._();
 
+  static bool darkModeEnabled = false;
+
   static const Color primary = Color(0xFF1B6CA8);
   static const Color primaryDark = Color(0xFF0D4F7C);
   static const Color primaryLight = Color(0xFF3A8FCC);
@@ -13,16 +15,32 @@ class AppColors {
   static const Color warning = Color(0xFFF1C40F);
   static const Color info = Color(0xFF3498DB);
 
-  static const Color background = Color(0xFFF5F7FA);
-  static const Color surface = Color(0xFFFFFFFF);
-  static const Color surfaceVariant = Color(0xFFEFF2F7);
-  static const Color border = Color(0xFFDDE1E9);
+  static Color get background => darkModeEnabled
+      ? const Color(0xFF1B2632)
+      : const Color(0xFFF5F7FA);
+  static Color get surface => darkModeEnabled
+      ? const Color(0xFF263442)
+      : const Color(0xFFFFFFFF);
+  static Color get surfaceVariant => darkModeEnabled
+      ? const Color(0xFF304152)
+      : const Color(0xFFEFF2F7);
+  static Color get border => darkModeEnabled
+      ? const Color(0xFF405265)
+      : const Color(0xFFDDE1E9);
 
-  static const Color textPrimary = Color(0xFF1A2332);
-  static const Color textSecondary = Color(0xFF6B7A8D);
-  static const Color textLight = Color(0xFFB0BAC9);
+  static Color get textPrimary => darkModeEnabled
+      ? const Color(0xFFE8EEF5)
+      : const Color(0xFF1A2332);
+  static Color get textSecondary => darkModeEnabled
+      ? const Color(0xFFB4C0CE)
+      : const Color(0xFF6B7A8D);
+  static Color get textLight => darkModeEnabled
+      ? const Color(0xFF8798AA)
+      : const Color(0xFFB0BAC9);
 
-  static const Color mapBackground = Color(0xFFE8F0F7);
+  static Color get mapBackground => darkModeEnabled
+      ? const Color(0xFF18232E)
+      : const Color(0xFFE8F0F7);
 
   // Usos de suelo
   static const Color usoHabitacional = Color(0xFF3498DB);

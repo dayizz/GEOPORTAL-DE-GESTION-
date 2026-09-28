@@ -5,10 +5,16 @@ import '../constants/app_colors.dart';
 class AppTheme {
   AppTheme._();
 
-  static ThemeData get light {
+  static ThemeData get light => _build(dark: false);
+
+  static ThemeData get dark => _build(dark: true);
+
+  static ThemeData _build({required bool dark}) {
     return ThemeData(
       useMaterial3: true,
+      brightness: dark ? Brightness.dark : Brightness.light,
       colorScheme: ColorScheme.fromSeed(
+        brightness: dark ? Brightness.dark : Brightness.light,
         seedColor: AppColors.primary,
         primary: AppColors.primary,
         secondary: AppColors.secondary,
@@ -93,11 +99,11 @@ class AppTheme {
         contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
         border: OutlineInputBorder(
           borderRadius: BorderRadius.circular(10),
-          borderSide: const BorderSide(color: AppColors.border),
+          borderSide:  BorderSide(color: AppColors.border),
         ),
         enabledBorder: OutlineInputBorder(
           borderRadius: BorderRadius.circular(10),
-          borderSide: const BorderSide(color: AppColors.border),
+          borderSide:  BorderSide(color: AppColors.border),
         ),
         focusedBorder: OutlineInputBorder(
           borderRadius: BorderRadius.circular(10),
@@ -124,7 +130,7 @@ class AppTheme {
         foregroundColor: Colors.white,
         elevation: 4,
       ),
-      navigationRailTheme: const NavigationRailThemeData(
+      navigationRailTheme:  NavigationRailThemeData(
         backgroundColor: AppColors.surface,
         selectedIconTheme: IconThemeData(color: AppColors.primary),
         unselectedIconTheme: IconThemeData(color: AppColors.textSecondary),
@@ -139,7 +145,7 @@ class AppTheme {
         labelStyle: GoogleFonts.inter(fontSize: 12),
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
       ),
-      dividerTheme: const DividerThemeData(
+      dividerTheme:  DividerThemeData(
         color: AppColors.border,
         thickness: 1,
         space: 1,

@@ -36,7 +36,7 @@ class GraficaWidget extends StatelessWidget {
     final total = predios.length;
 
     if (total == 0 && tipo != TipoGrafica.cadenamiento) {
-      return const Center(
+      return  Center(
         child: Text(
           'Sin predios para este proyecto',
           style: TextStyle(fontSize: 11, color: AppColors.textSecondary),
@@ -102,7 +102,7 @@ class GraficaWidget extends StatelessWidget {
       case TipoGrafica.segmentoTramoFrente:
         final porTramo = groupCountBy(predios, (p) => p.tramo);
         content = porTramo.isEmpty
-            ? const Text('Sin datos de tramos para este proyecto', style: TextStyle(color: AppColors.textSecondary))
+            ?  Text('Sin datos de tramos para este proyecto', style: TextStyle(color: AppColors.textSecondary))
             : Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
@@ -118,7 +118,7 @@ class GraficaWidget extends StatelessWidget {
       case TipoGrafica.cadenamiento:
         final filas = buildFilasCadenamiento(proyectoItem, predios);
         content = filas.isEmpty
-            ? const Text(
+            ?  Text(
                 'Sin cadenamiento registrado para este proyecto.',
                 style: TextStyle(color: AppColors.textSecondary, fontSize: 11),
               )
