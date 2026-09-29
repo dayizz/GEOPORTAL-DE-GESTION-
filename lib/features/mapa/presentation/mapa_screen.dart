@@ -29,7 +29,7 @@ import '../../carga/utils/file_download_io.dart';
 import '../../../core/utils/browser_download.dart';
 import '../providers/mapa_provider.dart';
 import '../utils/pks_label.dart';
-import '../../composiciones/presentation/widgets/color_swatch_picker.dart';
+import '../../composiciones/presentation/widgets/color_wheel_picker.dart';
 import '../../composiciones/utils/color_hex.dart';
 import 'package:screenshot/screenshot.dart';
 import '../utils/screenshot_crop_controller.dart';
@@ -1799,15 +1799,28 @@ class _MapaScreenState extends ConsumerState<MapaScreen> {
                     const SizedBox(height: 8),
                     const Text('Color del texto'),
                     const SizedBox(height: 6),
-                    ColorSwatchPicker(
-                      compacto: true,
-                      colorHex: colorToHex(properties.color),
-                      onChanged: (hex) {
+                    InkWell(
+                      borderRadius: BorderRadius.circular(24),
+                      onTap: () async {
+                        final hex = await showColorWheelDialog(
+                          context,
+                          initialHex: colorToHex(properties.color),
+                        );
                         final color = colorFromHex(hex);
                         if (color != null) {
                           refresh(() => properties.color = color);
                         }
                       },
+                      child: Container(
+                        width: 38,
+                        height: 38,
+                        decoration: BoxDecoration(
+                          color: properties.color,
+                          shape: BoxShape.circle,
+                          border: Border.all(color: AppColors.border, width: 2),
+                        ),
+                        child: const Icon(Icons.colorize, size: 18),
+                      ),
                     ),
                     const SizedBox(height: 12),
                     DropdownButtonFormField<_MapLabelFontStyle>(
