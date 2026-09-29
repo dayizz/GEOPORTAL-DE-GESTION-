@@ -12,6 +12,7 @@ import '../../../core/constants/app_colors.dart';
 import '../../../core/firebase/firebase_config.dart';
 import '../../../shared/widgets/app_scaffold.dart';
 import '../../mapa/providers/mapa_provider.dart';
+import '../../mapa/utils/pks_label.dart';
 import '../../predios/providers/predios_provider.dart';
 import '../../predios/providers/local_predios_provider.dart';
 import '../../predios/data/predios_repository.dart';
@@ -1973,26 +1974,11 @@ class _CargaArchivoScreenState extends ConsumerState<CargaArchivoScreen> {
           ? Map<String, dynamic>.from(rawProps)
           : <String, dynamic>{};
 
-      final label = _pickTextByAliases(props, const [
-            'propiedad',
-            'etiqueta',
-            'label',
-            'nombre',
-            'name',
-            'descripcion',
-            'pk',
-        'pks',
-        'pks_num',
-        'pks_numero',
-        'numero_pk',
-        'numero_pks',
-            'id',
-            'clave',
-          ]);
+      final label = extractPksLabel(props);
 
       final normalizedProps = <String, dynamic>{
         ...props,
-        if (label != null && label.isNotEmpty) 'pks_label': label,
+        if (label != null) 'pks_label': label,
       };
 
       normalized.add(

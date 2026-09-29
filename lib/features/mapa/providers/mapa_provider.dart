@@ -196,6 +196,9 @@ final mapaBaseLayerProvider = StateProvider<MapaBaseLayer>(
 	(ref) => MapaBaseLayer.estandar,
 );
 
+/// Opacidad de la capa base (calles o imagen satelital), de 0.0 a 1.0.
+final mapaLayerOpacityProvider = StateProvider<double>((ref) => 1.0);
+
 final mapaColorModeProvider = StateProvider<MapaColorMode>(
 	(ref) => MapaColorMode.estatusPredio,
 );

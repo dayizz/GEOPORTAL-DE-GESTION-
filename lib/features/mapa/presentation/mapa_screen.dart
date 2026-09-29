@@ -28,6 +28,9 @@ import '../../carga/utils/geojson_mapper.dart';
 import '../../carga/utils/file_download_io.dart';
 import '../../../core/utils/browser_download.dart';
 import '../providers/mapa_provider.dart';
+import '../utils/pks_label.dart';
+import '../../composiciones/presentation/widgets/color_swatch_picker.dart';
+import '../../composiciones/utils/color_hex.dart';
 import 'package:screenshot/screenshot.dart';
 import '../utils/screenshot_crop_controller.dart';
 class MapaScreen extends ConsumerStatefulWidget {
@@ -52,6 +55,8 @@ class _MapaScreenState extends ConsumerState<MapaScreen> {
   bool _showVisualizacionPanel = false;
   bool _showClaveLabels = false;
   bool _showPksLabels = true;
+  final _MapLabelProperties _pksLabelProperties = _MapLabelProperties();
+  final _MapLabelProperties _claveLabelProperties = _MapLabelProperties();
   bool _isDrawing = false;
   bool _isManualLinkMode = false;
   bool _isLinkingManual = false;
@@ -154,6 +159,7 @@ class _MapaScreenState extends ConsumerState<MapaScreen> {
     final prediosAsync = ref.watch(prediosMapaProvider);
     final prediosById = ref.watch(prediosMapaByIdProvider);
     final baseLayer = ref.watch(mapaBaseLayerProvider);
+    final baseLayerOpacity = ref.watch(mapaLayerOpacityProvider);
     final colorMode = ref.watch(mapaColorModeProvider);
     final predioOpacity = ref.watch(predioOpacityProvider);
     final importedFeatures = ref.watch(importedFeaturesProvider);
@@ -491,6 +497,9 @@ class _MapaScreenState extends ConsumerState<MapaScreen> {
                       urlTemplate: _tileTemplate(baseLayer),
                       maxZoom: 19,
                       userAgentPackageName: 'com.geoportal.predios',
+                      tileDisplay: TileDisplay.instantaneous(
+                        opacity: baseLayerOpacity,
+                      ),
                     ),
                     PolygonLayer(
                       polygons: visiblePredioPolygons,
@@ -751,8 +760,24 @@ class _MapaScreenState extends ConsumerState<MapaScreen> {
                 _buildCapturaPantallaButton(),
                 const SizedBox(width: 8),
                 _buildPksLabelsToggleButton(),
+                const SizedBox(width: 3),
+                _buildLabelSettingsButton(
+                  tooltip: 'Propiedades de texto PKS',
+                  onPressed: () => _showLabelPropertiesDialog(
+                    title: 'Texto de etiquetas PKS',
+                    properties: _pksLabelProperties,
+                  ),
+                ),
                 const SizedBox(width: 8),
                 _buildClaveLabelsToggleButton(),
+                const SizedBox(width: 3),
+                _buildLabelSettingsButton(
+                  tooltip: 'Propiedades de etiquetas de clave',
+                  onPressed: () => _showLabelPropertiesDialog(
+                    title: 'Texto de etiquetas de clave',
+                    properties: _claveLabelProperties,
+                  ),
+                ),
               ],
             ),
           ),
@@ -1445,9 +1470,10 @@ class _MapaScreenState extends ConsumerState<MapaScreen> {
 
   List<Marker> _buildPksLabelMarkers(List<Map<String, dynamic>> features) {
     final scale = _pksZoomScale(_currentZoom);
-    final fontSize = 10.0 * scale;
-    final width = 200.0 * scale;
-    final height = 22.0 * scale;
+    final properties = _pksLabelProperties;
+    final fontSize = properties.fontSize * scale;
+    final width = 260.0 * scale;
+    final height = fontSize * 1.8;
     final markers = <Marker>[];
     for (final feature in features) {
       final geometry = _geometryAsMap(feature['geometry']);
@@ -1472,14 +1498,15 @@ class _MapaScreenState extends ConsumerState<MapaScreen> {
                   textAlign: TextAlign.center,
                   style: TextStyle(
                     fontSize: fontSize,
-                    fontWeight: FontWeight.w700,
-                    color: Colors.black,
-                    shadows: [
-                      Shadow(color: Colors.white, blurRadius: 4 * scale, offset: Offset(1, 1)),
-                      Shadow(color: Colors.white, blurRadius: 4 * scale, offset: Offset(-1, 1)),
-                      Shadow(color: Colors.white, blurRadius: 4 * scale, offset: Offset(1, -1)),
-                      Shadow(color: Colors.white, blurRadius: 4 * scale, offset: Offset(-1, -1)),
-                    ],
+                    fontFamily: properties.fontFamily.isEmpty
+                        ? null
+                        : properties.fontFamily,
+                    fontWeight: properties.fontStyle.fontWeight,
+                    fontStyle: properties.fontStyle.fontStyle,
+                    color: properties.color,
+                    shadows: properties.useBuffer
+                        ? _labelBufferShadows(4 * scale)
+                        : const [],
                   ),
                 ),
               ),
@@ -1495,51 +1522,7 @@ class _MapaScreenState extends ConsumerState<MapaScreen> {
     final rawProps = feature['properties'];
     if (rawProps is! Map) return '';
     final props = Map<String, dynamic>.from(rawProps);
-    final normalized = GeoJsonMapper.normalizeProperties(props);
-
-    final candidates = [
-      props['pks_label'],
-      props['PKS_LABEL'],
-      props['pks'],
-      props['PKS'],
-      props['pks_num'],
-      props['PKS_NUM'],
-      props['pks_numero'],
-      props['PKS_NUMERO'],
-      props['numero_pk'],
-      props['NUMERO_PK'],
-      props['numero_pks'],
-      props['NUMERO_PKS'],
-      props['propiedad'],
-      props['PROPIEDAD'],
-      props['etiqueta'],
-      props['ETIQUETA'],
-      props['label'],
-      props['LABEL'],
-      props['nombre'],
-      props['NOMBRE'],
-      props['name'],
-      props['NAME'],
-      normalized['propietario_nombre'],
-      props['descripcion'],
-      props['DESCRIPCION'],
-      props['id'],
-      props['ID'],
-      props['pk'],
-      props['PK'],
-      props['clave'],
-      props['CLAVE'],
-      normalized['clave_catastral'],
-    ];
-
-    for (final candidate in candidates) {
-      final text = candidate?.toString().trim();
-      if (text != null && text.isNotEmpty && text.toLowerCase() != 'null') {
-        return text;
-      }
-    }
-
-    return '';
+    return extractPksLabel(props) ?? '';
   }
 
   List<LatLng> _extractPointsFromGeometry(Map<String, dynamic>? geometry) {
@@ -1580,10 +1563,11 @@ class _MapaScreenState extends ConsumerState<MapaScreen> {
     required LatLng point,
     required String label,
   }) {
+    final properties = _claveLabelProperties;
     return Marker(
       point: point,
-      width: 210,
-      height: 24,
+      width: 300,
+      height: properties.fontSize * 1.8,
       child: IgnorePointer(
         child: Center(
           child: Text(
@@ -1591,16 +1575,17 @@ class _MapaScreenState extends ConsumerState<MapaScreen> {
             maxLines: 1,
             overflow: TextOverflow.ellipsis,
             textAlign: TextAlign.center,
-            style: const TextStyle(
-              fontSize: 10,
-              fontWeight: FontWeight.w700,
-              color: Colors.black,
-              shadows: [
-                Shadow(color: Colors.white, blurRadius: 4, offset: Offset(1, 1)),
-                Shadow(color: Colors.white, blurRadius: 4, offset: Offset(-1, 1)),
-                Shadow(color: Colors.white, blurRadius: 4, offset: Offset(1, -1)),
-                Shadow(color: Colors.white, blurRadius: 4, offset: Offset(-1, -1)),
-              ],
+            style: TextStyle(
+              fontSize: properties.fontSize,
+              fontFamily: properties.fontFamily.isEmpty
+                  ? null
+                  : properties.fontFamily,
+              fontWeight: properties.fontStyle.fontWeight,
+              fontStyle: properties.fontStyle.fontStyle,
+              color: properties.color,
+              shadows: properties.useBuffer
+                  ? _labelBufferShadows(4)
+                  : const [],
             ),
           ),
         ),
@@ -1727,6 +1712,157 @@ class _MapaScreenState extends ConsumerState<MapaScreen> {
       ),
     );
   }
+
+  Widget _buildLabelSettingsButton({
+    required String tooltip,
+    required VoidCallback onPressed,
+  }) {
+    return Material(
+      color: AppColors.surface,
+      elevation: 3,
+      borderRadius: BorderRadius.circular(10),
+      child: Tooltip(
+        message: tooltip,
+        child: SizedBox(
+          width: 34,
+          height: 40,
+          child: IconButton(
+            padding: EdgeInsets.zero,
+            visualDensity: VisualDensity.compact,
+            onPressed: onPressed,
+            icon: const Icon(Icons.tune, size: 18),
+          ),
+        ),
+      ),
+    );
+  }
+
+  Future<void> _showLabelPropertiesDialog({
+    required String title,
+    required _MapLabelProperties properties,
+  }) async {
+    await showDialog<void>(
+      context: context,
+      builder: (dialogContext) => StatefulBuilder(
+        builder: (context, setDialogState) {
+          void refresh(VoidCallback update) {
+            setDialogState(update);
+            if (mounted) setState(() {});
+          }
+
+          return AlertDialog(
+            title: Text(title),
+            content: SizedBox(
+              width: 340,
+              child: SingleChildScrollView(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        const Text('Tamaño'),
+                        Text('${properties.fontSize.round()} px'),
+                      ],
+                    ),
+                    Slider(
+                      value: properties.fontSize,
+                      min: 8,
+                      max: 28,
+                      divisions: 20,
+                      label: '${properties.fontSize.round()} px',
+                      onChanged: (value) => refresh(() {
+                        properties.fontSize = value;
+                      }),
+                    ),
+                    const SizedBox(height: 8),
+                    const Text('Tipo de letra'),
+                    DropdownButton<String>(
+                      isExpanded: true,
+                      value: properties.fontFamily,
+                      items: const [
+                        DropdownMenuItem(value: '', child: Text('Predeterminada')),
+                        DropdownMenuItem(value: 'Arial', child: Text('Arial')),
+                        DropdownMenuItem(value: 'Georgia', child: Text('Georgia')),
+                        DropdownMenuItem(
+                          value: 'Courier New',
+                          child: Text('Courier New'),
+                        ),
+                        DropdownMenuItem(value: 'Verdana', child: Text('Verdana')),
+                      ],
+                      onChanged: (value) {
+                        if (value == null) return;
+                        refresh(() => properties.fontFamily = value);
+                      },
+                    ),
+                    const SizedBox(height: 8),
+                    const Text('Color del texto'),
+                    const SizedBox(height: 6),
+                    ColorSwatchPicker(
+                      compacto: true,
+                      colorHex: colorToHex(properties.color),
+                      onChanged: (hex) {
+                        final color = colorFromHex(hex);
+                        if (color != null) {
+                          refresh(() => properties.color = color);
+                        }
+                      },
+                    ),
+                    const SizedBox(height: 12),
+                    DropdownButtonFormField<_MapLabelFontStyle>(
+                      initialValue: properties.fontStyle,
+                      decoration: const InputDecoration(
+                        labelText: 'Estilo de letra',
+                        isDense: true,
+                        border: OutlineInputBorder(),
+                      ),
+                      items: _MapLabelFontStyle.values
+                          .map(
+                            (style) => DropdownMenuItem(
+                              value: style,
+                              child: Text(style.label),
+                            ),
+                          )
+                          .toList(growable: false),
+                      onChanged: (style) {
+                        if (style != null) {
+                          refresh(() => properties.fontStyle = style);
+                        }
+                      },
+                    ),
+                    SwitchListTile.adaptive(
+                      contentPadding: EdgeInsets.zero,
+                      title: const Text('Buffer blanco'),
+                      subtitle: const Text('Añade un halo para mejorar la lectura'),
+                      value: properties.useBuffer,
+                      onChanged: (value) => refresh(() {
+                        properties.useBuffer = value;
+                      }),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.of(dialogContext).pop(),
+                child: const Text('Cerrar'),
+              ),
+            ],
+          );
+        },
+      ),
+    );
+  }
+
+  List<Shadow> _labelBufferShadows(double blurRadius) => [
+    Shadow(color: Colors.white, blurRadius: blurRadius, offset: const Offset(1, 1)),
+    Shadow(color: Colors.white, blurRadius: blurRadius, offset: const Offset(-1, 1)),
+    Shadow(color: Colors.white, blurRadius: blurRadius, offset: const Offset(1, -1)),
+    Shadow(color: Colors.white, blurRadius: blurRadius, offset: const Offset(-1, -1)),
+  ];
+
   LatLng? _centroidOfPolygons(List<List<List<LatLng>>> polygons) {
     if (polygons.isEmpty) return null;
     List<List<LatLng>>? bestRings;
@@ -2279,6 +2415,8 @@ class _MapaScreenState extends ConsumerState<MapaScreen> {
     );
   }
   Widget _buildLayersPanel(MapaColorMode mode, MapaBaseLayer currentLayer) {
+    final opacity = ref.watch(mapaLayerOpacityProvider);
+    final opacityPercent = (opacity * 100).round();
     return Card(
       elevation: 6,
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
@@ -2337,6 +2475,51 @@ class _MapaScreenState extends ConsumerState<MapaScreen> {
                   ref.read(mapaBaseLayerProvider.notifier).state = MapaBaseLayer.sinMapa;
                   setState(() => _showLayersPanel = false);
                 },
+              ),
+              const SizedBox(height: 12),
+              const Divider(height: 1),
+              const SizedBox(height: 10),
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  Text(
+                    'Opacidad de capa',
+                    style: TextStyle(
+                      fontSize: 11,
+                      fontWeight: FontWeight.w700,
+                      color: AppColors.textPrimary,
+                    ),
+                  ),
+                  Text(
+                    '$opacityPercent%',
+                    style: const TextStyle(
+                      fontSize: 11,
+                      fontWeight: FontWeight.w700,
+                      color: AppColors.primary,
+                    ),
+                  ),
+                ],
+              ),
+              SliderTheme(
+                data: SliderTheme.of(context).copyWith(
+                  trackHeight: 3,
+                  thumbShape: const RoundSliderThumbShape(
+                    enabledThumbRadius: 7,
+                  ),
+                  overlayShape: const RoundSliderOverlayShape(
+                    overlayRadius: 14,
+                  ),
+                ),
+                child: Slider(
+                  value: opacity,
+                  min: 0,
+                  max: 1,
+                  divisions: 100,
+                  activeColor: AppColors.primary,
+                  onChanged: (value) {
+                    ref.read(mapaLayerOpacityProvider.notifier).state = value;
+                  },
+                ),
               ),
             ],
           ),
@@ -4767,6 +4950,38 @@ class _SavedPolygon {
     this.tipoPropiedad,
   });
 }
+
+enum _MapLabelFontStyle { normal, negrita, cursiva, negritaCursiva }
+
+extension on _MapLabelFontStyle {
+  String get label => switch (this) {
+    _MapLabelFontStyle.normal => 'Normal',
+    _MapLabelFontStyle.negrita => 'Negrita',
+    _MapLabelFontStyle.cursiva => 'Cursiva',
+    _MapLabelFontStyle.negritaCursiva => 'Negrita cursiva',
+  };
+
+  FontWeight get fontWeight => switch (this) {
+    _MapLabelFontStyle.negrita || _MapLabelFontStyle.negritaCursiva =>
+      FontWeight.w700,
+    _ => FontWeight.normal,
+  };
+
+  FontStyle get fontStyle => switch (this) {
+    _MapLabelFontStyle.cursiva || _MapLabelFontStyle.negritaCursiva =>
+      FontStyle.italic,
+    _ => FontStyle.normal,
+  };
+}
+
+class _MapLabelProperties {
+  double fontSize = 10;
+  String fontFamily = '';
+  Color color = Colors.black;
+  _MapLabelFontStyle fontStyle = _MapLabelFontStyle.negrita;
+  bool useBuffer = true;
+}
+
 class _PredioVisualData {
   final Predio predio;
   // Todos los registros de Gestión que comparten este mismo polígono
