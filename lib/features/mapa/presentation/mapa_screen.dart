@@ -759,25 +759,7 @@ class _MapaScreenState extends ConsumerState<MapaScreen> {
                 const SizedBox(width: 8),
                 _buildCapturaPantallaButton(),
                 const SizedBox(width: 8),
-                _buildPksLabelsToggleButton(),
-                const SizedBox(width: 3),
-                _buildLabelSettingsButton(
-                  tooltip: 'Propiedades de texto PKS',
-                  onPressed: () => _showLabelPropertiesDialog(
-                    title: 'Texto de etiquetas PKS',
-                    properties: _pksLabelProperties,
-                  ),
-                ),
-                const SizedBox(width: 8),
-                _buildClaveLabelsToggleButton(),
-                const SizedBox(width: 3),
-                _buildLabelSettingsButton(
-                  tooltip: 'Propiedades de etiquetas de clave',
-                  onPressed: () => _showLabelPropertiesDialog(
-                    title: 'Texto de etiquetas de clave',
-                    properties: _claveLabelProperties,
-                  ),
-                ),
+                _buildLabelsButton(),
               ],
             ),
           ),
@@ -1501,11 +1483,22 @@ class _MapaScreenState extends ConsumerState<MapaScreen> {
                     fontFamily: properties.fontFamily.isEmpty
                         ? null
                         : properties.fontFamily,
-                    fontWeight: properties.fontStyle.fontWeight,
-                    fontStyle: properties.fontStyle.fontStyle,
-                    color: properties.color,
+                    fontWeight: properties.weight.fontWeight,
+                    fontStyle: properties.italic
+                        ? FontStyle.italic
+                        : FontStyle.normal,
+                    decoration: properties.underline
+                        ? TextDecoration.underline
+                        : TextDecoration.none,
+                    color: properties.color.withValues(
+                      alpha: properties.opacity,
+                    ),
                     shadows: properties.useBuffer
-                        ? _labelBufferShadows(4 * scale)
+                        ? _labelBufferShadows(
+                            properties.bufferSize * scale,
+                            properties.bufferColor,
+                            properties.bufferOpacity,
+                          )
                         : const [],
                   ),
                 ),
@@ -1580,11 +1573,20 @@ class _MapaScreenState extends ConsumerState<MapaScreen> {
               fontFamily: properties.fontFamily.isEmpty
                   ? null
                   : properties.fontFamily,
-              fontWeight: properties.fontStyle.fontWeight,
-              fontStyle: properties.fontStyle.fontStyle,
-              color: properties.color,
+              fontWeight: properties.weight.fontWeight,
+              fontStyle: properties.italic
+                  ? FontStyle.italic
+                  : FontStyle.normal,
+              decoration: properties.underline
+                  ? TextDecoration.underline
+                  : TextDecoration.none,
+              color: properties.color.withValues(alpha: properties.opacity),
               shadows: properties.useBuffer
-                  ? _labelBufferShadows(4)
+                  ? _labelBufferShadows(
+                      properties.bufferSize,
+                      properties.bufferColor,
+                      properties.bufferOpacity,
+                    )
                   : const [],
             ),
           ),
@@ -1622,29 +1624,24 @@ class _MapaScreenState extends ConsumerState<MapaScreen> {
     return '';
   }
 
-  Widget _buildClaveLabelsToggleButton() {
-    final active = _showClaveLabels;
-    final borderColor = active ? AppColors.primary : AppColors.border;
-    final iconColor = active ? AppColors.primary : AppColors.textPrimary;
-    final fillColor = active
-      ? AppColors.primary.withValues(alpha: 0.10)
-      : AppColors.surface;
-    final tooltip = active
-      ? 'Ocultar etiquetas de clave'
-      : 'Mostrar etiquetas de clave';
-
+  Widget _buildLabelsButton() {
+    final active = _showClaveLabels || _showPksLabels;
     return Material(
       color: Colors.transparent,
       child: InkWell(
-        onTap: () => setState(() => _showClaveLabels = !_showClaveLabels),
+        onTap: _showLabelsDialog,
         borderRadius: BorderRadius.circular(10),
         child: Ink(
           width: 40,
           height: 40,
           decoration: BoxDecoration(
-            color: fillColor,
+            color: active
+                ? AppColors.primary.withValues(alpha: 0.10)
+                : AppColors.surface,
             borderRadius: BorderRadius.circular(10),
-            border: Border.all(color: borderColor),
+            border: Border.all(
+              color: active ? AppColors.primary : AppColors.border,
+            ),
             boxShadow: const [
               BoxShadow(
                 color: Color(0x1F000000),
@@ -1654,11 +1651,11 @@ class _MapaScreenState extends ConsumerState<MapaScreen> {
             ],
           ),
           child: Tooltip(
-            message: tooltip,
+            message: 'Etiquetas',
             child: Icon(
               Icons.label_outline,
               size: 20,
-              color: iconColor,
+              color: active ? AppColors.primary : AppColors.textPrimary,
             ),
           ),
         ),
@@ -1666,81 +1663,8 @@ class _MapaScreenState extends ConsumerState<MapaScreen> {
     );
   }
 
-  Widget _buildPksLabelsToggleButton() {
-    final active = _showPksLabels;
-    final borderColor = active ? AppColors.primary : AppColors.border;
-    final textColor = active ? AppColors.primary : AppColors.textPrimary;
-    final fillColor = active ? AppColors.primary.withValues(alpha: 0.10) : AppColors.surface;
-    final tooltip = active
-        ? 'Ocultar etiquetas PKS'
-        : 'Mostrar etiquetas PKS';
-
-    return Material(
-      color: Colors.transparent,
-      child: InkWell(
-        onTap: () => setState(() => _showPksLabels = !_showPksLabels),
-        borderRadius: BorderRadius.circular(10),
-        child: Ink(
-          width: 46,
-          height: 40,
-          decoration: BoxDecoration(
-            color: fillColor,
-            borderRadius: BorderRadius.circular(10),
-            border: Border.all(color: borderColor),
-            boxShadow: const [
-              BoxShadow(
-                color: Color(0x1F000000),
-                blurRadius: 12,
-                offset: Offset(0, 6),
-              ),
-            ],
-          ),
-          child: Tooltip(
-            message: tooltip,
-            child: Center(
-              child: Text(
-                'PKS',
-                style: TextStyle(
-                  fontSize: 11,
-                  fontWeight: FontWeight.w800,
-                  color: textColor,
-                ),
-              ),
-            ),
-          ),
-        ),
-      ),
-    );
-  }
-
-  Widget _buildLabelSettingsButton({
-    required String tooltip,
-    required VoidCallback onPressed,
-  }) {
-    return Material(
-      color: AppColors.surface,
-      elevation: 3,
-      borderRadius: BorderRadius.circular(10),
-      child: Tooltip(
-        message: tooltip,
-        child: SizedBox(
-          width: 34,
-          height: 40,
-          child: IconButton(
-            padding: EdgeInsets.zero,
-            visualDensity: VisualDensity.compact,
-            onPressed: onPressed,
-            icon: const Icon(Icons.tune, size: 18),
-          ),
-        ),
-      ),
-    );
-  }
-
-  Future<void> _showLabelPropertiesDialog({
-    required String title,
-    required _MapLabelProperties properties,
-  }) async {
+  Future<void> _showLabelsDialog() async {
+    _MapLabelKind? editing;
     await showDialog<void>(
       context: context,
       builder: (dialogContext) => StatefulBuilder(
@@ -1750,111 +1674,56 @@ class _MapaScreenState extends ConsumerState<MapaScreen> {
             if (mounted) setState(() {});
           }
 
+          final properties = editing == _MapLabelKind.clave
+              ? _claveLabelProperties
+              : _pksLabelProperties;
           return AlertDialog(
-            title: Text(title),
-            content: SizedBox(
-              width: 340,
-              child: SingleChildScrollView(
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                      children: [
-                        const Text('Tamaño'),
-                        Text('${properties.fontSize.round()} px'),
-                      ],
-                    ),
-                    Slider(
-                      value: properties.fontSize,
-                      min: 8,
-                      max: 28,
-                      divisions: 20,
-                      label: '${properties.fontSize.round()} px',
-                      onChanged: (value) => refresh(() {
-                        properties.fontSize = value;
-                      }),
-                    ),
-                    const SizedBox(height: 8),
-                    const Text('Tipo de letra'),
-                    DropdownButton<String>(
-                      isExpanded: true,
-                      value: properties.fontFamily,
-                      items: const [
-                        DropdownMenuItem(value: '', child: Text('Predeterminada')),
-                        DropdownMenuItem(value: 'Arial', child: Text('Arial')),
-                        DropdownMenuItem(value: 'Georgia', child: Text('Georgia')),
-                        DropdownMenuItem(
-                          value: 'Courier New',
-                          child: Text('Courier New'),
-                        ),
-                        DropdownMenuItem(value: 'Verdana', child: Text('Verdana')),
-                      ],
-                      onChanged: (value) {
-                        if (value == null) return;
-                        refresh(() => properties.fontFamily = value);
-                      },
-                    ),
-                    const SizedBox(height: 8),
-                    const Text('Color del texto'),
-                    const SizedBox(height: 6),
-                    InkWell(
-                      borderRadius: BorderRadius.circular(24),
-                      onTap: () async {
-                        final hex = await showColorWheelDialog(
-                          context,
-                          initialHex: colorToHex(properties.color),
-                        );
-                        final color = colorFromHex(hex);
-                        if (color != null) {
-                          refresh(() => properties.color = color);
-                        }
-                      },
-                      child: Container(
-                        width: 38,
-                        height: 38,
-                        decoration: BoxDecoration(
-                          color: properties.color,
-                          shape: BoxShape.circle,
-                          border: Border.all(color: AppColors.border, width: 2),
-                        ),
-                        child: const Icon(Icons.colorize, size: 18),
-                      ),
-                    ),
-                    const SizedBox(height: 12),
-                    DropdownButtonFormField<_MapLabelFontStyle>(
-                      initialValue: properties.fontStyle,
-                      decoration: const InputDecoration(
-                        labelText: 'Estilo de letra',
-                        isDense: true,
-                        border: OutlineInputBorder(),
-                      ),
-                      items: _MapLabelFontStyle.values
-                          .map(
-                            (style) => DropdownMenuItem(
-                              value: style,
-                              child: Text(style.label),
-                            ),
-                          )
-                          .toList(growable: false),
-                      onChanged: (style) {
-                        if (style != null) {
-                          refresh(() => properties.fontStyle = style);
-                        }
-                      },
-                    ),
-                    SwitchListTile.adaptive(
-                      contentPadding: EdgeInsets.zero,
-                      title: const Text('Buffer blanco'),
-                      subtitle: const Text('Añade un halo para mejorar la lectura'),
-                      value: properties.useBuffer,
-                      onChanged: (value) => refresh(() {
-                        properties.useBuffer = value;
-                      }),
-                    ),
-                  ],
+            title: Row(
+              children: [
+                if (editing != null)
+                  IconButton(
+                    tooltip: 'Volver a Etiquetas',
+                    onPressed: () => setDialogState(() => editing = null),
+                    icon: const Icon(Icons.chevron_left),
+                  ),
+                Text(
+                  editing == null
+                      ? 'Etiquetas'
+                      : editing == _MapLabelKind.clave
+                      ? 'Ajustes de Clave'
+                      : 'Ajustes de PKS',
                 ),
+              ],
+            ),
+            content: SizedBox(
+              width: 360,
+              child: SingleChildScrollView(
+                child: editing == null
+                    ? Column(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          _buildLabelVisibilityRow(
+                            title: 'Mostrar Clave',
+                            value: _showClaveLabels,
+                            onChanged: (value) =>
+                                refresh(() => _showClaveLabels = value),
+                            onSettings: () => setDialogState(
+                              () => editing = _MapLabelKind.clave,
+                            ),
+                          ),
+                          const Divider(height: 1),
+                          _buildLabelVisibilityRow(
+                            title: 'Mostrar PKs',
+                            value: _showPksLabels,
+                            onChanged: (value) =>
+                                refresh(() => _showPksLabels = value),
+                            onSettings: () => setDialogState(
+                              () => editing = _MapLabelKind.pks,
+                            ),
+                          ),
+                        ],
+                      )
+                    : _buildLabelPropertiesForm(context, properties, refresh),
               ),
             ),
             actions: [
@@ -1869,11 +1738,360 @@ class _MapaScreenState extends ConsumerState<MapaScreen> {
     );
   }
 
-  List<Shadow> _labelBufferShadows(double blurRadius) => [
-    Shadow(color: Colors.white, blurRadius: blurRadius, offset: const Offset(1, 1)),
-    Shadow(color: Colors.white, blurRadius: blurRadius, offset: const Offset(-1, 1)),
-    Shadow(color: Colors.white, blurRadius: blurRadius, offset: const Offset(1, -1)),
-    Shadow(color: Colors.white, blurRadius: blurRadius, offset: const Offset(-1, -1)),
+  Widget _buildLabelVisibilityRow({
+    required String title,
+    required bool value,
+    required ValueChanged<bool> onChanged,
+    required VoidCallback onSettings,
+  }) => Row(
+    children: [
+      Expanded(
+        child: SwitchListTile.adaptive(
+          contentPadding: EdgeInsets.zero,
+          title: Text(title),
+          value: value,
+          onChanged: onChanged,
+        ),
+      ),
+      IconButton(
+        tooltip: 'Ajustes de $title',
+        onPressed: onSettings,
+        icon: const Icon(Icons.chevron_right),
+      ),
+    ],
+  );
+
+  Widget _buildLabelPropertiesForm(
+    BuildContext context,
+    _MapLabelProperties properties,
+    void Function(VoidCallback) refresh,
+  ) {
+    Widget numberStepper({
+      required String title,
+      required int value,
+      required int min,
+      required int max,
+      required ValueChanged<int> onChanged,
+    }) => Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(title, style: const TextStyle(fontSize: 12)),
+        Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            IconButton(
+              tooltip: 'Reducir',
+              visualDensity: VisualDensity.compact,
+              onPressed: value > min ? () => onChanged(value - 1) : null,
+              icon: const Icon(Icons.remove, size: 18),
+            ),
+            Container(
+              constraints: const BoxConstraints(minWidth: 42),
+              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+              decoration: BoxDecoration(
+                border: Border.all(color: AppColors.border, width: 1.5),
+                borderRadius: BorderRadius.circular(7),
+              ),
+              child: Text(
+                '$value',
+                textAlign: TextAlign.center,
+                style: const TextStyle(
+                  fontSize: 15,
+                  fontWeight: FontWeight.w500,
+                ),
+              ),
+            ),
+            IconButton(
+              tooltip: 'Aumentar',
+              visualDensity: VisualDensity.compact,
+              onPressed: value < max ? () => onChanged(value + 1) : null,
+              icon: const Icon(Icons.add, size: 18),
+            ),
+          ],
+        ),
+      ],
+    );
+
+    Widget colorPicker(
+      String title,
+      Color color,
+      ValueChanged<Color> onColor, {
+      bool showDropper = true,
+    }) => Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(title, style: const TextStyle(fontSize: 12)),
+        const SizedBox(height: 5),
+        InkWell(
+          borderRadius: BorderRadius.circular(24),
+          onTap: () async {
+            final hex = await showColorWheelDialog(
+              context,
+              initialHex: colorToHex(color),
+            );
+            final selected = colorFromHex(hex);
+            if (selected != null) onColor(selected);
+          },
+          child: Container(
+            width: 34,
+            height: 34,
+            decoration: BoxDecoration(
+              color: color,
+              shape: BoxShape.circle,
+              border: Border.all(color: AppColors.border, width: 2),
+            ),
+            child: showDropper ? const Icon(Icons.colorize, size: 16) : null,
+          ),
+        ),
+      ],
+    );
+
+    Widget opacityControl(
+      String title,
+      double value,
+      ValueChanged<double> onChanged,
+    ) => Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          children: [Text(title), Text('${(value * 100).round()}%')],
+        ),
+        Slider(
+          value: value,
+          min: 0,
+          max: 1,
+          divisions: 100,
+          label: '${(value * 100).round()}%',
+          onChanged: onChanged,
+        ),
+      ],
+    );
+
+    final fontSizeDropdown = DropdownButtonFormField<String>(
+      isExpanded: true,
+      initialValue: properties.fontFamily,
+      decoration: const InputDecoration(
+        labelText: 'Tipo de letra',
+        isDense: true,
+        contentPadding: EdgeInsets.symmetric(horizontal: 10, vertical: 10),
+      ),
+      items: const [
+        DropdownMenuItem(value: '', child: Text('Predeterminada')),
+        DropdownMenuItem(value: 'Arial', child: Text('Arial')),
+        DropdownMenuItem(value: 'Georgia', child: Text('Georgia')),
+        DropdownMenuItem(value: 'Courier New', child: Text('Courier New')),
+        DropdownMenuItem(value: 'Verdana', child: Text('Verdana')),
+        DropdownMenuItem(value: 'Noto Sans', child: Text('Noto Sans')),
+        DropdownMenuItem(value: 'Montserrat', child: Text('Montserrat')),
+        DropdownMenuItem(
+          value: 'Times New Roman',
+          child: Text('Times New Roman'),
+        ),
+      ],
+      onChanged: (value) {
+        if (value != null) refresh(() => properties.fontFamily = value);
+      },
+    );
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        const Text('Texto', style: TextStyle(fontWeight: FontWeight.w600)),
+        const SizedBox(height: 6),
+        Row(
+          crossAxisAlignment: CrossAxisAlignment.center,
+          children: [
+            Expanded(child: fontSizeDropdown),
+            const SizedBox(width: 8),
+            Expanded(
+              child: numberStepper(
+                title: 'Tamaño',
+                value: properties.fontSize.round(),
+                min: 4,
+                max: 28,
+                onChanged: (value) =>
+                    refresh(() => properties.fontSize = value.toDouble()),
+              ),
+            ),
+          ],
+        ),
+        const SizedBox(height: 12),
+        Row(
+          crossAxisAlignment: CrossAxisAlignment.center,
+          children: [
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Text('Estilo', style: TextStyle(fontSize: 12)),
+                  const SizedBox(height: 5),
+                  Row(
+                    children: [
+                      _buildLabelStyleButton(
+                        'B',
+                        'Negrita',
+                        properties.weight == _MapLabelWeight.bold,
+                        bold: true,
+                        onPressed: () => refresh(
+                          () => properties.weight =
+                              properties.weight == _MapLabelWeight.bold
+                              ? _MapLabelWeight.normal
+                              : _MapLabelWeight.bold,
+                        ),
+                      ),
+                      const SizedBox(width: 5),
+                      _buildLabelStyleButton(
+                        'I',
+                        'Cursiva',
+                        properties.italic,
+                        italic: true,
+                        onPressed: () => refresh(
+                          () => properties.italic = !properties.italic,
+                        ),
+                      ),
+                      const SizedBox(width: 5),
+                      _buildLabelStyleButton(
+                        'U',
+                        'Subrayada',
+                        properties.underline,
+                        underline: true,
+                        onPressed: () => refresh(
+                          () => properties.underline = !properties.underline,
+                        ),
+                      ),
+                    ],
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(width: 10),
+            Expanded(
+              child: colorPicker(
+                'Color',
+                properties.color,
+                (color) => refresh(() => properties.color = color),
+              ),
+            ),
+          ],
+        ),
+        const SizedBox(height: 8),
+        opacityControl(
+          'Opacidad del texto',
+          properties.opacity,
+          (value) => refresh(() => properties.opacity = value),
+        ),
+        const Divider(height: 20),
+        SwitchListTile.adaptive(
+          contentPadding: EdgeInsets.zero,
+          title: const Text('Buffer'),
+          value: properties.useBuffer,
+          onChanged: (value) => refresh(() => properties.useBuffer = value),
+        ),
+        if (properties.useBuffer) ...[
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.center,
+            children: [
+              Expanded(
+                child: numberStepper(
+                  title: 'Tamaño',
+                  value: properties.bufferSize.round(),
+                  min: 1,
+                  max: 12,
+                  onChanged: (value) =>
+                      refresh(() => properties.bufferSize = value.toDouble()),
+                ),
+              ),
+              const SizedBox(width: 8),
+              Expanded(
+                child: colorPicker(
+                  'Color',
+                  properties.bufferColor,
+                  (color) => refresh(() => properties.bufferColor = color),
+                  showDropper: false,
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 8),
+          opacityControl(
+            'Opacidad del buffer',
+            properties.bufferOpacity,
+            (value) => refresh(() => properties.bufferOpacity = value),
+          ),
+        ],
+      ],
+    );
+  }
+
+  Widget _buildLabelStyleButton(
+    String letter,
+    String tooltip,
+    bool selected, {
+    bool bold = false,
+    bool italic = false,
+    bool underline = false,
+    required VoidCallback onPressed,
+  }) => Tooltip(
+    message: tooltip,
+    child: InkWell(
+      onTap: onPressed,
+      borderRadius: BorderRadius.circular(6),
+      child: Container(
+        width: 40,
+        height: 36,
+        alignment: Alignment.center,
+        decoration: BoxDecoration(
+          color: selected
+              ? AppColors.primary.withValues(alpha: 0.12)
+              : Colors.transparent,
+          border: Border.all(
+            color: selected ? AppColors.primary : AppColors.border,
+          ),
+          borderRadius: BorderRadius.circular(6),
+        ),
+        child: Text(
+          letter,
+          style: TextStyle(
+            fontSize: 18,
+            fontWeight: bold ? FontWeight.w700 : FontWeight.w600,
+            fontStyle: italic ? FontStyle.italic : FontStyle.normal,
+            decoration: underline
+                ? TextDecoration.underline
+                : TextDecoration.none,
+            color: selected ? AppColors.primary : AppColors.textPrimary,
+          ),
+        ),
+      ),
+    ),
+  );
+
+  List<Shadow> _labelBufferShadows(
+    double blurRadius,
+    Color color,
+    double opacity,
+  ) => [
+    Shadow(
+      color: color.withValues(alpha: opacity),
+      blurRadius: blurRadius,
+      offset: const Offset(1, 1),
+    ),
+    Shadow(
+      color: color.withValues(alpha: opacity),
+      blurRadius: blurRadius,
+      offset: const Offset(-1, 1),
+    ),
+    Shadow(
+      color: color.withValues(alpha: opacity),
+      blurRadius: blurRadius,
+      offset: const Offset(1, -1),
+    ),
+    Shadow(
+      color: color.withValues(alpha: opacity),
+      blurRadius: blurRadius,
+      offset: const Offset(-1, -1),
+    ),
   ];
 
   LatLng? _centroidOfPolygons(List<List<List<LatLng>>> polygons) {
@@ -4964,26 +5182,15 @@ class _SavedPolygon {
   });
 }
 
-enum _MapLabelFontStyle { normal, negrita, cursiva, negritaCursiva }
+enum _MapLabelKind { clave, pks }
 
-extension on _MapLabelFontStyle {
-  String get label => switch (this) {
-    _MapLabelFontStyle.normal => 'Normal',
-    _MapLabelFontStyle.negrita => 'Negrita',
-    _MapLabelFontStyle.cursiva => 'Cursiva',
-    _MapLabelFontStyle.negritaCursiva => 'Negrita cursiva',
-  };
+enum _MapLabelWeight { normal, semiBold, bold }
 
+extension on _MapLabelWeight {
   FontWeight get fontWeight => switch (this) {
-    _MapLabelFontStyle.negrita || _MapLabelFontStyle.negritaCursiva =>
-      FontWeight.w700,
-    _ => FontWeight.normal,
-  };
-
-  FontStyle get fontStyle => switch (this) {
-    _MapLabelFontStyle.cursiva || _MapLabelFontStyle.negritaCursiva =>
-      FontStyle.italic,
-    _ => FontStyle.normal,
+    _MapLabelWeight.normal => FontWeight.normal,
+    _MapLabelWeight.semiBold => FontWeight.w600,
+    _MapLabelWeight.bold => FontWeight.w700,
   };
 }
 
@@ -4991,8 +5198,14 @@ class _MapLabelProperties {
   double fontSize = 10;
   String fontFamily = '';
   Color color = Colors.black;
-  _MapLabelFontStyle fontStyle = _MapLabelFontStyle.negrita;
+  double opacity = 1;
+  _MapLabelWeight weight = _MapLabelWeight.bold;
+  bool italic = false;
+  bool underline = false;
   bool useBuffer = true;
+  double bufferSize = 4;
+  Color bufferColor = Colors.white;
+  double bufferOpacity = 1;
 }
 
 class _PredioVisualData {

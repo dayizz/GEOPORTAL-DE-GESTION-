@@ -210,7 +210,13 @@ class AppScaffold extends ConsumerWidget {
                         ..add(
                           const NavigationRailDestination(
                             icon: Icon(Icons.logout),
-                            label: Text('Cerrar sesión'),
+                            label: Text(
+                              'Cerrar sesión',
+                              style: TextStyle(fontSize: 10),
+                              maxLines: 1,
+                              softWrap: false,
+                              overflow: TextOverflow.ellipsis,
+                            ),
                           ),
                         ),
                 ),
