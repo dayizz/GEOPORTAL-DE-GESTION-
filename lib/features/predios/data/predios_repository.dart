@@ -474,10 +474,9 @@ class PrediosRepository {
     return null;
   }
 
-  /// Tras crear/actualizar un predio con geometría propia (un "predio
-  /// vectorial"), vincula automáticamente cualquier hermano por clave
-  /// catastral que aún no tenga polígono propio ni vínculo, para que todas
-  /// las afectaciones repetidas compartan un único polígono en el mapa.
+  /// Asegura que todos los registros con la misma clave apunten a una sola
+  /// ancla vectorial, incluso si una importación anterior dejó otro vínculo
+  /// o geometría duplicada.
   Future<void> autoVincularHermanosPorClave({
     required String claveCatastral,
     required String idAncla,
@@ -489,9 +488,8 @@ class PrediosRepository {
     var huboActualizacion = false;
     for (final doc in hermanos) {
       final raw = doc.data();
-      final tieneGeometriaPropia = raw['geometry'] != null;
-      final yaVinculado = (raw['polygon_ref_id']?.toString().trim().isNotEmpty ?? false);
-      if (tieneGeometriaPropia || yaVinculado) continue;
+      final yaVinculado = raw['polygon_ref_id']?.toString().trim();
+      if (yaVinculado == idAncla) continue;
       batch.set(
         doc.reference,
         {'polygon_ref_id': idAncla, 'updated_at': _isoNow()},
@@ -538,6 +536,8 @@ class PrediosRepository {
     }
 
     final hermanos = await _buscarDocsPorClave(clave);
+    final tieneGeometriaEntrante = payload['geometry'] != null;
+    final anclaExistente = await buscarPoligonoAnclaPorClave(clave);
 
     if (hermanos.length == 1 && !forzarNuevoRegistro) {
       final doc = hermanos.first;
@@ -549,17 +549,20 @@ class PrediosRepository {
       return UpsertPorClaveResult(predio: actualizado!, fusionado: true);
     }
 
-    final tieneGeometriaPropia = payload['geometry'] != null;
-    if (hermanos.isNotEmpty && !tieneGeometriaPropia) {
-      final anclaExistente = await buscarPoligonoAnclaPorClave(clave);
-      if (anclaExistente != null) {
-        payload['polygon_ref_id'] = anclaExistente;
-      }
+    if (anclaExistente != null) {
+      // La misma clave puede tener varias filas de Gestión, pero debe haber
+      // un solo polígono vectorial. Si ya existe un ancla, las repeticiones
+      // del GeoJSON también se conservan como afectaciones y apuntan a ella.
+      payload.remove('geometry');
+      payload['poligono_insertado'] = false;
+      payload['polygon_ref_id'] = anclaExistente;
     }
 
     final creado = await createPredio(payload);
-    if (tieneGeometriaPropia && hermanos.isNotEmpty) {
-      await autoVincularHermanosPorClave(claveCatastral: clave, idAncla: creado.id);
+    final idAncla = anclaExistente ??
+        (tieneGeometriaEntrante ? creado.id : null);
+    if (idAncla != null) {
+      await autoVincularHermanosPorClave(claveCatastral: clave, idAncla: idAncla);
     }
     return UpsertPorClaveResult(predio: creado, fusionado: false);
   }

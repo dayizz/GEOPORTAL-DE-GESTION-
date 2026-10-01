@@ -11,6 +11,7 @@ import 'package:go_router/go_router.dart';
 import 'package:http/http.dart' as http;
 import 'package:latlong2/latlong.dart';
 import '../../../core/constants/app_colors.dart';
+import '../../../core/utils/import_normalization.dart' as import_norm;
 import '../../../shared/widgets/app_scaffold.dart';
 import '../../auth/providers/demo_provider.dart';
 import '../../auth/providers/auth_provider.dart';
@@ -279,7 +280,9 @@ class _MapaScreenState extends ConsumerState<MapaScreen> {
               final selectedVisual = _selectedPredio == null
                   ? null
                   : visuals.cast<_PredioVisualData?>().firstWhere(
-                        (v) => v?.predio.id == _selectedPredio!.id,
+                        (v) => v?.afectaciones.any(
+                          (p) => p.id == _selectedPredio!.id,
+                        ) == true,
                         orElse: () => null,
                       );
               final renderedPolygonSignatures = <String>{};
@@ -1037,14 +1040,26 @@ class _MapaScreenState extends ConsumerState<MapaScreen> {
     // `polygonRefId`, para renderizar UN solo polígono por grupo aunque
     // existan varios registros de Gestión sobre el mismo predio físico.
     final porId = {for (final p in predios) p.id: p};
+    final anclasPorClave = _anclasGeometricasPorClave(predios);
     final grupos = <String, List<Predio>>{};
     for (final predio in predios) {
       String? ownerId;
-      if (predio.geometry != null) {
+      final clave = import_norm.normalizeCode(predio.claveCatastral);
+      if (clave != null && anclasPorClave.containsKey(clave)) {
+        // Una clave representa un solo polígono físico aunque existan varias
+        // filas de Gestión o más de un feature vectorial con esa clave.
+        ownerId = anclasPorClave[clave];
+      } else if (predio.geometry != null) {
         ownerId = predio.id;
       } else if (predio.polygonRefId != null &&
           porId.containsKey(predio.polygonRefId)) {
-        ownerId = predio.polygonRefId;
+        final referenced = porId[predio.polygonRefId];
+        final claveAncla = referenced == null
+            ? null
+            : import_norm.normalizeCode(referenced.claveCatastral);
+        ownerId = claveAncla == null
+            ? predio.polygonRefId
+            : anclasPorClave[claveAncla] ?? predio.polygonRefId;
       }
       if (ownerId == null) continue;
       (grupos[ownerId] ??= []).add(predio);
@@ -1080,17 +1095,35 @@ class _MapaScreenState extends ConsumerState<MapaScreen> {
     return visuales;
   }
 
+  Map<String, String> _anclasGeometricasPorClave(Iterable<Predio> predios) {
+    final anclas = <String, String>{};
+    for (final predio in predios) {
+      if (predio.geometry == null) continue;
+      final clave = import_norm.normalizeCode(predio.claveCatastral);
+      if (clave != null) anclas.putIfAbsent(clave, () => predio.id);
+    }
+    return anclas;
+  }
+
   /// Todas las afectaciones (registros de Gestión) que comparten el mismo
   /// polígono que `predio` -sea porque `predio` es el ancla (tiene geometry
   /// propia) o porque está vinculado a otro predio vía `polygonRefId`-. Se
   /// usa fuera de `_buildVisualData` (ej. al enfocar un predio desde
   /// Gestión) para no perder el contexto de afectaciones repetidas.
   List<Predio> _afectacionesDeGrupo(Predio predio, Map<String, Predio> prediosById) {
-    final ownerId = predio.geometry != null
-        ? predio.id
-        : (predio.polygonRefId ?? predio.id);
+    final anclasPorClave = _anclasGeometricasPorClave(prediosById.values);
+    final clave = import_norm.normalizeCode(predio.claveCatastral);
+    final ownerId = (clave == null ? null : anclasPorClave[clave]) ??
+        (predio.geometry != null ? predio.id : (predio.polygonRefId ?? predio.id));
+    final claveAncla = import_norm.normalizeCode(
+      prediosById[ownerId]?.claveCatastral ?? predio.claveCatastral,
+    );
     final grupo = prediosById.values
-        .where((p) => p.id == ownerId || p.polygonRefId == ownerId)
+        .where((p) {
+          final mismaClave = claveAncla != null &&
+              import_norm.normalizeCode(p.claveCatastral) == claveAncla;
+          return p.id == ownerId || p.polygonRefId == ownerId || mismaClave;
+        })
         .toList();
     return grupo.isEmpty ? [predio] : grupo;
   }
@@ -2286,7 +2319,13 @@ class _MapaScreenState extends ConsumerState<MapaScreen> {
   /// predio vectorial), se usa la geometría del ancla para poder ubicarlo.
   void _flyToPredio(Predio predio, {Map<String, Predio>? prediosById}) {
     try {
-      var geometry = predio.geometry;
+      final predios = prediosById?.values ?? const <Predio>[];
+      final anclasPorClave = _anclasGeometricasPorClave(predios);
+      final clave = import_norm.normalizeCode(predio.claveCatastral);
+      final anclaId = clave == null ? null : anclasPorClave[clave];
+      var geometry = anclaId == null
+          ? predio.geometry
+          : prediosById?[anclaId]?.geometry ?? predio.geometry;
       if (geometry == null &&
           predio.polygonRefId != null &&
           prediosById != null) {
