@@ -31,6 +31,7 @@ import 'widgets/panel_propiedades_norte.dart';
 import 'widgets/panel_propiedades_simbologia.dart';
 import 'widgets/panel_propiedades_texto.dart';
 import 'widgets/shape_painter.dart';
+import 'widgets/snap_indicator.dart';
 
 /// Editor de una composición: lienzo con una o más hojas, herramientas de
 /// figuras/texto/hoja, panel de capas y guardado a Firestore. Ver el plan
@@ -57,6 +58,11 @@ class _ComposicionEditorScreenState
 
   int _hojaActivaIndex = 0;
   String? _elementoSeleccionadoId;
+
+  /// Punto (px del lienzo) donde OSNAP imantó el elemento seleccionado en
+  /// este instante -null si no hay snap activo-, para dibujar el
+  /// indicador visual momentáneo (ver `SnapIndicator`).
+  Offset? _snapIndicadorPx;
   int _contadorInsertados = 0;
   bool _exportando = false;
   double _zoomNivel = 1.0;
@@ -486,6 +492,7 @@ class _ComposicionEditorScreenState
     final todosLosPredios =
         ref.watch(prediosMapaProvider).valueOrNull ?? const <Predio>[];
     final importedFeatures = ref.watch(importedFeaturesProvider);
+    final pksFeatures = ref.watch(pksPointFeaturesProvider);
     final proyectoItem = _proyectoItemDe(
       ref.watch(proyectosProvider).valueOrNull ?? const <ProyectoItem>[],
     );
@@ -511,6 +518,7 @@ class _ComposicionEditorScreenState
                           todosLosPredios,
                           proyectoItem,
                           importedFeatures,
+                          pksFeatures,
                         ),
                       ),
                       const Divider(height: 1),
@@ -808,8 +816,7 @@ class _ComposicionEditorScreenState
     (TipoFigura.triangulo, 'Triángulo'),
     (TipoFigura.hexagono, 'Hexágono'),
     (TipoFigura.pentagono, 'Pentágono'),
-    (TipoFigura.linea, 'Línea continua'),
-    (TipoFigura.lineaPunteada, 'Línea punteada'),
+    (TipoFigura.linea, 'Línea'),
   ];
 
   Widget _herramientaFigurasBoton() {
@@ -883,9 +890,7 @@ class _ComposicionEditorScreenState
                           figuraTipo: tipo,
                           colorTrazo: AppColors.primary,
                           grosorTrazo: 2,
-                          colorRelleno:
-                              tipo == TipoFigura.linea ||
-                                  tipo == TipoFigura.lineaPunteada
+                          colorRelleno: tipo == TipoFigura.linea
                               ? null
                               : AppColors.primary.withValues(alpha: 0.15),
                         ),
@@ -1083,6 +1088,7 @@ class _ComposicionEditorScreenState
     List<Predio> todosLosPredios,
     ProyectoItem? proyectoItem,
     List<Map<String, dynamic>> importedFeatures,
+    List<Map<String, dynamic>> pksFeatures,
   ) {
     final hoja = _hojaActiva;
     final (anchoMm, altoMm) = hoja.dimensionesMm;
@@ -1114,7 +1120,7 @@ class _ComposicionEditorScreenState
                 width: wPx,
                 height: topRulerHeight,
                 child: ColoredBox(
-                  color: const Color(0xFFF5F5F5),
+                  color: const Color(0xFFF4F5F7),
                   child: CustomPaint(
                     painter: _ReglaHojaPainter(
                       longitudMm: anchoMm,
@@ -1131,7 +1137,7 @@ class _ComposicionEditorScreenState
                 bottom: 0,
                 width: leftRulerWidth,
                 child: ColoredBox(
-                  color: const Color(0xFFF5F5F5),
+                  color: const Color(0xFFF4F5F7),
                   child: CustomPaint(
                     painter: _ReglaHojaPainter(
                       longitudMm: constraints.maxHeight / scale,
@@ -1170,6 +1176,10 @@ class _ComposicionEditorScreenState
                             key: ValueKey(elemento.id),
                             elemento: elemento,
                             scale: scale,
+                            hojaAnchoMm: anchoMm,
+                            hojaAltoMm: altoMm,
+                            onSnapIndicador: (p) =>
+                                setState(() => _snapIndicadorPx = p),
                             seleccionado:
                                 elemento.id == _elementoSeleccionadoId,
                             onSelect: () => setState(
@@ -1212,12 +1222,21 @@ class _ComposicionEditorScreenState
                             importedFeatures: elemento.tipo == TipoElemento.mapa
                                 ? importedFeatures
                                 : const [],
+                            pksFeatures: elemento.tipo == TipoElemento.mapa
+                                ? pksFeatures
+                                : const [],
                             hojaElementos: elemento.tipo == TipoElemento.escala
                                 ? hoja.elementos
                                 : const [],
                             proyectoItem: elemento.tipo == TipoElemento.grafica
                                 ? proyectoItem
                                 : null,
+                          ),
+                        if (_snapIndicadorPx != null)
+                          Positioned(
+                            left: _snapIndicadorPx!.dx - 8,
+                            top: _snapIndicadorPx!.dy - 8,
+                            child: const SnapIndicator(),
                           ),
                       ],
                     ),
@@ -1289,10 +1308,45 @@ class _ComposicionEditorScreenState
               elemento.id,
               (e) => e.copyWith(grosorTrazo: v),
             ),
+            onEstiloLineaChanged: (v) => _actualizarElemento(
+              elemento.id,
+              (e) => e.copyWith(estiloLinea: v),
+            ),
+            onEspaciadoLineaChanged: (v) => _actualizarElemento(
+              elemento.id,
+              (e) => e.copyWith(estiloLineaEspaciado: v),
+            ),
             onColorRellenoChanged: (v) => _actualizarElemento(
               elemento.id,
               (e) =>
                   e.copyWith(clearColorRelleno: v == null, colorRellenoHex: v),
+            ),
+            onPuntaTipoChanged: (v) => _actualizarElemento(
+              elemento.id,
+              (e) {
+                final sinExtremoElegido =
+                    !(e.lineaPuntaIzquierda ?? false) &&
+                    !(e.lineaPuntaDerecha ?? false);
+                return e.copyWith(
+                  lineaPuntaTipo: v,
+                  lineaPuntaDerecha:
+                      v != TipoPuntaLinea.ninguna && sinExtremoElegido
+                      ? true
+                      : null,
+                );
+              },
+            ),
+            onPuntaTamanoChanged: (v) => _actualizarElemento(
+              elemento.id,
+              (e) => e.copyWith(lineaPuntaTamano: v),
+            ),
+            onPuntaIzquierdaChanged: (v) => _actualizarElemento(
+              elemento.id,
+              (e) => e.copyWith(lineaPuntaIzquierda: v),
+            ),
+            onPuntaDerechaChanged: (v) => _actualizarElemento(
+              elemento.id,
+              (e) => e.copyWith(lineaPuntaDerecha: v),
             ),
           ),
         if (elemento.tipo == TipoElemento.texto)
@@ -1318,6 +1372,14 @@ class _ComposicionEditorScreenState
               elemento.id,
               (e) => e.copyWith(textoItalic: v),
             ),
+            onSubrayadoChanged: (v) => _actualizarElemento(
+              elemento.id,
+              (e) => e.copyWith(textoSubrayado: v),
+            ),
+            onTachadoChanged: (v) => _actualizarElemento(
+              elemento.id,
+              (e) => e.copyWith(textoTachado: v),
+            ),
             onColorTextoChanged: (v) => _actualizarElemento(
               elemento.id,
               (e) => e.copyWith(textoColorHex: v),
@@ -1329,14 +1391,38 @@ class _ComposicionEditorScreenState
                 textoColorFondoHex: v,
               ),
             ),
+            onBufferActivoChanged: (v) => _actualizarElemento(
+              elemento.id,
+              (e) => e.copyWith(textoBufferActivo: v),
+            ),
+            onBufferColorChanged: (v) => _actualizarElemento(
+              elemento.id,
+              (e) => e.copyWith(textoBufferColorHex: v),
+            ),
+            onBufferAnchoChanged: (v) => _actualizarElemento(
+              elemento.id,
+              (e) => e.copyWith(textoBufferAncho: v),
+            ),
+            onAlineacionChanged: (v) => _actualizarElemento(
+              elemento.id,
+              (e) => e.copyWith(textoAlineacion: v),
+            ),
+            onInterlineadoChanged: (v) => _actualizarElemento(
+              elemento.id,
+              (e) => e.copyWith(textoInterlineado: v),
+            ),
+            onTrackingChanged: (v) => _actualizarElemento(
+              elemento.id,
+              (e) => e.copyWith(textoTracking: v),
+            ),
+            onRotacionChanged: (v) => _actualizarElemento(
+              elemento.id,
+              (e) => e.copyWith(rotacion: v),
+            ),
           ),
         if (elemento.tipo == TipoElemento.mapa)
           PanelPropiedadesMapa(
             elemento: elemento,
-            onLatChanged: (v) =>
-                _actualizarElemento(elemento.id, (e) => e.copyWith(mapaLat: v)),
-            onLngChanged: (v) =>
-                _actualizarElemento(elemento.id, (e) => e.copyWith(mapaLng: v)),
             onZoomChanged: (v) => _actualizarElemento(
               elemento.id,
               (e) => e.copyWith(mapaZoom: v),
@@ -1348,6 +1434,42 @@ class _ComposicionEditorScreenState
             onMostrarClavesChanged: (v) => _actualizarElemento(
               elemento.id,
               (e) => e.copyWith(mapaMostrarClaves: v),
+            ),
+            onMostrarPksChanged: (v) => _actualizarElemento(
+              elemento.id,
+              (e) => e.copyWith(mapaMostrarPks: v),
+            ),
+            onRotacionMapaChanged: (v) => _actualizarElemento(
+              elemento.id,
+              (e) => e.copyWith(mapaRotacion: v),
+            ),
+            onFiguraChanged: (v) => _actualizarElemento(
+              elemento.id,
+              (e) => e.copyWith(mapaFigura: v),
+            ),
+            onOpacidadMapaChanged: (v) => _actualizarElemento(
+              elemento.id,
+              (e) => e.copyWith(mapaOpacidad: v),
+            ),
+            onOpacidadPrediosChanged: (v) => _actualizarElemento(
+              elemento.id,
+              (e) => e.copyWith(prediosOpacidad: v),
+            ),
+            onBordeActivoChanged: (v) => _actualizarElemento(
+              elemento.id,
+              (e) => e.copyWith(mapaBordeActivo: v),
+            ),
+            onBordeGrosorChanged: (v) => _actualizarElemento(
+              elemento.id,
+              (e) => e.copyWith(mapaBordeGrosor: v),
+            ),
+            onBordeColorChanged: (v) => _actualizarElemento(
+              elemento.id,
+              (e) => e.copyWith(mapaBordeColorHex: v),
+            ),
+            onBordeOpacidadChanged: (v) => _actualizarElemento(
+              elemento.id,
+              (e) => e.copyWith(mapaBordeOpacidad: v),
             ),
           ),
         if (elemento.tipo == TipoElemento.norte)
@@ -1408,9 +1530,9 @@ class _ReglaHojaPainter extends CustomPainter {
     if (size.isEmpty) return;
 
     final paint = Paint()
-      ..color = const Color(0xFF999999)
-      ..strokeWidth = 1.5;
-    final textStyle = const TextStyle(color: Color(0xFF666666), fontSize: 8);
+      ..color = const Color(0xFFC2C6CE)
+      ..strokeWidth = 1.0;
+    final textStyle = const TextStyle(color: Color(0xFFAEB2B9), fontSize: 8);
 
     final pixelsPerMm = scale;
     final numTicks = longitudMm.floor();

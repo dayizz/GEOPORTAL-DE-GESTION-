@@ -68,6 +68,16 @@ class GeoJsonMapper {
       'liberacion', 'LIBERACION',
       'cop_dot', 'COP_DOT', 'cop_dot_aop', 'COP_DOT_AOP',
     ],
+    'responsable_juridico': [
+      'responsable_juridico', 'RESPONSABLE_JURIDICO',
+      'responsable jurídico', 'RESPONSABLE JURÍDICO',
+      'Responsable Jurídico', 'Responsable jurídico',
+      'responsable juridico', 'RESPONSABLE JURIDICO',
+      'Responsable Juridico',
+      'responsable_legal', 'RESPONSABLE_LEGAL',
+      'area_juridica', 'AREA_JURIDICA',
+      'area jurídica', 'Área Jurídica', 'AREA JURÍDICA',
+    ],
     'ejido': [
       'ejido', 'EJIDO',
       'nom_ejido', 'NOM_EJIDO',
@@ -391,6 +401,8 @@ class GeoJsonMapper {
         return norm.normalizeTipoPropiedad(text);
       case 'tipo_liberacion':
         return norm.normalizeTipoLiberacion(text);
+      case 'responsable_juridico':
+        return norm.normalizeResponsableJuridico(text);
       case 'estructura':
         return norm.normalizeEstructura(text) ?? text;
       // "Ejido": texto libre, salvo variantes de "no aplica" (no todos los

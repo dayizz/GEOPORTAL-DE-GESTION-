@@ -33,6 +33,7 @@ class Predio {
   final bool negociacion;
   final String? situacionSocial;
   final String? tipoLiberacion;
+  final String? responsableJuridico;
   final double? latitud;
   final double? longitud;
   final Map<String, dynamic>? geometry;
@@ -64,6 +65,7 @@ class Predio {
     'Con ingreso',
     'No liberado',
     'L nueva',
+    'Investigación',
   ];
 
   static const Set<String> _rangosLiberado = {
@@ -111,6 +113,7 @@ class Predio {
     this.negociacion = false,
     this.situacionSocial,
     this.tipoLiberacion,
+    this.responsableJuridico,
     this.latitud,
     this.longitud,
     this.geometry,
@@ -241,6 +244,14 @@ class Predio {
       negociacion: map['negociacion'] as bool? ?? false,
       situacionSocial: map['situacion_social'] as String?,
       tipoLiberacion: map['tipo_liberacion'] as String?,
+      responsableJuridico: pickText([
+        'responsable_juridico',
+        'RESPONSABLE_JURIDICO',
+        'responsable jurídico',
+        'RESPONSABLE JURÍDICO',
+        'responsable_legal',
+        'RESPONSABLE_LEGAL',
+      ]),
       latitud: (map['latitud'] as num?)?.toDouble(),
       longitud: (map['longitud'] as num?)?.toDouble(),
       geometry: geometry,
@@ -291,6 +302,7 @@ class Predio {
       'negociacion': negociacion,
       'situacion_social': situacionSocial,
       'tipo_liberacion': tipoLiberacion,
+      'responsable_juridico': responsableJuridico,
       'latitud': latitud,
       'longitud': longitud,
       'geometry': geometry,
@@ -347,6 +359,7 @@ class Predio {
     bool? negociacion,
     String? situacionSocial,
     String? tipoLiberacion,
+    String? responsableJuridico,
     double? latitud,
     double? longitud,
     Map<String, dynamic>? geometry,
@@ -401,6 +414,7 @@ class Predio {
       negociacion: negociacion ?? this.negociacion,
       situacionSocial: situacionSocial ?? this.situacionSocial,
       tipoLiberacion: tipoLiberacion ?? this.tipoLiberacion,
+      responsableJuridico: responsableJuridico ?? this.responsableJuridico,
       latitud: latitud ?? this.latitud,
       longitud: longitud ?? this.longitud,
       geometry: geometry ?? this.geometry,

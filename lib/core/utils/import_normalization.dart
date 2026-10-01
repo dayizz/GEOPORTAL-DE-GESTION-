@@ -158,6 +158,7 @@ const List<String> tipoLiberacionOpciones = [
   'EXPROPIACION',
   'SIN TIPO',
   'ANUENCIA POR OFICIO',
+  'MINUTA',
 ];
 
 /// Normaliza "tipo_liberacion" contra COP/DOT/AOP/EXPROPIACION, ignorando
@@ -179,6 +180,26 @@ String normalizeTipoLiberacion(String? value) {
   }
   if (compacto.contains('SINTIPO')) return 'SIN TIPO';
   return 'SIN TIPO';
+}
+
+/// Normaliza el responsable jurídico al catálogo de Gestión cuando se
+/// reconoce SEDATU o SICT, conservando otros valores para no perder datos.
+String? normalizeResponsableJuridico(String? value) {
+  if (value == null) return null;
+  final limpio = _limpiarBase(value);
+  if (limpio.isEmpty) return null;
+  final compacto = limpio.toUpperCase().replaceAll(RegExp(r'[^A-Z0-9]'), '');
+  if (compacto.contains('SEDATU') ||
+      (compacto.contains('DESARROLLO') && compacto.contains('URBANO'))) {
+    return 'SEDATU';
+  }
+  if (compacto.contains('SICT') ||
+      (compacto.contains('INFRAESTRUCTURA') &&
+          compacto.contains('COMUNICACIONES') &&
+          compacto.contains('TRANSPORTES'))) {
+    return 'SICT';
+  }
+  return limpio.toUpperCase();
 }
 
 /// Catálogo vigente de "Estructura" (coincide con el dropdown de
@@ -282,6 +303,7 @@ const List<String> rangoEstatusOpciones = [
   'Con ingreso',
   'No liberado',
   'L nueva',
+  'Investigación',
 ];
 
 /// Normaliza "estatus"/"rango de estatus" contra el catálogo vigente.
@@ -295,6 +317,7 @@ String normalizeRangoEstatus(String? value) {
   if (compacto.isEmpty) return 'No liberado';
   final esNegativo = compacto.startsWith('NO');
   if (compacto.contains('LNUEVA')) return 'L nueva';
+  if (compacto.contains('INVESTIGACION')) return 'Investigación';
   if (compacto.contains('POSIBLE') && compacto.contains('DOT')) return 'Posible DOT';
   if (compacto.contains('UVSR') || compacto.contains('INSTRUCCION')) return 'Instruccion UVSR';
   if (compacto.contains('INGRESO')) return 'Con ingreso';

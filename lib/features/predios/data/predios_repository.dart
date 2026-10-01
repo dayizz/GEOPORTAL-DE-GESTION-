@@ -127,6 +127,7 @@ class PrediosRepository {
       'negociacion': _toBool(raw['negociacion']),
       'situacion_social': raw['situacion_social']?.toString(),
       'tipo_liberacion': raw['tipo_liberacion']?.toString(),
+      'responsable_juridico': raw['responsable_juridico']?.toString(),
       'latitud': _toDouble(raw['latitud']),
       'longitud': _toDouble(raw['longitud']),
       'geometry': geometry,

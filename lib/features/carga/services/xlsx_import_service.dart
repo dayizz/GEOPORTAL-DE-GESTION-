@@ -242,6 +242,14 @@ class XlsxImportService {
         'cop_dot',
         'cop_dot_aop',
       ],
+      'responsable_juridico': [
+        'responsable_juridico',
+        'responsable juridico',
+        'responsable legal',
+        'area juridica',
+        'area legal',
+        'juridico',
+      ],
     'km_inicio': [
       'km_inicio',
       'km_inicial',
@@ -714,6 +722,12 @@ class XlsxImportService {
     final tipoLiberacion = pick(_prediosAliases['tipo_liberacion']!);
     if (tipoLiberacion != null) {
       out['tipo_liberacion'] = norm.normalizeTipoLiberacion(tipoLiberacion);
+    }
+
+    final responsableJuridico = pick(_prediosAliases['responsable_juridico']!);
+    if (responsableJuridico != null) {
+      out['responsable_juridico'] =
+          norm.normalizeResponsableJuridico(responsableJuridico);
     }
 
     final rangoEstatus = pick(_prediosAliases['rango_estatus']!);

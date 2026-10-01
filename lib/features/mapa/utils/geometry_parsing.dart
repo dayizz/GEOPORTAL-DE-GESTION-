@@ -47,6 +47,36 @@ List<List<LatLng>> extractRingsFromGeometry(Map<String, dynamic>? geometry) {
   return polygons.isEmpty ? const [] : polygons.first;
 }
 
+/// Parseo de geometría `Point`/`MultiPoint` a `LatLng` (p.ej. para la capa
+/// de puntos PKS). Copiado de `_extractPointsFromGeometry`/`_coordToLatLng`
+/// en `mapa_screen.dart`, mismo criterio de duplicación que el resto de
+/// este archivo.
+List<LatLng> extractPointsFromGeometry(Map<String, dynamic>? geometry) {
+  if (geometry == null) return const [];
+  final type = geometry['type']?.toString();
+  final coords = geometry['coordinates'];
+  if (type == null || coords is! List || coords.isEmpty) return const [];
+
+  if (type == 'Point') {
+    final point = _coordToLatLng(coords);
+    return point == null ? const [] : [point];
+  }
+  if (type == 'MultiPoint') {
+    return coords.whereType<List>().map(_coordToLatLng).whereType<LatLng>().toList(growable: false);
+  }
+  return const [];
+}
+
+LatLng? _coordToLatLng(List<dynamic> coord) {
+  if (coord.length < 2) return null;
+  final x = _parseCoord(coord[0]);
+  final y = _parseCoord(coord[1]);
+  if (x == null || y == null) return null;
+  if (_isValidLatLng(lat: y, lng: x)) return LatLng(y, x);
+  if (_isValidLatLng(lat: x, lng: y)) return LatLng(x, y);
+  return null;
+}
+
 List<LatLng> _ringToLatLng(List<dynamic> ring) {
   try {
     final pairs = <(double, double)>[];

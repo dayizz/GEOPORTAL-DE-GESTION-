@@ -124,6 +124,7 @@ class AppColors {
   static const Color rangoPosibleDot = Color(0xFFBD817E);        // rosa/marron
   static const Color rangoNoLiberado = Color(0xFFFF0000);        // rojo
   static const Color rangoDesconocido = Color(0xFFBDBDBD);       // gris claro
+  static const Color rangoInvestigacion = Color(0xFF808080);     // gris
   static const Color rangoContornoVerde = Color(0xFF00FF00);     // contorno distintivo
 
   static Color rangoEstatusColor(String? rango) {
@@ -142,6 +143,8 @@ class AppColors {
         return rangoPosibleDot;
       case 'NO LIBERADO':
         return rangoNoLiberado;
+      case 'INVESTIGACIÓN':
+        return rangoInvestigacion;
       default:
         return rangoDesconocido;
     }

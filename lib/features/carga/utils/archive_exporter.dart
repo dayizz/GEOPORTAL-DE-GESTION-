@@ -88,7 +88,8 @@ Future<ArchiveExportPayload> _buildGeoJsonPayload(
         ..['identificacion'] = current.identificacion
         ..['levantamiento'] = current.levantamiento
         ..['negociacion'] = current.negociacion
-        ..['tipo_liberacion'] = current.tipoLiberacion;
+        ..['tipo_liberacion'] = current.tipoLiberacion
+        ..['responsable_juridico'] = current.responsableJuridico;
     }
 
     final geometry = sourceMap['geometry'] ?? current?.geometry;
@@ -160,6 +161,7 @@ Future<ArchiveExportPayload> _buildXlsxPayload(
     'LEVANTAMIENTO',
     'NEGOCIACION',
     'OBSERVACIONES',
+    'RESPONSABLE JURIDICO',
   ];
 
   for (var col = 0; col < headers.length; col++) {
@@ -192,6 +194,7 @@ Future<ArchiveExportPayload> _buildXlsxPayload(
       predio.levantamiento ? 'SI' : 'NO',
       predio.negociacion ? 'SI' : 'NO',
       predio.situacionSocial ?? '',
+      predio.responsableJuridico ?? '',
     ];
 
     for (var col = 0; col < rowData.length; col++) {

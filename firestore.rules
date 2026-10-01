@@ -51,7 +51,8 @@ service cloud.firestore {
 
     function canWritePredio(data) {
       return isAdmin()
-        || (canWriteOperationalData() && hasAssignedProject(data.proyecto));
+        || ((canWriteOperationalData() || isOperativo())
+            && hasAssignedProject(data.proyecto));
     }
 
     function isGestor() {
@@ -77,7 +78,13 @@ service cloud.firestore {
     // Predios de gestion
     match /predios/{predioId} {
       allow read: if isSignedIn();
-      allow create, update: if isSignedIn()
+      allow create: if isSignedIn()
+        && request.resource.data.keys().hasAll(['clave_catastral', 'tramo', 'tipo_propiedad'])
+        && isString(request.resource.data.clave_catastral, 1, 120)
+        && isString(request.resource.data.tramo, 0, 20)
+        && isString(request.resource.data.tipo_propiedad, 1, 60);
+      allow update: if canWritePredio(resource.data)
+        && canWritePredio(request.resource.data)
         && request.resource.data.keys().hasAll(['clave_catastral', 'tramo', 'tipo_propiedad'])
         && isString(request.resource.data.clave_catastral, 1, 120)
         && isString(request.resource.data.tramo, 0, 20)

@@ -82,6 +82,11 @@ bool canManageOperationalData(String? perfil) =>
     isPerfilGestor(perfil) ||
     isPerfilSupervisorInstitucional(perfil);
 
+/// Operativo auxiliar puede editar predios, manteniendo restringidas las
+/// demás funciones de administración operativa.
+bool canEditPredios(String? perfil) =>
+    canManageOperationalData(perfil) || isPerfilOperativoAuxiliar(perfil);
+
 bool canAccessCarga(String? perfil) =>
     canManageOperationalData(perfil) ||
     normalizePerfil(perfil) == perfilOperativoAuxiliar;
@@ -112,6 +117,10 @@ bool canAccessRouteByPerfil(String route, String? perfil) {
 
   if (route == '/composiciones' || route.startsWith('/composiciones/')) {
     return canAccessComposiciones(perfil);
+  }
+
+  if (route.endsWith('/editar') && route.startsWith('/predios/')) {
+    return canEditPredios(perfil);
   }
 
   if (route.endsWith('/nuevo') || route.endsWith('/editar')) {

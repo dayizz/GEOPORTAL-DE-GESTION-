@@ -26,6 +26,7 @@ class PredioFormScreen extends ConsumerStatefulWidget {
 }
 
 class _PredioFormScreenState extends ConsumerState<PredioFormScreen> {
+  static const List<String> _responsableJuridicoOpciones = ['SEDATU', 'SICT'];
   static const List<String> _tipoLiberacionOpciones = [
     'COP',
     'DOT',
@@ -33,6 +34,7 @@ class _PredioFormScreenState extends ConsumerState<PredioFormScreen> {
     'EXPROPIACION',
     'SIN TIPO',
     'ANUENCIA POR OFICIO',
+    'MINUTA',
   ];
   static const List<String> _estructuraOpciones = [
     'Estacion',
@@ -65,6 +67,7 @@ class _PredioFormScreenState extends ConsumerState<PredioFormScreen> {
   String _tramoNumero = '1';
   String _tipoPropiedad = 'PRIVADA';
   String? _estructura;
+  String? _responsableJuridico;
   String? _proyecto;
   bool _cop = false;
   bool _poligonoInsertado = false;
@@ -143,6 +146,7 @@ class _PredioFormScreenState extends ConsumerState<PredioFormScreen> {
         _estadoCtrl.text = predio.estado ?? '';
         _municipioCtrl.text = predio.municipio ?? '';
         _tipoLiberacionCtrl.text = predio.tipoLiberacion ?? '';
+        _responsableJuridico = predio.responsableJuridico;
         _kmInicioCtrl.text = predio.kmInicio?.toString() ?? '';
         _kmFinCtrl.text = predio.kmFin?.toString() ?? '';
         _kmEfectivosCtrl.text = predio.kmEfectivos?.toString() ?? '';
@@ -489,8 +493,9 @@ class _PredioFormScreenState extends ConsumerState<PredioFormScreen> {
           bdt: _bdt,
           clearBdt: _bdt == null,
           situacionSocial: _situacionSocialCtrl.text.isEmpty ? null : _situacionSocialCtrl.text.trim(),
-            tipoLiberacion:
+          tipoLiberacion:
               _tipoLiberacionCtrl.text.isEmpty ? null : _tipoLiberacionCtrl.text.trim(),
+          responsableJuridico: _responsableJuridico,
           poligonoInsertado: _poligonoInsertado,
           identificacion: _identificacion,
           levantamiento: _levantamiento,
@@ -533,8 +538,9 @@ class _PredioFormScreenState extends ConsumerState<PredioFormScreen> {
           bdt: _bdt,
           clearBdt: _bdt == null,
           situacionSocial: _situacionSocialCtrl.text.isEmpty ? null : _situacionSocialCtrl.text.trim(),
-            tipoLiberacion:
+          tipoLiberacion:
               _tipoLiberacionCtrl.text.isEmpty ? null : _tipoLiberacionCtrl.text.trim(),
+          responsableJuridico: _responsableJuridico,
           poligonoInsertado: _poligonoInsertado,
           identificacion: _identificacion,
           levantamiento: _levantamiento,
@@ -569,8 +575,9 @@ class _PredioFormScreenState extends ConsumerState<PredioFormScreen> {
           'plano_pdf': _planoPdf,
           'bdt': _bdt,
           'situacion_social': _situacionSocialCtrl.text.isEmpty ? null : _situacionSocialCtrl.text.trim(),
-            'tipo_liberacion':
+          'tipo_liberacion':
               _tipoLiberacionCtrl.text.isEmpty ? null : _tipoLiberacionCtrl.text.trim(),
+          'responsable_juridico': _responsableJuridico,
           'poligono_insertado': _poligonoInsertado,
           'identificacion': _identificacion,
           'levantamiento': _levantamiento,
@@ -654,163 +661,293 @@ class _PredioFormScreenState extends ConsumerState<PredioFormScreen> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              _buildSectionTitle('Identificacion LDDV', Icons.description_outlined),
+              _buildSectionTitle('Identificación', Icons.description_outlined),
               const SizedBox(height: 12),
-              TextFormField(
-                controller: _claveCtrl,
-                decoration: InputDecoration(label: _requiredLabel('Clave Catastral (ID SEDATU)'), prefixIcon: const Icon(Icons.tag)),
-                validator: (v) => (v == null || v.isEmpty) ? 'Campo requerido' : null,
-                textCapitalization: TextCapitalization.characters,
-              ),
-              const SizedBox(height: 14),
-              Builder(builder: (context) {
-                final proyectos = ref.watch(proyectosCodigosProvider);
-                final value = proyectos.contains(_proyecto) ? _proyecto : null;
-                return DropdownButtonFormField<String>(
-                  value: value,
+              _buildFormRow([
+                Builder(builder: (context) {
+                  final proyectos = ref.watch(proyectosCodigosProvider);
+                  final value = proyectos.contains(_proyecto) ? _proyecto : null;
+                  return DropdownButtonFormField<String>(
+                    value: value,
+                    decoration: InputDecoration(
+                      label: _requiredLabel('Proyecto'),
+                      prefixIcon: const Icon(Icons.folder_outlined),
+                      hintText: 'Selecciona',
+                    ),
+                    items: proyectos
+                        .map((proyecto) => DropdownMenuItem(value: proyecto, child: Text(proyecto)))
+                        .toList(),
+                    validator: (value) => value == null || value.isEmpty
+                        ? 'Campo requerido'
+                        : null,
+                    onChanged: (value) => setState(() => _proyecto = value),
+                  );
+                }),
+                TextFormField(
+                  controller: _claveCtrl,
                   decoration: InputDecoration(
-                    label: _requiredLabel('Proyecto'),
-                    prefixIcon: const Icon(Icons.folder_outlined),
+                    label: _requiredLabel('Clave Catastral (ID SEDATU)'),
+                    prefixIcon: const Icon(Icons.tag),
+                  ),
+                  validator: (value) => value == null || value.isEmpty
+                      ? 'Campo requerido'
+                      : null,
+                  textCapitalization: TextCapitalization.characters,
+                ),
+                DropdownButtonFormField<String>(
+                  value: _tramoTipo,
+                  decoration: const InputDecoration(
+                    labelText: 'T/F/S',
+                    prefixIcon: Icon(Icons.route),
+                  ),
+                  items: const ['TRAMO', 'FRENTE', 'SEGMENTO']
+                      .map((tipo) => DropdownMenuItem(value: tipo, child: Text(tipo)))
+                      .toList(),
+                  onChanged: (value) => setState(() {
+                    _tramoTipo = value ?? _tramoTipo;
+                    _tramo = _buildTramoValue();
+                  }),
+                ),
+                TextFormField(
+                  initialValue: _tramoNumero,
+                  keyboardType: TextInputType.number,
+                  decoration: const InputDecoration(labelText: 'Número'),
+                  onChanged: (value) => setState(() {
+                    final limpio = value.trim();
+                    _tramoNumero = limpio.isEmpty ? '1' : limpio;
+                    _tramo = _buildTramoValue();
+                  }),
+                ),
+              ], minFieldWidth: 165),
+              const SizedBox(height: 12),
+              _buildFormRow([
+                TextFormField(
+                  controller: _propietarioNombreCtrl,
+                  decoration: const InputDecoration(
+                    labelText: 'Propietario',
+                    prefixIcon: Icon(Icons.person_outline),
+                  ),
+                ),
+                DropdownButtonFormField<String>(
+                  value: _tipoPropiedad,
+                  decoration: const InputDecoration(labelText: 'Tipo de propiedad'),
+                  items: const [
+                    'SOCIAL', 'DOMINIO PLENO', 'PRIVADA', 'DESCONOCIDO',
+                    'FEDERAL', 'GUBERNAMENTAL', 'ESTATAL', 'MUNICIPAL',
+                  ].map((tipo) => DropdownMenuItem(value: tipo, child: Text(tipo))).toList(),
+                  onChanged: (value) => setState(() => _tipoPropiedad = value ?? _tipoPropiedad),
+                ),
+                DropdownButtonFormField<String>(
+                  value: _estructura,
+                  decoration: InputDecoration(
+                    label: _requiredLabel('Estructura'),
                     hintText: 'Selecciona',
                   ),
-                  items: proyectos
-                      .map((p) => DropdownMenuItem(value: p, child: Text(p)))
+                  items: _estructuraOpciones
+                      .map((tipo) => DropdownMenuItem(value: tipo, child: Text(tipo)))
                       .toList(),
-                  validator: (v) => (v == null || v.isEmpty) ? 'Campo requerido' : null,
-                  onChanged: (v) => setState(() => _proyecto = v),
-                );
-              }),
-              const SizedBox(height: 14),
-              Row(children: [
-                Expanded(
-                  child: DropdownButtonFormField<String>(
-                    value: _tramoTipo,
-                    decoration: const InputDecoration(labelText: 'T/F/S', prefixIcon: Icon(Icons.route)),
-                    items: const ['TRAMO', 'FRENTE', 'SEGMENTO']
-                        .map((t) => DropdownMenuItem(value: t, child: Text(t)))
-                        .toList(),
-                    onChanged: (v) => setState(() {
-                      _tramoTipo = v ?? _tramoTipo;
-                      _tramo = _buildTramoValue();
-                    }),
-                  ),
+                  onChanged: (value) => setState(() => _estructura = value),
                 ),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: TextFormField(
-                    initialValue: _tramoNumero,
-                    keyboardType: TextInputType.number,
-                    decoration: const InputDecoration(labelText: 'Numero'),
-                    onChanged: (v) => setState(() {
-                      final limpio = v.trim();
-                      _tramoNumero = limpio.isEmpty ? '1' : limpio;
-                      _tramo = _buildTramoValue();
-                    }),
-                  ),
-                ),
-              ]),
-              const SizedBox(height: 14),
-              DropdownButtonFormField<String>(
-                    value: _tipoPropiedad,
-                    decoration: const InputDecoration(labelText: 'Tipo Propiedad'),
-                    items: ['SOCIAL','DOMINIO PLENO','PRIVADA','DESCONOCIDO','FEDERAL','GUBERNAMENTAL','ESTATAL','MUNICIPAL'].map((t) => DropdownMenuItem(value: t, child: Text(t))).toList(),
-                    onChanged: (v) => setState(() => _tipoPropiedad = v ?? _tipoPropiedad),
-                  ),
-              const SizedBox(height: 14),
-              DropdownButtonFormField<String>(
-                value: _estructura,
-                decoration: InputDecoration(label: _requiredLabel('Estructura'), hintText: 'Selecciona'),
-                items: _estructuraOpciones
-                    .map((t) => DropdownMenuItem(value: t, child: Text(t)))
-                    .toList(),
-                onChanged: (v) => setState(() => _estructura = v),
-              ),
-              const SizedBox(height: 14),
-              TextFormField(
-                controller: _ejidoCtrl,
-                decoration: InputDecoration(label: _requiredLabel('Ejido'), prefixIcon: const Icon(Icons.agriculture_outlined)),
-              ),
-              const SizedBox(height: 14),
-              Row(children: [
-                Expanded(
-                  child: TextFormField(
-                    controller: _estadoCtrl,
-                    decoration: InputDecoration(
-                      label: _requiredLabel('Estado'),
-                      prefixIcon: const Icon(Icons.map_outlined),
-                    ),
-                  ),
-                ),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: TextFormField(
-                    controller: _municipioCtrl,
-                    decoration: InputDecoration(
-                      label: _requiredLabel('Municipio'),
-                      prefixIcon: const Icon(Icons.location_city_outlined),
-                    ),
-                  ),
-                ),
-              ]),
-              const SizedBox(height: 24),
-              _buildSectionTitle('Cadenamiento (km)', Icons.linear_scale),
+              ], minFieldWidth: 210),
               const SizedBox(height: 12),
-              Row(children: [
-                Expanded(child: TextFormField(controller: _kmInicioCtrl, keyboardType: const TextInputType.numberWithOptions(decimal: true), decoration: InputDecoration(label: _requiredLabel('km Inicio')))),
-                const SizedBox(width: 12),
-                Expanded(child: TextFormField(controller: _kmFinCtrl, keyboardType: const TextInputType.numberWithOptions(decimal: true), decoration: InputDecoration(label: _requiredLabel('km Fin')))),
-              ]),
-              const SizedBox(height: 14),
-              Row(children: [
-                Expanded(child: TextFormField(controller: _kmEfectivosCtrl, keyboardType: const TextInputType.numberWithOptions(decimal: true), decoration: InputDecoration(label: _requiredLabel('km Efectivos')))),
-              ]),
-              const SizedBox(height: 14),
-              TextFormField(
-                controller: _superficieCtrl,
-                keyboardType: const TextInputType.numberWithOptions(decimal: true),
-                decoration: InputDecoration(label: _requiredLabel('Superficie DDV (m2)'), prefixIcon: const Icon(Icons.square_foot)),
-              ),
+              _buildFormRow([
+                TextFormField(
+                  controller: _estadoCtrl,
+                  decoration: InputDecoration(
+                    label: _requiredLabel('Estado'),
+                    prefixIcon: const Icon(Icons.map_outlined),
+                  ),
+                ),
+                TextFormField(
+                  controller: _municipioCtrl,
+                  decoration: InputDecoration(
+                    label: _requiredLabel('Municipio'),
+                    prefixIcon: const Icon(Icons.location_city_outlined),
+                  ),
+                ),
+                TextFormField(
+                  controller: _ejidoCtrl,
+                  decoration: InputDecoration(
+                    label: _requiredLabel('Ejido'),
+                    prefixIcon: const Icon(Icons.agriculture_outlined),
+                  ),
+                ),
+              ], minFieldWidth: 210),
               const SizedBox(height: 24),
-              _buildSectionTitle('Propietario', Icons.person_outline),
+
+              _buildSectionTitle('Cadenamiento', Icons.linear_scale),
               const SizedBox(height: 12),
-              TextFormField(
-                controller: _propietarioNombreCtrl,
-                decoration: InputDecoration(label: _requiredLabel('Nombre del Propietario'), prefixIcon: const Icon(Icons.person)),
-              ),
+              _buildFormRow([
+                TextFormField(
+                  controller: _kmInicioCtrl,
+                  keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                  decoration: InputDecoration(label: _requiredLabel('KM inicio')),
+                ),
+                TextFormField(
+                  controller: _kmFinCtrl,
+                  keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                  decoration: InputDecoration(label: _requiredLabel('KM fin')),
+                ),
+                TextFormField(
+                  controller: _kmEfectivosCtrl,
+                  keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                  decoration: InputDecoration(label: _requiredLabel('KM efectivos')),
+                ),
+                TextFormField(
+                  controller: _superficieCtrl,
+                  keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                  decoration: InputDecoration(
+                    label: _requiredLabel('M²'),
+                    prefixIcon: const Icon(Icons.square_foot),
+                  ),
+                ),
+              ], minFieldWidth: 165),
               const SizedBox(height: 24),
-              _buildSectionTitle('Documentos', Icons.folder_outlined),
+
+              _buildSectionTitle('Avance', Icons.checklist_outlined),
               const SizedBox(height: 12),
-              _buildArchivoCard(
-                'COP/DOT PDF',
-                _resolvedPdfUrl(),
-                // La "Fecha de liberación" es independiente del link -ya no
-                // se autocompleta al vincular el PDF-: se llena aparte, más
-                // abajo, manualmente o desde un archivo importado.
-                (url) => setState(() => _pdfUrl = url),
-                () => setState(() => _pdfUrl = null),
-              ),
-              const SizedBox(height: 10),
-              _buildArchivoCard(
-                'DWG',
-                _poligonoDwg,
-                (url) => setState(() => _poligonoDwg = url),
-                () => setState(() => _poligonoDwg = null),
-              ),
-              const SizedBox(height: 10),
-              _buildArchivoCard(
-                'Plano PDF',
-                _planoPdf,
-                (url) => setState(() => _planoPdf = url),
-                () => setState(() => _planoPdf = null),
-              ),
-              const SizedBox(height: 10),
-              _buildArchivoCard(
-                'BDT',
-                _bdt,
-                (url) => setState(() => _bdt = url),
-                () => setState(() => _bdt = null),
-              ),
-              const SizedBox(height: 14),
+              _buildFormRow([
+                CheckboxListTile(
+                  title: const Text('Identificación'),
+                  value: _identificacion,
+                  onChanged: (value) => setState(() => _identificacion = value ?? false),
+                  dense: true,
+                  contentPadding: EdgeInsets.zero,
+                  controlAffinity: ListTileControlAffinity.leading,
+                ),
+                CheckboxListTile(
+                  title: const Text('Levantamiento'),
+                  value: _levantamiento,
+                  onChanged: (value) => setState(() => _levantamiento = value ?? false),
+                  dense: true,
+                  contentPadding: EdgeInsets.zero,
+                  controlAffinity: ListTileControlAffinity.leading,
+                ),
+                CheckboxListTile(
+                  title: const Text('Negociación'),
+                  value: _negociacion,
+                  onChanged: (value) => setState(() {
+                    _negociacion = value ?? false;
+                    _rangoEstatus = _negociacion ? 'Negociacion' : _rangoEstatus;
+                  }),
+                  dense: true,
+                  contentPadding: EdgeInsets.zero,
+                  controlAffinity: ListTileControlAffinity.leading,
+                ),
+              ], minFieldWidth: 170),
+              const SizedBox(height: 8),
+              _buildFormRow([
+                DropdownButtonFormField<String>(
+                  value: _rangoEstatus,
+                  decoration: const InputDecoration(
+                    labelText: 'Rango de estatus',
+                    prefixIcon: Icon(Icons.verified_outlined),
+                  ),
+                  items: Predio.rangoEstatusOpciones
+                      .map((rango) => DropdownMenuItem(value: rango, child: Text(rango)))
+                      .toList(),
+                  onChanged: (value) {
+                    if (value == null) return;
+                    setState(() {
+                      _rangoEstatus = value;
+                      _cop = Predio.estatusSimplificado(value) == 'Liberado';
+                      _negociacion = Predio.estatusSimplificado(value) == 'No liberado';
+                    });
+                  },
+                ),
+                InputDecorator(
+                  decoration: const InputDecoration(
+                    labelText: 'Estatus',
+                    prefixIcon: Icon(Icons.flag_outlined),
+                  ),
+                  child: Builder(builder: (context) {
+                    final estatus = Predio.estatusSimplificado(_rangoEstatus);
+                    final color = estatus == 'Liberado'
+                        ? AppColors.rangoLiberado
+                        : AppColors.rangoNoLiberado;
+                    return Align(
+                      alignment: Alignment.centerLeft,
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                        decoration: BoxDecoration(
+                          color: color.withValues(alpha: 0.15),
+                          borderRadius: BorderRadius.circular(4),
+                        ),
+                        child: Text(
+                          estatus,
+                          style: TextStyle(fontWeight: FontWeight.bold, color: color),
+                        ),
+                      ),
+                    );
+                  }),
+                ),
+                DropdownButtonFormField<String>(
+                  value: _responsableJuridicoOpciones.contains(_responsableJuridico?.toUpperCase())
+                      ? _responsableJuridico?.toUpperCase()
+                      : null,
+                  decoration: const InputDecoration(
+                    labelText: 'Responsable Jurídico',
+                    prefixIcon: Icon(Icons.account_balance_outlined),
+                  ),
+                  items: _responsableJuridicoOpciones
+                      .map((item) => DropdownMenuItem(value: item, child: Text(item)))
+                      .toList(),
+                  onChanged: (value) => setState(() => _responsableJuridico = value),
+                ),
+              ], minFieldWidth: 220),
+              const SizedBox(height: 12),
+              _buildFormRow([
+                DropdownButtonFormField<String>(
+                  value: _tipoLiberacionOpciones.contains(_tipoLiberacionCtrl.text.trim().toUpperCase())
+                      ? _tipoLiberacionCtrl.text.trim().toUpperCase()
+                      : null,
+                  decoration: const InputDecoration(
+                    labelText: 'Tipo de liberación',
+                    prefixIcon: Icon(Icons.assignment_turned_in_outlined),
+                  ),
+                  items: _tipoLiberacionOpciones
+                      .map((tipo) => DropdownMenuItem(value: tipo, child: Text(tipo)))
+                      .toList(),
+                  onChanged: (value) => setState(() => _tipoLiberacionCtrl.text = value ?? ''),
+                ),
+                TextFormField(
+                  readOnly: true,
+                  onTap: _pickCopFecha,
+                  decoration: InputDecoration(
+                    labelText: 'Fecha de liberación',
+                    prefixIcon: const Icon(Icons.calendar_today_outlined),
+                    hintText: _copFecha != null
+                        ? DateFormat('dd/MM/yyyy').format(_copFecha!)
+                        : 'Selecciona una fecha',
+                    suffixIcon: _copFecha == null
+                        ? null
+                        : IconButton(
+                            tooltip: 'Limpiar fecha',
+                            icon: const Icon(Icons.clear),
+                            onPressed: () => setState(() => _copFecha = null),
+                          ),
+                  ),
+                ),
+                TextFormField(
+                  readOnly: true,
+                  onTap: _pickFechaLimitePago,
+                  decoration: InputDecoration(
+                    labelText: 'Fecha de pago',
+                    prefixIcon: const Icon(Icons.calendar_today_outlined),
+                    hintText: _fechaLimitePago != null
+                        ? DateFormat('dd/MM/yyyy').format(_fechaLimitePago!)
+                        : 'Selecciona una fecha',
+                    suffixIcon: _fechaLimitePago == null
+                        ? null
+                        : IconButton(
+                            tooltip: 'Limpiar fecha',
+                            icon: const Icon(Icons.clear),
+                            onPressed: () => setState(() => _fechaLimitePago = null),
+                          ),
+                  ),
+                ),
+              ], minFieldWidth: 220),
+              const SizedBox(height: 12),
               TextFormField(
                 controller: _situacionSocialCtrl,
                 decoration: const InputDecoration(
@@ -821,116 +958,39 @@ class _PredioFormScreenState extends ConsumerState<PredioFormScreen> {
                 maxLines: 4,
                 textInputAction: TextInputAction.newline,
               ),
-              const SizedBox(height: 14),
-              DropdownButtonFormField<String>(
-                value: _tipoLiberacionOpciones.contains(_tipoLiberacionCtrl.text.trim().toUpperCase())
-                    ? _tipoLiberacionCtrl.text.trim().toUpperCase()
-                    : null,
-                decoration: const InputDecoration(
-                  labelText: 'Tipo de liberacion',
-                  prefixIcon: Icon(Icons.assignment_turned_in_outlined),
-                ),
-                items: _tipoLiberacionOpciones
-                    .map((tipo) => DropdownMenuItem(value: tipo, child: Text(tipo)))
-                    .toList(),
-                onChanged: (value) => setState(() {
-                  _tipoLiberacionCtrl.text = value ?? '';
-                }),
-              ),
-              const SizedBox(height: 14),
-              TextFormField(
-                readOnly: true,
-                onTap: _pickCopFecha,
-                decoration: InputDecoration(
-                  labelText: 'Fecha de liberación',
-                  prefixIcon: const Icon(Icons.calendar_today_outlined),
-                  hintText: _copFecha != null
-                      ? DateFormat('dd/MM/yyyy').format(_copFecha!)
-                      : 'Selecciona una fecha',
-                  suffixIcon: _copFecha == null
-                      ? null
-                      : IconButton(
-                          tooltip: 'Limpiar fecha',
-                          icon: const Icon(Icons.clear),
-                          onPressed: () => setState(() => _copFecha = null),
-                        ),
-                ),
-              ),
-              const SizedBox(height: 14),
-              TextFormField(
-                readOnly: true,
-                onTap: _pickFechaLimitePago,
-                decoration: InputDecoration(
-                  labelText: 'Fecha límite de pago',
-                  prefixIcon: const Icon(Icons.calendar_today_outlined),
-                  hintText: _fechaLimitePago != null
-                      ? DateFormat('dd/MM/yyyy').format(_fechaLimitePago!)
-                      : 'Selecciona una fecha',
-                  suffixIcon: _fechaLimitePago == null
-                      ? null
-                      : IconButton(
-                          tooltip: 'Limpiar fecha',
-                          icon: const Icon(Icons.clear),
-                          onPressed: () => setState(() => _fechaLimitePago = null),
-                        ),
-                ),
-              ),
               const SizedBox(height: 24),
-              _buildSectionTitle('Estatus del Predio', Icons.flag_outlined),
-              const SizedBox(height: 8),
-              DropdownButtonFormField<String>(
-                value: _rangoEstatus,
-                decoration: const InputDecoration(
-                  labelText: 'Rango de estatus',
-                  prefixIcon: Icon(Icons.verified_outlined),
+
+              _buildSectionTitle('Documentos', Icons.folder_outlined),
+              const SizedBox(height: 12),
+              _buildFormRow([
+                _buildArchivoCard(
+                  'COP/DOT PDF',
+                  _resolvedPdfUrl(),
+                  (url) => setState(() => _pdfUrl = url),
+                  () => setState(() => _pdfUrl = null),
                 ),
-                items: Predio.rangoEstatusOpciones
-                    .map((r) => DropdownMenuItem(value: r, child: Text(r)))
-                    .toList(),
-                onChanged: (v) {
-                  if (v == null) return;
-                  setState(() {
-                    _rangoEstatus = v;
-                    _cop = Predio.estatusSimplificado(v) == 'Liberado';
-                    _negociacion = Predio.estatusSimplificado(v) == 'No liberado';
-                  });
-                },
-              ),
-              const SizedBox(height: 8),
-              Builder(builder: (context) {
-                final estatus = Predio.estatusSimplificado(_rangoEstatus);
-                final color = estatus == 'Liberado' ? AppColors.rangoLiberado : AppColors.rangoNoLiberado;
-                return Row(
-                  children: [
-                    const Text('Estatus: ', style: TextStyle(fontWeight: FontWeight.w600)),
-                    Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-                      decoration: BoxDecoration(
-                        color: color.withValues(alpha: 0.15),
-                        borderRadius: BorderRadius.circular(4),
-                      ),
-                      child: Text(
-                        estatus,
-                        style: TextStyle(fontWeight: FontWeight.bold, color: color),
-                      ),
-                    ),
-                  ],
-                );
-              }),
-              const SizedBox(height: 24),
-              _buildSectionTitle('Avance DDV', Icons.checklist_outlined),
-              const SizedBox(height: 8),
-              CheckboxListTile(title: const Text('Identificacion'), value: _identificacion, onChanged: (v) => setState(() => _identificacion = v ?? false), dense: true),
-              CheckboxListTile(title: const Text('Levantamiento'), value: _levantamiento, onChanged: (v) => setState(() => _levantamiento = v ?? false), dense: true),
-              CheckboxListTile(
-                title: const Text('Negociacion'),
-                value: _negociacion,
-                onChanged: (v) => setState(() {
-                  _negociacion = v ?? false;
-                  _rangoEstatus = _negociacion ? 'Negociacion' : _rangoEstatus;
-                }),
-                dense: true,
-              ),
+                _buildArchivoCard(
+                  'Plano PDF',
+                  _planoPdf,
+                  (url) => setState(() => _planoPdf = url),
+                  () => setState(() => _planoPdf = null),
+                ),
+              ], minFieldWidth: 260),
+              const SizedBox(height: 12),
+              _buildFormRow([
+                _buildArchivoCard(
+                  'DWG',
+                  _poligonoDwg,
+                  (url) => setState(() => _poligonoDwg = url),
+                  () => setState(() => _poligonoDwg = null),
+                ),
+                _buildArchivoCard(
+                  'BDT',
+                  _bdt,
+                  (url) => setState(() => _bdt = url),
+                  () => setState(() => _bdt = null),
+                ),
+              ], minFieldWidth: 260),
               const SizedBox(height: 32),
               SizedBox(
                 width: double.infinity,
@@ -949,6 +1009,28 @@ class _PredioFormScreenState extends ConsumerState<PredioFormScreen> {
       ),
     );
   }
+
+  Widget _buildFormRow(
+    List<Widget> fields, {
+    double minFieldWidth = 210,
+    double spacing = 12,
+  }) => LayoutBuilder(
+    builder: (context, constraints) {
+      final columns = ((constraints.maxWidth + spacing) /
+              (minFieldWidth + spacing))
+          .floor()
+          .clamp(1, fields.length);
+      final fieldWidth =
+          (constraints.maxWidth - spacing * (columns - 1)) / columns;
+      return Wrap(
+        spacing: spacing,
+        runSpacing: spacing,
+        children: fields
+            .map((field) => SizedBox(width: fieldWidth, child: field))
+            .toList(growable: false),
+      );
+    },
+  );
 
   Widget _buildSectionTitle(String title, IconData icon) {
     return Row(

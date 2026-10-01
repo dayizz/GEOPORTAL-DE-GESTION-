@@ -597,6 +597,17 @@ class SincronizacionService {
         'observacion', 'OBSERVACION',
         'obs', 'OBS',
       ])?.trim(),
+      'responsable_juridico': norm.normalizeResponsableJuridico(
+        _pickFlexible(props, [
+          'responsable_juridico', 'RESPONSABLE_JURIDICO',
+          'responsable jurídico', 'RESPONSABLE JURÍDICO',
+          'Responsable Jurídico', 'Responsable jurídico',
+          'responsable juridico', 'RESPONSABLE JURIDICO',
+          'responsable_legal', 'RESPONSABLE_LEGAL',
+          'area_juridica', 'AREA_JURIDICA',
+          'area juridica', 'AREA JURIDICA',
+        ]),
+      ),
       'direccion': norm.normalizeTitleCase(_pick(props, ['direccion', 'DIRECCION', 'domicilio', 'DOMICILIO', 'calle', 'CALLE'])),
       'colonia': norm.normalizeTitleCase(_pick(props, ['colonia', 'COLONIA', 'barrio', 'BARRIO'])),
       'municipio': norm.normalizeTitleCase(estadoMunicipio['municipio']),

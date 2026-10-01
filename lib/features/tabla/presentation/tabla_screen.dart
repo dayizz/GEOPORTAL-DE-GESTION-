@@ -57,7 +57,7 @@ class _TablaScreenState extends ConsumerState<TablaScreen> {
   bool _autocompletandoLiberados = false;
 
   // Paginación
-  static const int _rowsPerPage = 50;
+  static const int _rowsPerPage = 100;
   int _currentPage = 0;
 
   void _goToPage(int page, int totalRows) {
@@ -160,7 +160,8 @@ class _TablaScreenState extends ConsumerState<TablaScreen> {
         final q = _busqueda.toLowerCase();
         return p.claveCatastral.toLowerCase().contains(q) ||
             (p.propietarioNombre?.toLowerCase().contains(q) ?? false) ||
-            (p.ejido?.toLowerCase().contains(q) ?? false);
+            (p.ejido?.toLowerCase().contains(q) ?? false) ||
+            (p.responsableJuridico?.toLowerCase().contains(q) ?? false);
       }
       return true;
     }).toList();
@@ -546,8 +547,9 @@ class _TablaScreenState extends ConsumerState<TablaScreen> {
         'ID', 'CLAVE', 'PROYECTO', 'T/F/S', 'TIPO', 'ESTRUCTURA', 'ESTADO', 'MUNICIPIO',
         'EJIDO', 'PROPIETARIO', 'KM INICIO', 'KM FIN', 'KM EFECTIVOS',
         'SUPERFICIE M2', 'COP', 'FECHA DE LIBERACION', 'COP/DOT PDF', 'DWG', 'PLANO PDF', 'BDT',
-        'RANGO ESTATUS', 'ESTATUS',
-        'IDENTIFICACION', 'LEVANTAMIENTO', 'NEGOCIACION', 'OBSERVACIONES', 'FECHA LIMITE DE PAGO'
+        'RANGO DE ESTATUS', 'ESTATUS',
+        'IDENTIFICACION', 'LEVANTAMIENTO', 'NEGOCIACION', 'OBSERVACIONES', 'FECHA LIMITE DE PAGO',
+        'RESPONSABLE JURIDICO',
       ];
       
       for (var i = 0; i < headers.length; i++) {
@@ -587,6 +589,7 @@ class _TablaScreenState extends ConsumerState<TablaScreen> {
           p.fechaLimitePago != null
               ? '${p.fechaLimitePago!.day}/${p.fechaLimitePago!.month}/${p.fechaLimitePago!.year}'
               : '',
+          p.responsableJuridico ?? '',
         ];
         
         for (var col = 0; col < rowData.length; col++) {
@@ -904,37 +907,40 @@ class _TablaScreenState extends ConsumerState<TablaScreen> {
        48, // ID (numeracion por proyecto)
        48, // ACCIONES (ver en mapa / editar / eliminar)
       180, // CLAVE
-       90, // ESTRUCTURA
+      150, // PROPIETARIO
        50, // T/F/S
-       90, // TIPO
+       90, // TIPO DE PROPIEDAD
+       90, // ESTRUCTURA
        95, // ESTADO
       125, // MUNICIPIO
       120, // EJIDO
-      150, // PROPIETARIOS
        72, // KM INICIO
        72, // KM FIN
-       72, // KM EF
+       72, // KM EFECTIVOS
        80, // M²
+       54, // IDENTIFICACION
+       54, // LEVANTAMIENTO
+       54, // NEGOCIACION
+      110, // RANGO ESTATUS
+       90, // ESTATUS
       120, // TIPO LIBERACION
-       46, // COP
-      100, // FECHA DE LIBERACION
+       100, // FECHA DE LIBERACION
+      135, // RESPONSABLE JURIDICO
+      100, // FECHA DE PAGO
+       46, // COP/DOT
        46, // DWG
        46, // PLANO PDF
        46, // BDT
-      110, // RANGO ESTATUS
-       90, // ESTATUS
-       54, // IDENT.
-       54, // LEVANT.
-       54, // NEGOC.
       150, // OBSERVACIONES
-      100, // FECHA LIMITE DE PAGO
     ];
 
     const headers = <String>[
-      'ID', '', 'CLAVE', 'ESTRUCTURA', 'T/F/S', 'TIPO', 'ESTADO', 'MUNICIPIO', 'EJIDO', 'PROPIETARIOS',
-      'KM INICIO', 'KM FIN', 'KM EF', 'M²', 'TIPO\nLIBERACION',
-      'COP/DOT', 'FECHA DE\nLIBERACION', 'DWG', 'PLANO\nPDF', 'BDT', 'RANGO\nESTATUS', 'ESTATUS',
-      'IDENT.', 'LEVANT.', 'NEGOC.', 'OBSERVACIONES', 'FECHA LIMITE\nDE PAGO',
+      'ID', 'ACCIONES', 'CLAVE', 'PROPIETARIO', 'T/F/S', 'TIPO DE\nPROPIEDAD',
+      'ESTRUCTURA', 'ESTADO', 'MUNICIPIO', 'EJIDO', 'KM INICIO', 'KM FIN',
+      'KM EFECTIVOS', 'M²', 'IDENTIFICACION', 'LEVANTAMIENTO', 'NEGOCIACION',
+      'RANGO DE\nESTATUS', 'ESTATUS', 'TIPO DE\nLIBERACION',
+      'FECHA DE\nLIBERACION', 'RESPONSABLE\nJURIDICO', 'FECHA DE PAGO',
+      'COP/DOT', 'DWG', 'PLANO', 'BDT', 'OBSERVACIONES',
     ];
 
     return LayoutBuilder(
@@ -1670,20 +1676,20 @@ class _TablaScreenState extends ConsumerState<TablaScreen> {
               style: const TextStyle(fontSize: 11, fontFamily: 'monospace'),
               color: tipoColor.withValues(alpha: 0.08),
               requerido: true),
-            // ESTRUCTURA
-            _dataCell(p.estructura ?? '-', widths[3], requerido: true),
+          // PROPIETARIO
+          _dataCell(p.propietarioNombre ?? '-', widths[3], requerido: true),
           // T/F/S
-            _tramoBadgeCell(p.tramo, widths[4]),
-          // TIPO
-            _tipoBadgeCell(p.tipoPropiedad, tipoColor, widths[5]),
+          _tramoBadgeCell(p.tramo, widths[4]),
+          // TIPO DE PROPIEDAD
+          _tipoBadgeCell(p.tipoPropiedad, tipoColor, widths[5]),
+          // ESTRUCTURA
+          _dataCell(p.estructura ?? '-', widths[6], requerido: true),
           // ESTADO
-          _dataCell((p.estado == null || p.estado!.isEmpty) ? '-' : p.estado!, widths[6], requerido: true),
+          _dataCell((p.estado == null || p.estado!.isEmpty) ? '-' : p.estado!, widths[7], requerido: true),
           // MUNICIPIO
-          _dataCell((p.municipio == null || p.municipio!.isEmpty) ? '-' : p.municipio!, widths[7], requerido: true),
+          _dataCell((p.municipio == null || p.municipio!.isEmpty) ? '-' : p.municipio!, widths[8], requerido: true),
           // EJIDO
-          _dataCell(p.ejido ?? '-', widths[8], requerido: true),
-          // PROPIETARIOS
-          _dataCell(p.propietarioNombre ?? '-', widths[9], requerido: true),
+          _dataCell(p.ejido ?? '-', widths[9], requerido: true),
           // KM INICIO
           _kmCell(p.kmInicio, widths[10], requerido: true),
           // KM FIN
@@ -1692,25 +1698,9 @@ class _TablaScreenState extends ConsumerState<TablaScreen> {
           _numCell(p.kmEfectivos, widths[12], decimals: 4, requerido: true),
           // M²
           _numCell(p.superficie, widths[13], decimals: 2, requerido: true),
-          // TIPO LIBERACION
-          _dataCell(p.tipoLiberacion ?? '-', widths[14]),
-          // COP/DOT PDF (icono de estado)
-          _archivoLinkCell(p, widths[15], campo: 'copdot'),
-          // FECHA DE LIBERACION (editable: calendario)
-          _fechaLiberacionCell(p, widths[16]),
-          // DWG
-          _archivoLinkCell(p, widths[17], campo: 'dwg'),
-          // PLANO PDF
-          _archivoLinkCell(p, widths[18], campo: 'planoPdf'),
-          // BDT
-          _archivoLinkCell(p, widths[19], campo: 'bdt'),
-          // RANGO ESTATUS
-          _rangoEstatusCell(p, widths[20]),
-          // ESTATUS
-          _estatusCell(p, widths[21]),
           // IDENTIFICACION (tappable)
           _tappableBoolCell(
-            p.identificacion, widths[22],
+            p.identificacion, widths[14],
             onTap: () => _savePredio(
               p,
               p.copyWith(
@@ -1721,7 +1711,7 @@ class _TablaScreenState extends ConsumerState<TablaScreen> {
           ),
           // LEVANTAMIENTO (tappable)
           _tappableBoolCell(
-            p.levantamiento, widths[23],
+            p.levantamiento, widths[15],
             onTap: () => _savePredio(
               p,
               p.copyWith(
@@ -1732,7 +1722,7 @@ class _TablaScreenState extends ConsumerState<TablaScreen> {
           ),
           // NEGOCIACION (tappable)
           _tappableBoolCell(
-            p.negociacion, widths[24],
+            p.negociacion, widths[16],
             onTap: () => _savePredio(
               p,
               p.copyWith(
@@ -1741,9 +1731,25 @@ class _TablaScreenState extends ConsumerState<TablaScreen> {
               ),
             ),
           ),
-          // OBSERVACIONES (antes situacion social)
-          _dataCell(p.situacionSocial ?? '-', widths[25]),
-          _fechaLimitePagoCell(p, widths[26]),
+          // RANGO DE ESTATUS
+          _rangoEstatusCell(p, widths[17]),
+          // ESTATUS
+          _estatusCell(p, widths[18]),
+          // TIPO DE LIBERACION
+          _dataCell(p.tipoLiberacion ?? '-', widths[19]),
+          // FECHA DE LIBERACION
+          _fechaLiberacionCell(p, widths[20]),
+          // RESPONSABLE JURIDICO
+          _dataCell(p.responsableJuridico ?? '-', widths[21]),
+          // FECHA DE PAGO
+          _fechaLimitePagoCell(p, widths[22]),
+          // DOCUMENTOS
+          _archivoLinkCell(p, widths[23], campo: 'copdot'),
+          _archivoLinkCell(p, widths[24], campo: 'dwg'),
+          _archivoLinkCell(p, widths[25], campo: 'planoPdf'),
+          _archivoLinkCell(p, widths[26], campo: 'bdt'),
+          // OBSERVACIONES
+          _dataCell(p.situacionSocial ?? '-', widths[27]),
         ],
       ),
     );

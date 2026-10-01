@@ -5,8 +5,8 @@ import 'package:flutter/material.dart';
 import '../../utils/color_hex.dart';
 
 /// Rueda de matiz/saturación (ángulo = matiz, distancia al centro =
-/// saturación) + control de brillo aparte, para elegir cualquier tono en
-/// vez de limitarse a la paleta fija de [ColorSwatchPicker]. No depende de
+/// saturación) + control de brillo aparte, para elegir cualquier tono al
+/// tocar el recuadro de color en `ColorSwatchPicker`. No depende de
 /// ningún paquete de color (no hay ninguno instalado en el proyecto):
 /// la rueda se dibuja con un `SweepGradient` (matiz) + un `RadialGradient`
 /// blanco->transparente encima (saturación), el mismo truco declarativo
@@ -97,48 +97,6 @@ Future<String?> showColorWheelDialog(BuildContext context, {String? initialHex})
       );
     },
   );
-}
-
-/// Botón compacto (para insertar junto a la paleta de [ColorSwatchPicker])
-/// que abre [showColorWheelDialog] y reporta el resultado.
-class BotonRuedaColor extends StatelessWidget {
-  const BotonRuedaColor({super.key, required this.colorHex, required this.onChanged});
-
-  final String? colorHex;
-  final ValueChanged<String> onChanged;
-
-  @override
-  Widget build(BuildContext context) {
-    return Tooltip(
-      message: 'Más tonos',
-      child: GestureDetector(
-        onTap: () async {
-          final resultado = await showColorWheelDialog(context, initialHex: colorHex);
-          if (resultado != null) onChanged(resultado);
-        },
-        child: Container(
-          width: 22,
-          height: 22,
-          decoration: const BoxDecoration(
-            shape: BoxShape.circle,
-            gradient: SweepGradient(
-              colors: [
-                Color(0xFFFF0000),
-                Color(0xFFFFFF00),
-                Color(0xFF00FF00),
-                Color(0xFF00FFFF),
-                Color(0xFF0000FF),
-                Color(0xFFFF00FF),
-                Color(0xFFFF0000),
-              ],
-            ),
-            border: Border.fromBorderSide(BorderSide(color: Colors.black26)),
-          ),
-          child: const Icon(Icons.add, size: 14, color: Colors.white),
-        ),
-      ),
-    );
-  }
 }
 
 class _RuedaColor extends StatelessWidget {
