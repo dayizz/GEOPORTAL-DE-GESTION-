@@ -2032,6 +2032,8 @@ class _CargaArchivoScreenState extends ConsumerState<CargaArchivoScreen> {
 
       final normalizedProps = <String, dynamic>{
         ...props,
+        '__import_kind': 'pks',
+        '__pks': true,
         if (label != null) 'pks_label': label,
       };
 
@@ -2039,6 +2041,8 @@ class _CargaArchivoScreenState extends ConsumerState<CargaArchivoScreen> {
         <String, dynamic>{
           'type': 'Feature',
           'geometry': geometry,
+          '__import_kind': 'pks',
+          '__pks': true,
           'properties': normalizedProps,
         },
       );

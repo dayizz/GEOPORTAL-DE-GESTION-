@@ -218,6 +218,13 @@ final pksPointFeaturesProvider = StateProvider<List<Map<String, dynamic>>>(
 	(ref) => const [],
 );
 
+/// UID cuya última sesión ya restauró las capas persistidas de PKS y
+/// envolventes. Permite reintentar con otra cuenta sin recargar en cada
+/// navegación al mapa.
+final mapSavedLayersRestoredUidProvider = StateProvider<String?>(
+	(ref) => null,
+);
+
 /// ID del predio que debe ser enfocado en el mapa (desde Gestión o Propietarios).
 /// El mapa limpia este valor después de hacer el fly-to.
 final focusPredioIdProvider = StateProvider<String?>((ref) => null);

@@ -26,6 +26,8 @@ import '../../estructura/providers/proyectos_provider.dart' show proyectosCodigo
 import '../../propietarios/data/propietarios_repository.dart';
 import '../../propietarios/providers/propietarios_provider.dart';
 import '../../carga/utils/geojson_mapper.dart';
+import '../../carga/providers/carga_provider.dart';
+import '../../carga/data/archivos_geojson_repository.dart';
 import '../../carga/utils/file_download_io.dart';
 import '../../../core/utils/browser_download.dart';
 import '../providers/mapa_provider.dart';
@@ -123,6 +125,7 @@ class _MapaScreenState extends ConsumerState<MapaScreen> {
   MapaColorMode? _lastColorMode;
   List<Polygon>? _lastImportedPolygons;
   List<Polyline>? _lastImportedEnvolventeLines;
+  String? _restoringMapLayersForUid;
   // Memoización de visuales
   List<Predio>? _lastPredios;
   MapaColorMode? _lastColorModeVisual;
@@ -138,6 +141,7 @@ class _MapaScreenState extends ConsumerState<MapaScreen> {
     // en `BalanceScreen` para lo mismo-.
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (mounted) ref.invalidate(prediosMapaProvider);
+      if (mounted) _restoreSavedMapLayers();
     });
   }
 
@@ -160,6 +164,27 @@ class _MapaScreenState extends ConsumerState<MapaScreen> {
   }
   @override
   Widget build(BuildContext context) {
+    ref.listen(currentUserProvider, (previous, user) {
+      if (user == null) {
+        ref.read(importedFeaturesProvider.notifier).state = const [];
+        ref.read(pksPointFeaturesProvider.notifier).state = const [];
+        ref.read(mapSavedLayersRestoredUidProvider.notifier).state = null;
+        _lastImportedFeatures = null;
+        _lastImportedPolygons = null;
+        _lastImportedEnvolventeLines = null;
+      } else {
+        final restoredUid = ref.read(mapSavedLayersRestoredUidProvider);
+        if (restoredUid != null && restoredUid != user.uid) {
+          ref.read(importedFeaturesProvider.notifier).state = const [];
+          ref.read(pksPointFeaturesProvider.notifier).state = const [];
+          ref.read(mapSavedLayersRestoredUidProvider.notifier).state = null;
+          _lastImportedFeatures = null;
+          _lastImportedPolygons = null;
+          _lastImportedEnvolventeLines = null;
+        }
+        _restoreSavedMapLayers();
+      }
+    });
     final prediosAsync = ref.watch(prediosMapaProvider);
     final prediosById = ref.watch(prediosMapaByIdProvider);
     final baseLayer = ref.watch(mapaBaseLayerProvider);
@@ -859,6 +884,163 @@ class _MapaScreenState extends ConsumerState<MapaScreen> {
     ),
   );
   }
+
+  Future<void> _restoreSavedMapLayers() async {
+    final user = ref.read(currentUserProvider);
+    if (user == null) return;
+    final uid = user.uid;
+    if (ref.read(mapSavedLayersRestoredUidProvider) == uid ||
+        _restoringMapLayersForUid == uid) {
+      return;
+    }
+    _restoringMapLayersForUid = uid;
+
+    try {
+      Map<String, dynamic>? profile;
+      try {
+        profile = await ref
+            .read(currentUserProfileProvider.future)
+            .timeout(const Duration(seconds: 8));
+      } catch (_) {
+        profile = null;
+      }
+      if (!mounted || ref.read(currentUserProvider)?.uid != uid) return;
+
+      final perfil = profile?['perfil']?.toString() ?? ref.read(currentUserPerfilProvider);
+      final canSeeAll = isAdminApproverUser(user) ||
+          isPerfilAdministrador(perfil) ||
+          isPerfilSupervisorInstitucional(perfil) ||
+          ref.read(currentUserIsAdminProvider).valueOrNull == true;
+      final assignedProjects = (profile?['proyectos'] as List?)
+              ?.whereType<String>()
+              .map((project) => project.trim().toUpperCase())
+              .where((project) => project.isNotEmpty)
+              .toSet() ??
+          ref.read(currentUserAssignedProjectsProvider).toSet();
+
+      final rows = await ref.read(archivosGeoJsonRepositoryProvider).getArchivos();
+      if (!mounted || ref.read(currentUserProvider)?.uid != uid) return;
+
+      final savedFiles = rows
+          .map((row) {
+            try {
+              return ImportedFile.fromBD(row);
+            } catch (_) {
+              return null;
+            }
+          })
+          .whereType<ImportedFile>();
+      final envelopeFeatures = <Map<String, dynamic>>[];
+      final pksFeatures = <Map<String, dynamic>>[];
+
+      for (final file in savedFiles) {
+        final owned = file.createdByUid == null || file.createdByUid == uid;
+        if (!canSeeAll && !owned) {
+          if (assignedProjects.isEmpty) continue;
+          final project = (file.proyecto ??
+                  GeoJsonMapper.detectarProyectoDesdeFeatures(file.features))
+              ?.trim()
+              .toUpperCase();
+          if (project == null || !assignedProjects.contains(project)) continue;
+        }
+
+        final normalizedName = import_norm
+            .stripAccents(file.name.toUpperCase())
+            .replaceAll(RegExp(r'[^A-Z0-9]'), '');
+        final isEnvelope = normalizedName.contains('ENVOLVENTE') ||
+            file.features.any(_isEnvolventeFeature);
+        final isPks = _isSavedPksFile(file, normalizedName: normalizedName);
+
+        if (isEnvelope) {
+          envelopeFeatures.addAll(_tagSavedEnvelopeFeatures(file.features));
+        }
+        if (isPks) {
+          pksFeatures.addAll(_tagSavedPksFeatures(file.features));
+        }
+      }
+
+      if (ref.read(importedFeaturesProvider).isEmpty && envelopeFeatures.isNotEmpty) {
+        ref.read(importedFeaturesProvider.notifier).state = envelopeFeatures;
+      }
+      if (ref.read(pksPointFeaturesProvider).isEmpty && pksFeatures.isNotEmpty) {
+        ref.read(pksPointFeaturesProvider.notifier).state = pksFeatures;
+      }
+      ref.read(mapSavedLayersRestoredUidProvider.notifier).state = uid;
+    } catch (_) {
+      // La restauración es best-effort; si la consulta falla se reintentará
+      // cuando se vuelva a entrar al mapa.
+    } finally {
+      if (_restoringMapLayersForUid == uid) _restoringMapLayersForUid = null;
+    }
+  }
+
+  bool _isSavedPksFile(ImportedFile file, {required String normalizedName}) {
+    if (file.features.isEmpty) return false;
+    final geometries = file.features
+        .map((feature) => _geometryAsMap(feature['geometry'])?['type']?.toString().toUpperCase())
+        .whereType<String>()
+        .toList(growable: false);
+    if (geometries.isEmpty ||
+        geometries.any((type) => type != 'POINT' && type != 'MULTIPOINT')) {
+      return false;
+    }
+    if (normalizedName.contains('PKS')) return true;
+    return file.features.any((feature) {
+      final rawProperties = feature['properties'];
+      if (rawProperties is! Map) return false;
+      final properties = Map<String, dynamic>.from(rawProperties);
+      return properties.keys.any((key) {
+        final normalized = import_norm
+            .stripAccents(key.toLowerCase())
+            .replaceAll(RegExp(r'[^a-z0-9]'), '');
+        return normalized == 'pkslabel' ||
+            normalized == 'pks' ||
+            normalized == 'pksnum' ||
+            normalized == 'pksnumero' ||
+            normalized == 'numeropk' ||
+            normalized == 'numeropks' ||
+            normalized == 'cadenamiento' ||
+            normalized == 'cadenamien' ||
+            normalized == 'pk';
+      });
+    });
+  }
+
+  List<Map<String, dynamic>> _tagSavedEnvelopeFeatures(
+    List<Map<String, dynamic>> features,
+  ) =>
+      features.map((feature) {
+        final rawProperties = feature['properties'];
+        final properties = rawProperties is Map
+            ? Map<String, dynamic>.from(rawProperties)
+            : <String, dynamic>{};
+        return <String, dynamic>{
+          ...feature,
+          '__import_kind': 'envolvente',
+          '__envolvente': true,
+          'properties': {
+            ...properties,
+            '__import_kind': 'envolvente',
+            '__envolvente': true,
+            'categoria': 'ENVOLVENTE',
+          },
+        };
+      }).toList(growable: false);
+
+  List<Map<String, dynamic>> _tagSavedPksFeatures(
+    List<Map<String, dynamic>> features,
+  ) =>
+      features.map((feature) {
+        final rawProperties = feature['properties'];
+        final properties = rawProperties is Map
+            ? Map<String, dynamic>.from(rawProperties)
+            : <String, dynamic>{};
+        return <String, dynamic>{
+          ...feature,
+          '__import_kind': 'pks',
+          'properties': properties,
+        };
+      }).toList(growable: false);
   String _tileTemplate(MapaBaseLayer layer) {
     if (layer == MapaBaseLayer.satelital) {
       // Google Satellite Hybrid - incluye imágenes satelitales con etiquetas de calles y lugares
