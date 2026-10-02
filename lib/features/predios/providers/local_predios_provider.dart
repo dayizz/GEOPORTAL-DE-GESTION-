@@ -184,7 +184,10 @@ class LocalPrediosNotifier extends StateNotifier<List<Predio>> {
         propietarioNombre: propietarioDetectado,
         tramo: _stringValue(normalized['tramo']) ?? '',
         tipoPropiedad: _normalizeTipoPropiedadValue(_stringValue(normalized['tipo_propiedad']) ?? _stringValue(props['tipo_propiedad'])),
-        estructura: _stringValue(normalized['estructura']) ?? _stringValue(props['estructura']),
+        estructura: _stringValue(normalized['estructura']) ??
+            _stringValue(props['estructura']) ??
+            _stringValue(props['tipo_infraestructura']) ??
+            _stringValue(props['TIPO DE INFRAESTRUCTURA']),
         ejido: _stringValue(normalized['ejido']),
         estado: estado,
         municipio: municipio,
@@ -193,6 +196,8 @@ class LocalPrediosNotifier extends StateNotifier<List<Predio>> {
         kmLineales: _toDouble(normalized['km_lineales']) ?? 0,
         kmEfectivos: _toDouble(normalized['km_efectivos']) ?? _toDouble(props['km_efectivos']) ?? 0,
         superficie: superficie,
+        superficieFirmada: _toDouble(normalized['superficie_firmada']),
+        pdfUrl: _stringValue(normalized['pdf_url']),
         cop: _toBool(normalized['cop']),
         proyecto: _stringValue(normalized['proyecto']) ??
             GeoJsonMapper.detectarProyecto(normalized),
@@ -365,6 +370,7 @@ class LocalPrediosNotifier extends StateNotifier<List<Predio>> {
       kmLineales: incoming.kmLineales ?? existing.kmLineales,
       kmEfectivos: incoming.kmEfectivos ?? existing.kmEfectivos,
       superficie: incoming.superficie ?? existing.superficie,
+      superficieFirmada: incoming.superficieFirmada ?? existing.superficieFirmada,
       cop: existing.cop || incoming.cop,
       copFirmado: _preferNullableText(existing.copFirmado, incoming.copFirmado),
       pdfUrl: _preferNullableText(existing.pdfUrl, incoming.pdfUrl),

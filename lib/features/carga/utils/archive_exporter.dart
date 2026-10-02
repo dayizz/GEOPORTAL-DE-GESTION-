@@ -88,6 +88,10 @@ Future<ArchiveExportPayload> _buildGeoJsonPayload(
         ..['identificacion'] = current.identificacion
         ..['levantamiento'] = current.levantamiento
         ..['negociacion'] = current.negociacion
+        ..['superficie_firmada'] = current.superficieFirmada
+        ..['rango_estatus'] = current.rangoEstatus
+        ..['estatus'] = Predio.estatusSimplificado(current.rangoEstatus)
+        ..['pdf_url'] = current.pdfUrl
         ..['tipo_liberacion'] = current.tipoLiberacion
         ..['responsable_juridico'] = current.responsableJuridico;
     }
@@ -146,6 +150,7 @@ Future<ArchiveExportPayload> _buildXlsxPayload(
     'PROYECTO',
     'T/F/S',
     'TIPO',
+    'TIPO DE INFRAESTRUCTURA',
     'ESTADO',
     'MUNICIPIO',
     'EJIDO',
@@ -154,14 +159,17 @@ Future<ArchiveExportPayload> _buildXlsxPayload(
     'KM FIN',
     'KM EFECTIVOS',
     'SUPERFICIE M2',
+    'SUPERFICIE FIRMADA',
     'COP',
     'FECHA COP',
     'ESTATUS',
+    'LIBERACIÓN',
     'IDENTIFICACION',
     'LEVANTAMIENTO',
     'NEGOCIACION',
     'OBSERVACIONES',
     'RESPONSABLE JURIDICO',
+    'EXPEDIENTE',
   ];
 
   for (var col = 0; col < headers.length; col++) {
@@ -177,6 +185,7 @@ Future<ArchiveExportPayload> _buildXlsxPayload(
       predio.proyecto ?? original?.proyecto ?? '',
       predio.tramo,
       predio.tipoPropiedad,
+      predio.estructura ?? '',
       predio.estado ?? '',
       predio.municipio ?? '',
       predio.ejido ?? '',
@@ -185,16 +194,19 @@ Future<ArchiveExportPayload> _buildXlsxPayload(
       predio.kmFin?.toString() ?? '',
       predio.kmEfectivos?.toString() ?? '',
       predio.superficie?.toString() ?? '',
+      predio.superficieFirmada?.toString() ?? '',
       predio.cop ? 'SI' : 'NO',
       predio.copFecha != null
           ? '${predio.copFecha!.day}/${predio.copFecha!.month}/${predio.copFecha!.year}'
           : '',
-      predio.cop ? 'Liberado' : 'No liberado',
+      predio.rangoEstatus,
+      Predio.estatusSimplificado(predio.rangoEstatus),
       predio.identificacion ? 'SI' : 'NO',
       predio.levantamiento ? 'SI' : 'NO',
       predio.negociacion ? 'SI' : 'NO',
       predio.situacionSocial ?? '',
       predio.responsableJuridico ?? '',
+      predio.pdfUrl ?? '',
     ];
 
     for (var col = 0; col < rowData.length; col++) {

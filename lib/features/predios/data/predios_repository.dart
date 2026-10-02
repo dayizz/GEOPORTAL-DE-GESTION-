@@ -102,7 +102,7 @@ class PrediosRepository {
       'propietario_nombre': raw['propietario_nombre']?.toString(),
       'tramo': raw['tramo']?.toString() ?? '',
       'tipo_propiedad': raw['tipo_propiedad']?.toString() ?? 'PRIVADA',
-      'estructura': raw['estructura']?.toString(),
+      'estructura': (raw['estructura'] ?? raw['tipo_infraestructura'] ?? raw['TIPO DE INFRAESTRUCTURA'])?.toString(),
       'ejido': raw['ejido']?.toString(),
       'estado': raw['estado']?.toString(),
       'municipio': raw['municipio']?.toString(),
@@ -111,6 +111,9 @@ class PrediosRepository {
       'km_lineales': _toDouble(raw['km_lineales']),
       'km_efectivos': _toDouble(raw['km_efectivos']),
       'superficie': _toDouble(raw['superficie']),
+      'superficie_firmada': _toDouble(
+        raw['superficie_firmada'] ?? raw['SUPERFICIE FIRMADA'],
+      ),
       'cop': _toBool(raw['cop']),
       'cop_firmado': raw['cop_firmado']?.toString(),
       'pdf_url': raw['pdf_url']?.toString(),

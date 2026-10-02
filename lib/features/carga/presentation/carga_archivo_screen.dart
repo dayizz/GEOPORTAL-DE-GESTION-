@@ -1694,7 +1694,10 @@ class _CargaArchivoScreenState extends ConsumerState<CargaArchivoScreen> {
       if (optimizedGeometry == null) continue;
 
       final geometryType = (optimizedGeometry['type']?.toString() ?? '').toUpperCase();
-      if (geometryType != 'POLYGON' && geometryType != 'MULTIPOLYGON') {
+      if (geometryType != 'POLYGON' &&
+          geometryType != 'MULTIPOLYGON' &&
+          geometryType != 'LINESTRING' &&
+          geometryType != 'MULTILINESTRING') {
         continue;
       }
 
@@ -1784,7 +1787,7 @@ class _CargaArchivoScreenState extends ConsumerState<CargaArchivoScreen> {
     final coords = geometry['coordinates'];
     if (type == null || coords is! List) return null;
 
-    if (type == 'Polygon') {
+    if (type.toUpperCase() == 'POLYGON') {
       final outerRaw = coords.whereType<List>().isNotEmpty ? coords.whereType<List>().first : null;
       if (outerRaw == null) return null;
       final outer = _simplifyGeoJsonRing(outerRaw, maxPoints: maxRingPoints);
@@ -1797,7 +1800,7 @@ class _CargaArchivoScreenState extends ConsumerState<CargaArchivoScreen> {
       };
     }
 
-    if (type == 'MultiPolygon') {
+    if (type.toUpperCase() == 'MULTIPOLYGON') {
       final polygons = <List<List<dynamic>>>[];
       for (final polygon in coords.whereType<List>()) {
         final ringList = polygon.whereType<List>().toList(growable: false);
@@ -1816,7 +1819,46 @@ class _CargaArchivoScreenState extends ConsumerState<CargaArchivoScreen> {
       };
     }
 
+    if (type.toUpperCase() == 'LINESTRING') {
+      final line = _simplifyGeoJsonLine(coords, maxPoints: maxRingPoints);
+      if (line.length < 2) return null;
+      return {...geometry, 'type': 'LineString', 'coordinates': line};
+    }
+
+    if (type.toUpperCase() == 'MULTILINESTRING') {
+      final lines = coords
+          .whereType<List>()
+          .map((line) => _simplifyGeoJsonLine(line, maxPoints: maxRingPoints))
+          .where((line) => line.length >= 2)
+          .toList(growable: false);
+      if (lines.isEmpty) return null;
+      return {...geometry, 'type': 'MultiLineString', 'coordinates': lines};
+    }
+
     return geometry;
+  }
+
+  List<List<dynamic>> _simplifyGeoJsonLine(
+    List<dynamic> rawLine, {
+    required int maxPoints,
+  }) {
+    final points = <List<dynamic>>[];
+    for (final rawPoint in rawLine.whereType<List>()) {
+      if (rawPoint.length < 2) continue;
+      final x = _toDoubleCoord(rawPoint[0]);
+      final y = _toDoubleCoord(rawPoint[1]);
+      if (x == null || y == null) continue;
+      points.add([x, y]);
+    }
+    if (points.length <= maxPoints || maxPoints < 2) return points;
+    final sampled = <List<dynamic>>[];
+    for (var i = 0; i < maxPoints; i++) {
+      final index = ((points.length - 1) * i / (maxPoints - 1)).round();
+      if (sampled.isEmpty || !_coordEquals(sampled.last, points[index])) {
+        sampled.add(points[index]);
+      }
+    }
+    return sampled;
   }
 
   List<dynamic> _simplifyGeoJsonRing(

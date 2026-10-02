@@ -59,6 +59,7 @@ class _PredioFormScreenState extends ConsumerState<PredioFormScreen> {
   final _kmFinCtrl = TextEditingController();
   final _kmEfectivosCtrl = TextEditingController();
   final _superficieCtrl = TextEditingController();
+  final _superficieFirmadaCtrl = TextEditingController();
   final _situacionSocialCtrl = TextEditingController();
   final _propietarioNombreCtrl = TextEditingController();
 
@@ -151,6 +152,7 @@ class _PredioFormScreenState extends ConsumerState<PredioFormScreen> {
         _kmFinCtrl.text = predio.kmFin?.toString() ?? '';
         _kmEfectivosCtrl.text = predio.kmEfectivos?.toString() ?? '';
         _superficieCtrl.text = predio.superficie?.toString() ?? '';
+        _superficieFirmadaCtrl.text = predio.superficieFirmada?.toString() ?? '';
         _pdfUrl = predio.pdfUrl ?? predio.copFirmado;
         _copFecha = predio.copFecha;
         _fechaLimitePago = predio.fechaLimitePago;
@@ -183,6 +185,7 @@ class _PredioFormScreenState extends ConsumerState<PredioFormScreen> {
     for (final c in [
       _claveCtrl, _ejidoCtrl, _estadoCtrl, _municipioCtrl, _tipoLiberacionCtrl, _kmInicioCtrl, _kmFinCtrl,
       _kmEfectivosCtrl, _superficieCtrl,
+      _superficieFirmadaCtrl,
       _situacionSocialCtrl, _propietarioNombreCtrl,
     ]) {
       c.dispose();
@@ -477,6 +480,9 @@ class _PredioFormScreenState extends ConsumerState<PredioFormScreen> {
           kmFin: _kmFinCtrl.text.isEmpty ? null : double.tryParse(_kmFinCtrl.text),
           kmEfectivos: _kmEfectivosCtrl.text.isEmpty ? null : double.tryParse(_kmEfectivosCtrl.text),
           superficie: _superficieCtrl.text.isEmpty ? null : double.tryParse(_superficieCtrl.text),
+          superficieFirmada: _superficieFirmadaCtrl.text.trim().isEmpty
+              ? null
+              : double.tryParse(_superficieFirmadaCtrl.text.replaceAll(',', '.')),
           cop: estatusLiberado,
           copFirmado: _resolvedPdfUrl(),
           pdfUrl: _resolvedPdfUrl(),
@@ -522,6 +528,9 @@ class _PredioFormScreenState extends ConsumerState<PredioFormScreen> {
           kmFin: _kmFinCtrl.text.isEmpty ? null : double.tryParse(_kmFinCtrl.text),
           kmEfectivos: _kmEfectivosCtrl.text.isEmpty ? null : double.tryParse(_kmEfectivosCtrl.text),
           superficie: _superficieCtrl.text.isEmpty ? null : double.tryParse(_superficieCtrl.text),
+          superficieFirmada: _superficieFirmadaCtrl.text.trim().isEmpty
+              ? null
+              : double.tryParse(_superficieFirmadaCtrl.text.replaceAll(',', '.')),
           cop: estatusLiberado,
           copFirmado: _resolvedPdfUrl(),
           pdfUrl: _resolvedPdfUrl(),
@@ -566,6 +575,9 @@ class _PredioFormScreenState extends ConsumerState<PredioFormScreen> {
           'km_fin': _kmFinCtrl.text.isEmpty ? null : double.tryParse(_kmFinCtrl.text),
           'km_efectivos': _kmEfectivosCtrl.text.isEmpty ? null : double.tryParse(_kmEfectivosCtrl.text),
           'superficie': _superficieCtrl.text.isEmpty ? null : double.tryParse(_superficieCtrl.text),
+          'superficie_firmada': _superficieFirmadaCtrl.text.trim().isEmpty
+              ? null
+              : double.tryParse(_superficieFirmadaCtrl.text.replaceAll(',', '.')),
           'cop': estatusLiberado,
           'cop_firmado': _resolvedPdfUrl(),
           'pdf_url': _resolvedPdfUrl(),
@@ -740,7 +752,7 @@ class _PredioFormScreenState extends ConsumerState<PredioFormScreen> {
                 DropdownButtonFormField<String>(
                   value: _estructura,
                   decoration: InputDecoration(
-                    label: _requiredLabel('Estructura'),
+                    label: _requiredLabel('Tipo de infraestructura'),
                     hintText: 'Selecciona',
                   ),
                   items: _estructuraOpciones
@@ -840,7 +852,7 @@ class _PredioFormScreenState extends ConsumerState<PredioFormScreen> {
                 DropdownButtonFormField<String>(
                   value: _rangoEstatus,
                   decoration: const InputDecoration(
-                    labelText: 'Rango de estatus',
+                    labelText: 'Estatus',
                     prefixIcon: Icon(Icons.verified_outlined),
                   ),
                   items: Predio.rangoEstatusOpciones
@@ -857,7 +869,7 @@ class _PredioFormScreenState extends ConsumerState<PredioFormScreen> {
                 ),
                 InputDecorator(
                   decoration: const InputDecoration(
-                    labelText: 'Estatus',
+                    labelText: 'Liberación',
                     prefixIcon: Icon(Icons.flag_outlined),
                   ),
                   child: Builder(builder: (context) {
@@ -893,6 +905,18 @@ class _PredioFormScreenState extends ConsumerState<PredioFormScreen> {
                       .map((item) => DropdownMenuItem(value: item, child: Text(item)))
                       .toList(),
                   onChanged: (value) => setState(() => _responsableJuridico = value),
+                ),
+              ], minFieldWidth: 220),
+              const SizedBox(height: 12),
+              _buildFormRow([
+                TextFormField(
+                  controller: _superficieFirmadaCtrl,
+                  keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                  decoration: const InputDecoration(
+                    labelText: 'Superficie firmada',
+                    suffixText: 'm²',
+                    prefixIcon: Icon(Icons.square_foot_outlined),
+                  ),
                 ),
               ], minFieldWidth: 220),
               const SizedBox(height: 12),
@@ -964,7 +988,7 @@ class _PredioFormScreenState extends ConsumerState<PredioFormScreen> {
               const SizedBox(height: 12),
               _buildFormRow([
                 _buildArchivoCard(
-                  'COP/DOT PDF',
+                  'EXPEDIENTE',
                   _resolvedPdfUrl(),
                   (url) => setState(() => _pdfUrl = url),
                   () => setState(() => _pdfUrl = null),

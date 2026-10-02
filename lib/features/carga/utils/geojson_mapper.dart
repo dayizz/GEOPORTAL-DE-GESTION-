@@ -59,13 +59,18 @@ class GeoJsonMapper {
     'estructura': [
       'estructura', 'ESTRUCTURA',
       'tipo_estructura', 'TIPO_ESTRUCTURA',
+      'tipo_infraestructura', 'TIPO_INFRAESTRUCTURA',
+      'tipo de infraestructura', 'TIPO DE INFRAESTRUCTURA',
       'clase_estructura', 'CLASE_ESTRUCTURA',
       'estruc', 'ESTRUC',
     ],
     'tipo_liberacion': [
       'tipo_liberacion', 'TIPO_LIBERACION',
       'tipo_de_liberacion', 'TIPO_DE_LIBERACION',
-      'liberacion', 'LIBERACION',
+      'tipo liberacion', 'TIPO LIBERACION', 'tipo de liberacion',
+      'TIPO DE LIBERACION', 'tipo_liber', 'TIPO_LIBER',
+      'liberacion_tipo', 'LIBERACION_TIPO', 'tipo_release',
+      'TIPO_RELEASE', 'expropiacion', 'EXPROPIACION',
       'cop_dot', 'COP_DOT', 'cop_dot_aop', 'COP_DOT_AOP',
     ],
     'responsable_juridico': [
@@ -97,6 +102,17 @@ class GeoJsonMapper {
       'area_ha', 'AREA_HA',
       'superficie_m2', 'SUPERFICIE_M2',
       'm2', 'M2',
+    ],
+    'superficie_firmada': [
+      'superficie_firmada', 'SUPERFICIE_FIRMADA',
+      'superficie firmada', 'SUPERFICIE FIRMADA', 'Superficie firmada',
+      'area_firmada', 'AREA_FIRMADA', 'area firmada', 'AREA FIRMADA',
+    ],
+    'pdf_url': [
+      'pdf_url', 'PDF_URL', 'expediente', 'EXPEDIENTE',
+      'expediente_pdf', 'EXPEDIENTE_PDF',
+      'cop_dot_pdf', 'COP_DOT_PDF', 'cop/dot pdf', 'COP/DOT PDF',
+      'copdot_pdf', 'COPDOT_PDF',
     ],
     'uso_suelo': [
       'uso_suelo', 'USO_SUELO',
@@ -368,8 +384,41 @@ class GeoJsonMapper {
       }
     }
 
+    // El encabezado antiguo "LIBERACION" se usó para ambos conceptos.
+    // Se conserva según el valor, sin sobrescribir encabezados explícitos.
+    final legacyLiberacion = _pickFlexible(props, ['liberacion', 'LIBERACION']);
+    if (legacyLiberacion != null) {
+      final value = legacyLiberacion.toString().trim();
+      final range = norm.normalizeRangoEstatus(value);
+      final type = norm.normalizeTipoLiberacion(value);
+      if (!_hasMeaningfulValue(result['rango_estatus']) &&
+          _esValorDeEstatus(range)) {
+        result['rango_estatus'] = range;
+      }
+      if (!_hasMeaningfulValue(result['tipo_liberacion']) &&
+          type != 'SIN TIPO') {
+        result['tipo_liberacion'] = type;
+      }
+    }
+
     return result;
   }
+
+  static bool _hasMeaningfulValue(dynamic value) =>
+      value != null && value.toString().trim().isNotEmpty && value.toString() != 'null';
+
+  static dynamic _pickFlexible(Map<String, dynamic> props, List<String> aliases) {
+    final normalizedAliases = aliases.map(_normalizeKey).toSet();
+    for (final entry in props.entries) {
+      if (!normalizedAliases.contains(_normalizeKey(entry.key))) continue;
+      if (_hasMeaningfulValue(entry.value)) return entry.value;
+    }
+    return null;
+  }
+
+  static bool _esValorDeEstatus(String value) =>
+      RegExp(r'liberad|negociacio|posibledot|uvsr|instruccion|ingreso|lnueva|investigacion')
+          .hasMatch(norm.stripAccents(value.toLowerCase()).replaceAll(RegExp(r'[^a-z0-9]'), ''));
 
   static dynamic _normalizeCanonicalValue(String key, dynamic value) {
     // Si ya es boolean, devolverlo directo
@@ -412,6 +461,8 @@ class GeoJsonMapper {
       // "Estatus"/"Rango de estatus" contra el catálogo de Gestión.
       case 'rango_estatus':
         return norm.normalizeRangoEstatus(text);
+      case 'superficie_firmada':
+        return double.tryParse(text.replaceAll(',', '')) ?? text;
       // "Fecha de liberación" (COP/DOT): acepta ISO, dd/mm/aaaa y
       // dd-mm-aaaa, siempre se guarda en ISO 8601.
       case 'cop_fecha':

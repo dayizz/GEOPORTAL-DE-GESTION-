@@ -17,6 +17,7 @@ class Predio {
   final double? kmLineales;
   final double? kmEfectivos;
   final double? superficie; // M2
+  final double? superficieFirmada;
   final bool cop; // Convenio de Ocupación Previa
   final String? copFirmado; // Archivo PDF del COP firmado
   final String? pdfUrl; // URL publica del PDF COP/DOT en storage
@@ -97,6 +98,7 @@ class Predio {
     this.kmLineales,
     this.kmEfectivos,
     this.superficie,
+    this.superficieFirmada,
     this.cop = false,
     this.copFirmado,
     this.pdfUrl,
@@ -197,6 +199,8 @@ class Predio {
       estructura: pickText([
         'estructura', 'ESTRUCTURA',
         'tipo_estructura', 'TIPO_ESTRUCTURA',
+        'tipo_infraestructura', 'TIPO_INFRAESTRUCTURA',
+        'tipo de infraestructura', 'TIPO DE INFRAESTRUCTURA',
         'clase_estructura', 'CLASE_ESTRUCTURA',
         'estruc', 'ESTRUC',
       ]),
@@ -224,6 +228,12 @@ class Predio {
       kmLineales: pickDouble(['km_lineales', 'KM_LINEALES', 'km lineales', 'KM LINEALES', 'longitud_km', 'LONGITUD_KM']) ?? (map['km_lineales'] as num?)?.toDouble(),
       kmEfectivos: pickDouble(['km_efectivos', 'KM_EFECTIVOS', 'km efectivos', 'KM EFECTIVOS', 'longitud_efectiva', 'LONGITUD_EFECTIVA']) ?? (map['km_efectivos'] as num?)?.toDouble(),
       superficie: (map['superficie'] as num?)?.toDouble(),
+      superficieFirmada: pickDouble([
+        'superficie_firmada',
+        'SUPERFICIE_FIRMADA',
+        'superficie firmada',
+        'SUPERFICIE FIRMADA',
+      ]),
       cop: map['cop'] as bool? ?? false,
       copFirmado: map['cop_firmado'] as String?,
       pdfUrl: map['pdf_url'] as String? ?? map['cop_firmado'] as String?,
@@ -287,6 +297,7 @@ class Predio {
       'km_lineales': kmLineales,
       'km_efectivos': kmEfectivos,
       'superficie': superficie,
+      'superficie_firmada': superficieFirmada,
       'cop': cop,
       'cop_firmado': copFirmado,
       'pdf_url': pdfUrl,
@@ -343,6 +354,7 @@ class Predio {
     double? kmLineales,
     double? kmEfectivos,
     double? superficie,
+    double? superficieFirmada,
     bool? cop,
     String? copFirmado,
     String? pdfUrl,
@@ -398,6 +410,7 @@ class Predio {
       kmLineales: kmLineales ?? this.kmLineales,
       kmEfectivos: kmEfectivos ?? this.kmEfectivos,
       superficie: superficie ?? this.superficie,
+      superficieFirmada: superficieFirmada ?? this.superficieFirmada,
       cop: cop ?? this.cop,
       copFirmado: clearCopFirmado ? null : (copFirmado ?? this.copFirmado),
       pdfUrl: clearPdfUrl ? null : (pdfUrl ?? this.pdfUrl),

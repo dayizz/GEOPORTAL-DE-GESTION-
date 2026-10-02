@@ -232,13 +232,16 @@ class XlsxImportService {
       'estructura': [
         'estructura',
         'tipo_estructura',
+        'tipo_infraestructura',
+        'tipo de infraestructura',
         'clase_estructura',
         'estruc',
       ],
       'tipo_liberacion': [
         'tipo_liberacion',
         'tipo_de_liberacion',
-        'liberacion',
+        'tipo liberacion',
+        'tipo de liberacion',
         'cop_dot',
         'cop_dot_aop',
       ],
@@ -281,6 +284,19 @@ class XlsxImportService {
       'm2',
       'hectareas',
       'ha',
+    ],
+    'superficie_firmada': [
+      'superficie_firmada',
+      'superficie firmada',
+      'area_firmada',
+      'area firmada',
+    ],
+    'pdf_url': [
+      'pdf_url',
+      'expediente',
+      'expediente_pdf',
+      'cop_dot_pdf',
+      'copdot_pdf',
     ],
     'proyecto': [
       'proyecto',
@@ -719,7 +735,13 @@ class XlsxImportService {
     final estructura = pick(_prediosAliases['estructura']!);
     if (estructura != null) out['estructura'] = norm.normalizeEstructura(estructura);
 
-    final tipoLiberacion = pick(_prediosAliases['tipo_liberacion']!);
+    final liberacionAmbigua = pick(['liberacion']);
+    final tipoLiberacion =
+        pick(_prediosAliases['tipo_liberacion']!) ??
+        (liberacionAmbigua != null &&
+                norm.normalizeTipoLiberacion(liberacionAmbigua) != 'SIN TIPO'
+            ? liberacionAmbigua
+            : null);
     if (tipoLiberacion != null) {
       out['tipo_liberacion'] = norm.normalizeTipoLiberacion(tipoLiberacion);
     }
@@ -730,7 +752,12 @@ class XlsxImportService {
           norm.normalizeResponsableJuridico(responsableJuridico);
     }
 
-    final rangoEstatus = pick(_prediosAliases['rango_estatus']!);
+    final rangoEstatusDetallado = pick(_prediosAliases['rango_estatus']!);
+    final rangoEstatusSimple = liberacionAmbigua != null &&
+            _esValorDeEstatus(liberacionAmbigua)
+        ? liberacionAmbigua
+        : null;
+    final rangoEstatus = rangoEstatusDetallado ?? rangoEstatusSimple;
     if (rangoEstatus != null) out['rango_estatus'] = norm.normalizeRangoEstatus(rangoEstatus);
 
     final copFecha = pick(_prediosAliases['cop_fecha']!);
@@ -782,6 +809,15 @@ class XlsxImportService {
     final superficie = pickDouble(_prediosAliases['superficie']!);
     if (superficie != null) out['superficie'] = superficie;
 
+    final superficieFirmada =
+        pickDouble(_prediosAliases['superficie_firmada']!);
+    if (superficieFirmada != null) {
+      out['superficie_firmada'] = superficieFirmada;
+    }
+
+    final expediente = pick(_prediosAliases['pdf_url']!);
+    if (expediente != null) out['pdf_url'] = expediente;
+
     final lat = pickDouble(_prediosAliases['latitud']!);
     if (lat != null) out['latitud'] = lat;
 
@@ -816,6 +852,20 @@ class XlsxImportService {
     if (correoProp != null) out['correo_propietario'] = _normalizeEmail(correoProp);
 
     return out;
+  }
+
+  bool _esValorDeEstatus(String value) {
+    final compacto = norm
+        .stripAccents(value.toUpperCase())
+        .replaceAll(RegExp(r'[^A-Z0-9]'), '');
+    return compacto.contains('LIBERAD') ||
+        compacto.contains('NEGOCIACIO') ||
+        compacto.contains('POSIBLEDOT') ||
+        compacto.contains('UVSR') ||
+        compacto.contains('INSTRUCCION') ||
+        compacto.contains('INGRESO') ||
+        compacto.contains('LNUEVA') ||
+        compacto.contains('INVESTIGACION');
   }
 
   Map<String, dynamic> _normalizarFilaPropietario(Map<String, String> row) {

@@ -544,11 +544,11 @@ class _TablaScreenState extends ConsumerState<TablaScreen> {
       
       // Headers
       final headers = [
-        'ID', 'CLAVE', 'PROYECTO', 'T/F/S', 'TIPO', 'ESTRUCTURA', 'ESTADO', 'MUNICIPIO',
+        'ID', 'CLAVE', 'PROYECTO', 'T/F/S', 'TIPO', 'TIPO DE INFRAESTRUCTURA', 'ESTADO', 'MUNICIPIO',
         'EJIDO', 'PROPIETARIO', 'KM INICIO', 'KM FIN', 'KM EFECTIVOS',
-        'SUPERFICIE M2', 'COP', 'FECHA DE LIBERACION', 'COP/DOT PDF', 'DWG', 'PLANO PDF', 'BDT',
-        'RANGO DE ESTATUS', 'ESTATUS',
-        'IDENTIFICACION', 'LEVANTAMIENTO', 'NEGOCIACION', 'OBSERVACIONES', 'FECHA LIMITE DE PAGO',
+        'SUPERFICIE M2', 'COP', 'FECHA DE LIBERACION', 'EXPEDIENTE', 'DWG', 'PLANO PDF', 'BDT',
+        'ESTATUS', 'LIBERACIÓN',
+        'IDENTIFICACION', 'LEVANTAMIENTO', 'NEGOCIACION', 'SUPERFICIE FIRMADA', 'OBSERVACIONES', 'FECHA LIMITE DE PAGO',
         'RESPONSABLE JURIDICO',
       ];
       
@@ -585,6 +585,7 @@ class _TablaScreenState extends ConsumerState<TablaScreen> {
           p.identificacion ? 'SI' : 'NO',
           p.levantamiento ? 'SI' : 'NO',
           p.negociacion ? 'SI' : 'NO',
+          p.superficieFirmada?.toString() ?? '',
           p.situacionSocial ?? '',
           p.fechaLimitePago != null
               ? '${p.fechaLimitePago!.day}/${p.fechaLimitePago!.month}/${p.fechaLimitePago!.year}'
@@ -812,7 +813,7 @@ class _TablaScreenState extends ConsumerState<TablaScreen> {
                     Padding(
                       padding: const EdgeInsets.only(right: 6),
                       child: Chip(
-                        label: Text('Estructura: $t'),
+                        label: Text('Tipo de infraestructura: $t'),
                         onDeleted: () => setState(() => _filtroEstructura = {..._filtroEstructura}..remove(t)),
                         deleteIcon: const Icon(Icons.close, size: 14),
                         materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
@@ -858,7 +859,7 @@ class _TablaScreenState extends ConsumerState<TablaScreen> {
                     Padding(
                       padding: const EdgeInsets.only(right: 6),
                       child: Chip(
-                        label: Text('Estatus: $t'),
+                        label: Text('Liberación: $t'),
                         onDeleted: () => setState(() => _filtroEstatus = {..._filtroEstatus}..remove(t)),
                         backgroundColor: t == 'Liberado'
                             ? AppColors.secondary.withValues(alpha: 0.15)
@@ -872,7 +873,7 @@ class _TablaScreenState extends ConsumerState<TablaScreen> {
                     Padding(
                       padding: const EdgeInsets.only(right: 6),
                       child: Chip(
-                        label: Text('Rango: $t'),
+                        label: Text('Estatus: $t'),
                         onDeleted: () => setState(() => _filtroRangoEstatus = {..._filtroRangoEstatus}..remove(t)),
                         backgroundColor: AppColors.rangoEstatusColor(t).withValues(alpha: 0.15),
                         deleteIcon: const Icon(Icons.close, size: 14),
@@ -910,7 +911,7 @@ class _TablaScreenState extends ConsumerState<TablaScreen> {
       150, // PROPIETARIO
        50, // T/F/S
        90, // TIPO DE PROPIEDAD
-       90, // ESTRUCTURA
+       140, // TIPO DE INFRAESTRUCTURA
        95, // ESTADO
       125, // MUNICIPIO
       120, // EJIDO
@@ -921,13 +922,14 @@ class _TablaScreenState extends ConsumerState<TablaScreen> {
        54, // IDENTIFICACION
        54, // LEVANTAMIENTO
        54, // NEGOCIACION
-      110, // RANGO ESTATUS
-       90, // ESTATUS
+       95, // SUPERFICIE FIRMADA
+      110, // ESTATUS
+       90, // LIBERACION
       120, // TIPO LIBERACION
        100, // FECHA DE LIBERACION
       135, // RESPONSABLE JURIDICO
       100, // FECHA DE PAGO
-       46, // COP/DOT
+       46, // EXPEDIENTE
        46, // DWG
        46, // PLANO PDF
        46, // BDT
@@ -936,11 +938,11 @@ class _TablaScreenState extends ConsumerState<TablaScreen> {
 
     const headers = <String>[
       'ID', 'ACCIONES', 'CLAVE', 'PROPIETARIO', 'T/F/S', 'TIPO DE\nPROPIEDAD',
-      'ESTRUCTURA', 'ESTADO', 'MUNICIPIO', 'EJIDO', 'KM INICIO', 'KM FIN',
+      'TIPO DE\nINFRAESTRUCTURA', 'ESTADO', 'MUNICIPIO', 'EJIDO', 'KM INICIO', 'KM FIN',
       'KM EFECTIVOS', 'M²', 'IDENTIFICACION', 'LEVANTAMIENTO', 'NEGOCIACION',
-      'RANGO DE\nESTATUS', 'ESTATUS', 'TIPO DE\nLIBERACION',
+      'SUPERFICIE\nFIRMADA', 'ESTATUS', 'LIBERACIÓN', 'TIPO DE\nLIBERACION',
       'FECHA DE\nLIBERACION', 'RESPONSABLE\nJURIDICO', 'FECHA DE PAGO',
-      'COP/DOT', 'DWG', 'PLANO', 'BDT', 'OBSERVACIONES',
+      'EXPEDIENTE', 'DWG', 'PLANO', 'BDT', 'OBSERVACIONES',
     ];
 
     return LayoutBuilder(
@@ -1282,7 +1284,7 @@ class _TablaScreenState extends ConsumerState<TablaScreen> {
   String _archivoLabel(String campo) {
     switch (campo) {
       case 'copdot':
-        return 'COP/DOT PDF';
+        return 'EXPEDIENTE';
       case 'dwg':
         return 'DWG';
       case 'planoPdf':
@@ -1682,7 +1684,7 @@ class _TablaScreenState extends ConsumerState<TablaScreen> {
           _tramoBadgeCell(p.tramo, widths[4]),
           // TIPO DE PROPIEDAD
           _tipoBadgeCell(p.tipoPropiedad, tipoColor, widths[5]),
-          // ESTRUCTURA
+          // TIPO DE INFRAESTRUCTURA
           _dataCell(p.estructura ?? '-', widths[6], requerido: true),
           // ESTADO
           _dataCell((p.estado == null || p.estado!.isEmpty) ? '-' : p.estado!, widths[7], requerido: true),
@@ -1731,25 +1733,27 @@ class _TablaScreenState extends ConsumerState<TablaScreen> {
               ),
             ),
           ),
-          // RANGO DE ESTATUS
-          _rangoEstatusCell(p, widths[17]),
-          // ESTATUS
-          _estatusCell(p, widths[18]),
+          // SUPERFICIE FIRMADA
+          _numCell(p.superficieFirmada, widths[17], decimals: 2),
+          // ESTATUS (rango detallado)
+          _rangoEstatusCell(p, widths[18]),
+          // LIBERACIÓN (estatus simplificado)
+          _estatusCell(p, widths[19]),
           // TIPO DE LIBERACION
-          _dataCell(p.tipoLiberacion ?? '-', widths[19]),
+          _dataCell(p.tipoLiberacion ?? '-', widths[20]),
           // FECHA DE LIBERACION
-          _fechaLiberacionCell(p, widths[20]),
+          _fechaLiberacionCell(p, widths[21]),
           // RESPONSABLE JURIDICO
-          _dataCell(p.responsableJuridico ?? '-', widths[21]),
+          _dataCell(p.responsableJuridico ?? '-', widths[22]),
           // FECHA DE PAGO
-          _fechaLimitePagoCell(p, widths[22]),
+          _fechaLimitePagoCell(p, widths[23]),
           // DOCUMENTOS
-          _archivoLinkCell(p, widths[23], campo: 'copdot'),
-          _archivoLinkCell(p, widths[24], campo: 'dwg'),
-          _archivoLinkCell(p, widths[25], campo: 'planoPdf'),
-          _archivoLinkCell(p, widths[26], campo: 'bdt'),
+          _archivoLinkCell(p, widths[24], campo: 'copdot'),
+          _archivoLinkCell(p, widths[25], campo: 'dwg'),
+          _archivoLinkCell(p, widths[26], campo: 'planoPdf'),
+          _archivoLinkCell(p, widths[27], campo: 'bdt'),
           // OBSERVACIONES
-          _dataCell(p.situacionSocial ?? '-', widths[27]),
+          _dataCell(p.situacionSocial ?? '-', widths[28]),
         ],
       ),
     );
@@ -2328,7 +2332,7 @@ class _TablaScreenState extends ConsumerState<TablaScreen> {
                     ),
                   ),
                 Text(
-                  'Estructura',
+                  'Tipo de infraestructura',
                   style: Theme.of(ctx).textTheme.labelLarge?.copyWith(
                         color: AppColors.textPrimary,
                         fontWeight: FontWeight.w700,
@@ -2428,7 +2432,7 @@ class _TablaScreenState extends ConsumerState<TablaScreen> {
                 ),
                 const SizedBox(height: 16),
                 Text(
-                  'Estatus',
+                  'Liberación',
                   style: Theme.of(ctx).textTheme.labelLarge?.copyWith(
                         color: AppColors.textPrimary,
                         fontWeight: FontWeight.w700,
@@ -2459,7 +2463,7 @@ class _TablaScreenState extends ConsumerState<TablaScreen> {
                 ),
                 const SizedBox(height: 16),
                 Text(
-                  'Rango de estatus',
+                  'Estatus',
                   style: Theme.of(ctx).textTheme.labelLarge?.copyWith(
                         color: AppColors.textPrimary,
                         fontWeight: FontWeight.w700,

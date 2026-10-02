@@ -189,6 +189,15 @@ class SincronizacionService {
     return null;
   }
 
+  bool _esEstatusLiberacion(String? value) {
+    if (value == null) return false;
+    final compacto = norm.stripAccents(value.toUpperCase()).replaceAll(RegExp(r'[^A-Z]'), '');
+    return compacto == 'LIBERADO' || compacto == 'NOLIBERADO' ||
+        compacto == 'INVESTIGACION' || compacto == 'NEGOCIACION' ||
+        compacto == 'POSIBLEDOT' || compacto == 'INSTRUCCIONUVSR' ||
+        compacto == 'CONINGRESO' || compacto == 'LNUEVA';
+  }
+
   double? _pickDoubleFlexible(Map<String, dynamic> props, List<String> keys) {
     final raw = _pickFlexible(props, keys);
     return _toDouble(raw);
@@ -527,6 +536,10 @@ class SincronizacionService {
       'superficie_m2', 'SUPERFICIE_M2',
       'm2', 'M2',
     ]);
+    final superficieFirmada = _pickDoubleFlexible(props, [
+      'superficie_firmada', 'SUPERFICIE_FIRMADA', 'superficie firmada',
+      'SUPERFICIE FIRMADA', 'area_firmada', 'AREA_FIRMADA', 'area firmada',
+    ]);
 
     final kmLineales = _pickDoubleFlexible(props, [
       'km_lineales', 'KM_LINEALES',
@@ -570,6 +583,8 @@ class SincronizacionService {
       'estructura': norm.normalizeEstructura(_pickFlexible(props, [
         'estructura', 'ESTRUCTURA',
         'tipo_estructura', 'TIPO_ESTRUCTURA',
+        'tipo_infraestructura', 'TIPO_INFRAESTRUCTURA',
+        'tipo de infraestructura', 'TIPO DE INFRAESTRUCTURA',
         'clase_estructura', 'CLASE_ESTRUCTURA',
         'estruc', 'ESTRUC',
       ])),
@@ -624,6 +639,12 @@ class SincronizacionService {
 
       // ── Dimensiones / Geometría ──────────────────────────────────────────
       'superficie': superficie,
+      'superficie_firmada': superficieFirmada,
+      'pdf_url': _pickFlexible(props, [
+        'expediente', 'EXPEDIENTE', 'expediente_pdf', 'EXPEDIENTE_PDF',
+        'pdf_url', 'PDF_URL', 'cop_dot_pdf', 'COP_DOT_PDF',
+        'cop/dot pdf', 'COP/DOT PDF',
+      ]),
       // Aceptan formato PK ("12+359") o decimal ("12.359") -misma distancia,
       // 12 km + 359 m-; siempre quedan guardados como el mismo número para
       // que Gestión los muestre consistentemente en formato PK.
@@ -688,14 +709,15 @@ class SincronizacionService {
           'tipo liberacion', 'TIPO LIBERACION',
           'tipo_de_liberacion', 'TIPO_DE_LIBERACION',
           'tipo de liberacion', 'TIPO DE LIBERACION',
-          'liberacion', 'LIBERACION',
           'tipo_liber', 'TIPO_LIBER',
           'liberacion_tipo', 'LIBERACION_TIPO',
           'tipo_release', 'TIPO_RELEASE',
           'expropiacion', 'EXPROPIACION',
         ]);
-        if (crudo == null) return null;
-        return norm.normalizeTipoLiberacion(crudo);
+        final legacy = _pickFlexible(props, ['liberacion', 'LIBERACION']);
+        final value = crudo ?? (norm.normalizeTipoLiberacion(legacy) != 'SIN TIPO' ? legacy : null);
+        if (value == null) return null;
+        return norm.normalizeTipoLiberacion(value);
       }(),
 
       // "Estatus"/"Rango de estatus" contra el catálogo de Gestión
@@ -709,8 +731,10 @@ class SincronizacionService {
           'estatus', 'ESTATUS',
           'estatus_predio', 'ESTATUS_PREDIO',
         ]);
-        if (crudo == null) return null;
-        return norm.normalizeRangoEstatus(crudo);
+        final legacy = _pickFlexible(props, ['liberacion', 'LIBERACION']);
+        final value = crudo ?? (_esEstatusLiberacion(legacy) ? legacy : null);
+        if (value == null) return null;
+        return norm.normalizeRangoEstatus(value);
       }(),
 
       // "Fecha de liberación" (COP/DOT): puede venir del archivo importado

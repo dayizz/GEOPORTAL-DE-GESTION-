@@ -333,10 +333,10 @@ Map<String, dynamic> _parseGeoJsonPayload(Map<String, dynamic> request) {
 }
 
 Map<String, dynamic>? _normalizeGeoJson(Map<String, dynamic> data) {
-  final type = data['type'] as String?;
-  if (type == 'FeatureCollection') return data;
+  final type = data['type']?.toString().trim().toUpperCase();
+  if (type == 'FEATURECOLLECTION') return data;
 
-  if (type == 'Feature') {
+  if (type == 'FEATURE') {
     return {
       'type': 'FeatureCollection',
       'features': [data],
@@ -344,20 +344,21 @@ Map<String, dynamic>? _normalizeGeoJson(Map<String, dynamic> data) {
   }
 
   const geometryTypes = {
-    'Polygon',
-    'MultiPolygon',
-    'LineString',
-    'MultiLineString',
-    'Point',
-    'MultiPoint',
+    'POLYGON': 'Polygon',
+    'MULTIPOLYGON': 'MultiPolygon',
+    'LINESTRING': 'LineString',
+    'MULTILINESTRING': 'MultiLineString',
+    'POINT': 'Point',
+    'MULTIPOINT': 'MultiPoint',
   };
-  if (type != null && geometryTypes.contains(type)) {
+  final canonicalGeometryType = type == null ? null : geometryTypes[type];
+  if (canonicalGeometryType != null) {
     return {
       'type': 'FeatureCollection',
       'features': [
         {
           'type': 'Feature',
-          'geometry': data,
+          'geometry': {...data, 'type': canonicalGeometryType},
           'properties': <String, dynamic>{},
         }
       ],
