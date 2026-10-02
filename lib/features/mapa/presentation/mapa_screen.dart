@@ -93,6 +93,7 @@ class _MapaScreenState extends ConsumerState<MapaScreen> {
   final List<String> _manualSelectedPredioIds = [];
   final TextEditingController _manualPredioSearchCtrl = TextEditingController();
   int? _lastImportedFeaturesIdentity;
+  int? _lastPksFeaturesIdentity;
   /// Rotación actual del mapa en grados.
   double _currentRotation = 0;
   /// Si el panel de rotación está expandido.
@@ -165,6 +166,7 @@ class _MapaScreenState extends ConsumerState<MapaScreen> {
     final predioOpacity = ref.watch(predioOpacityProvider);
     final importedFeatures = ref.watch(importedFeaturesProvider);
     final pksFeatures = ref.watch(pksPointFeaturesProvider);
+    _focusPksIfNeeded(pksFeatures);
     final shouldTrackZoomForPks = _showPksLabels && pksFeatures.isNotEmpty;
     List<Polygon> importedPolygons;
     if (_lastImportedFeatures == importedFeatures && _lastColorMode == colorMode) {
@@ -1553,16 +1555,16 @@ class _MapaScreenState extends ConsumerState<MapaScreen> {
 
   List<LatLng> _extractPointsFromGeometry(Map<String, dynamic>? geometry) {
     if (geometry == null) return const [];
-    final type = geometry['type']?.toString();
+    final type = geometry['type']?.toString().trim().toUpperCase();
     final coords = geometry['coordinates'];
     if (type == null || coords is! List || coords.isEmpty) return const [];
 
-    if (type == 'Point') {
+    if (type == 'POINT') {
       final point = _coordToLatLng(coords);
       return point == null ? const [] : [point];
     }
 
-    if (type == 'MultiPoint') {
+    if (type == 'MULTIPOINT') {
       final points = coords
           .whereType<List>()
           .map(_coordToLatLng)
@@ -1582,7 +1584,60 @@ class _MapaScreenState extends ConsumerState<MapaScreen> {
 
     if (_isValidLatLng(lat: y, lng: x)) return LatLng(y, x);
     if (_isValidLatLng(lat: x, lng: y)) return LatLng(x, y);
+    // Algunos exportadores etiquetan el archivo como GeoJSON aunque las
+    // coordenadas sigan en UTM. Aplica a PKS la conversión ya usada para
+    // los polígonos para evitar descartar esos puntos.
+    final zone = _detectMexicoUtmZone([x], [y]);
+    if (zone != null) {
+      final converted = _utmToWgs84(x, y, zone);
+      final lng = converted[0];
+      final lat = converted[1];
+      if (_isValidLatLng(lat: lat, lng: lng)) return LatLng(lat, lng);
+    }
     return null;
+  }
+
+  void _focusPksIfNeeded(List<Map<String, dynamic>> features) {
+    if (features.isEmpty) {
+      _lastPksFeaturesIdentity = null;
+      return;
+    }
+    final identity = identityHashCode(features);
+    if (_lastPksFeaturesIdentity == identity) return;
+    _lastPksFeaturesIdentity = identity;
+
+    final points = <LatLng>[];
+    for (final feature in features) {
+      points.addAll(_extractPointsFromGeometry(_geometryAsMap(feature['geometry'])));
+    }
+    if (points.isEmpty) return;
+
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      try {
+        if (points.length == 1 ||
+            points.every((point) =>
+                point.latitude == points.first.latitude &&
+                point.longitude == points.first.longitude)) {
+          _mapCtrl.move(points.first, 16.0);
+          return;
+        }
+        final bounds = LatLngBounds(points.first, points.first);
+        for (final point in points.skip(1)) {
+          bounds.extend(point);
+        }
+        _mapCtrl.fitCamera(
+          CameraFit.bounds(
+            bounds: bounds,
+            padding: const EdgeInsets.all(56),
+          ),
+        );
+      } catch (_) {
+        // El mapa podría aún no estar listo. Permite reintentar en el
+        // siguiente cambio de estado.
+        _lastPksFeaturesIdentity = null;
+      }
+    });
   }
 
   Marker _buildClaveLabelMarker({

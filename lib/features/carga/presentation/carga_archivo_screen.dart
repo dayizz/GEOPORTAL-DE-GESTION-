@@ -196,6 +196,8 @@ class _CargaArchivoScreenState extends ConsumerState<CargaArchivoScreen> {
   }
 
   Future<void> _cargarArchivosDesdeBD() async {
+    final idsExistentesAlIniciar =
+        ref.read(cargaProvider).map((file) => file.id).toSet();
     try {
       final repo = ref.read(archivosGeoJsonRepositoryProvider);
       final rawList = await repo.getArchivos();
@@ -215,8 +217,18 @@ class _CargaArchivoScreenState extends ConsumerState<CargaArchivoScreen> {
       // rol/perfil dependen de streams de Firestore que podrían no haber
       // resuelto todavía en este punto, lo que antes causaba que archivos
       // válidos desaparecieran intermitentemente al recargar.
-      ref.read(cargaProvider.notifier).initFromBD(parsed);
-      if (parsed.isEmpty) {
+      final idsAgregadosDuranteCarga = ref
+          .read(cargaProvider)
+          .where((file) => !idsExistentesAlIniciar.contains(file.id))
+          .map((file) => file.id)
+          .toSet();
+      ref.read(cargaProvider.notifier).initFromBD(
+            parsed,
+            preserveIds: idsAgregadosDuranteCarga,
+          );
+      // Esta lectura puede haber empezado antes de que terminara una nueva
+      // importación. No limpies su capa de mapa con una respuesta vacía vieja.
+      if (parsed.isEmpty && ref.read(cargaProvider).isEmpty) {
         clearImportedMapState(ref.read);
         ref.read(importacionAsyncProvider.notifier).reset();
       }
@@ -1997,11 +2009,11 @@ class _CargaArchivoScreenState extends ConsumerState<CargaArchivoScreen> {
     final geometry = _asStringDynamicMap(rawGeometry);
     if (geometry == null) return null;
 
-    final type = geometry['type']?.toString();
+    final type = geometry['type']?.toString().trim().toUpperCase();
     final coords = geometry['coordinates'];
     if (type == null || coords is! List) return null;
 
-    if (type == 'Point') {
+    if (type == 'POINT') {
       final point = _normalizePointCoordinate(coords);
       if (point == null) return null;
       return {
@@ -2010,7 +2022,7 @@ class _CargaArchivoScreenState extends ConsumerState<CargaArchivoScreen> {
       };
     }
 
-    if (type == 'MultiPoint') {
+    if (type == 'MULTIPOINT') {
       final points = coords
           .whereType<List>()
           .map(_normalizePointCoordinate)

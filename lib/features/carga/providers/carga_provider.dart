@@ -135,11 +135,15 @@ class CargaNotifier extends StateNotifier<List<ImportedFile>> {
   CargaNotifier() : super([]);
 
   /// Carga (o recarga) la lista desde BD.
-  /// Los archivos que solo están en memoria (sin bdId) se conservan al final.
-  void initFromBD(List<ImportedFile> bdFiles) {
-    final soloEnMemoria = state.where((f) => f.bdId == null).toList();
-    final bdIds = bdFiles.map((f) => f.bdId).whereType<String>().toSet();
-    final memoriaExtra = soloEnMemoria.where((f) => !bdIds.contains(f.bdId)).toList();
+  /// Conserva archivos agregados localmente durante la consulta a Firestore.
+  void initFromBD(
+    List<ImportedFile> bdFiles, {
+    Set<String> preserveIds = const {},
+  }) {
+    final bdIds = bdFiles.map((f) => f.id).toSet();
+    final memoriaExtra = state
+        .where((f) => preserveIds.contains(f.id) && !bdIds.contains(f.id))
+        .toList();
     state = [...bdFiles, ...memoriaExtra];
   }
 
@@ -199,4 +203,3 @@ class CargaNotifier extends StateNotifier<List<ImportedFile>> {
 final cargaProvider = StateNotifierProvider<CargaNotifier, List<ImportedFile>>(
   (ref) => CargaNotifier(),
 );
-
