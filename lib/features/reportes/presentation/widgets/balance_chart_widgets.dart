@@ -99,7 +99,7 @@ Widget buildAvanceDdvStatusBar({
         Row(
           mainAxisAlignment: MainAxisAlignment.spaceBetween,
           children: [
-            const Text('Liberación DDV', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w700)),
+            const Text('Liberación DDV (según Estatus)', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w700)),
             Text('${fmt.format(total)} predios', style:  TextStyle(fontSize: 12, color: AppColors.textSecondary)),
           ],
         ),
@@ -443,7 +443,7 @@ Widget buildTipoPropiedadCard({
   final identificados = predios.where((p) => p.identificacion).length;
   final levantados = predios.where((p) => p.levantamiento).length;
   final negociados = predios.where((p) => p.negociacion).length;
-  final liberados = predios.where((p) => p.cop).length;
+  final liberados = predios.where(predioEstaLiberado).length;
 
   return Container(
     padding: const EdgeInsets.all(16),

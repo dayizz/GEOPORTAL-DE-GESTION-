@@ -159,11 +159,11 @@ class _BalanceScreenState extends ConsumerState<BalanceScreen> {
           final total = prediosFiltrados.length;
           final porTramo = groupCountBy(prediosFiltrados, (predator) => predator.tramo);
 
-          final prediosLiberados = prediosFiltrados.where((predator) => predator.cop).length;
+          final prediosLiberados = prediosFiltrados.where(predioEstaLiberado).length;
           final prediosNoLiberados = (total - prediosLiberados).clamp(0, total);
 
           final kmEfectivosLiberados = prediosFiltrados
-              .where((predator) => predator.cop)
+              .where(predioEstaLiberado)
               .fold<double>(0, (sum, predator) => sum + (predator.kmEfectivos ?? 0));
 
           // Agrupar por tipo de liberación usando primero el valor capturado
@@ -184,8 +184,7 @@ class _BalanceScreenState extends ConsumerState<BalanceScreen> {
               .toList();
 
           // "Avance Mensual"/"Avance Semanal": % acumulado de predios en
-          // campo "Liberación" activo (`cop`) al cierre de cada periodo
-          // sobre el total del proyecto/segmento filtrado.
+          // que Gestión muestra como liberados al cierre de cada periodo.
           final pctLiberadoMensual = cumulativePctLiberado(
             prediosFiltrados,
             finesDePeriodo: List.generate(
@@ -533,7 +532,7 @@ class _BalanceScreenState extends ConsumerState<BalanceScreen> {
                   pctLiberadoPorBarra: pctLiberadoMensual,
                 ),
                  Text(
-                  '% acumulado según la columna Liberación al cierre de cada mes (sobre el total del proyecto/segmento)',
+                  '% acumulado liberado según Estatus (como en Gestión), al cierre de cada mes',
                   style: TextStyle(fontSize: 11, color: AppColors.textSecondary),
                 ),
 
@@ -548,7 +547,7 @@ class _BalanceScreenState extends ConsumerState<BalanceScreen> {
                   pctLiberadoPorBarra: pctLiberadoSemanal,
                 ),
                  Text(
-                  '% acumulado según la columna Liberación al cierre de cada semana (últimas 8 semanas, sobre el total del proyecto/segmento)',
+                  '% acumulado liberado según Estatus (como en Gestión), al cierre de cada semana',
                   style: TextStyle(fontSize: 11, color: AppColors.textSecondary),
                 ),
 
