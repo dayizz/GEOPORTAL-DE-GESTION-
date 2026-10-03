@@ -170,7 +170,7 @@ class _BalanceScreenState extends ConsumerState<BalanceScreen> {
           // en Gestión ("Sin tipo"/"Sin liberación" ya consolidados).
           final porTipoLiberacion = porTipoLiberacionConsolidado(prediosFiltrados);
 
-          // Distribución por "Rango de estatus" (Liberado, Negociación,
+          // Distribución por "Estatus" (Liberado, Negociación,
           // Posible DOT, Instrucción UVSR, Con ingreso, No liberado, L
           // nueva), ordenada según el catálogo vigente para que la dona y
           // su leyenda coincidan siempre en el mismo orden.
@@ -184,10 +184,8 @@ class _BalanceScreenState extends ConsumerState<BalanceScreen> {
               .toList();
 
           // "Avance Mensual"/"Avance Semanal": % acumulado de predios en
-          // estatus "Liberado" al cierre de cada periodo (sobre el total
-          // del proyecto/segmento filtrado), misma fuente única que el
-          // resto de la app (`Predio.estatusSimplificado` sobre
-          // `rangoEstatus`, no el flag `cop`).
+          // campo "Liberación" activo (`cop`) al cierre de cada periodo
+          // sobre el total del proyecto/segmento filtrado.
           final pctLiberadoMensual = cumulativePctLiberado(
             prediosFiltrados,
             finesDePeriodo: List.generate(
@@ -393,7 +391,7 @@ class _BalanceScreenState extends ConsumerState<BalanceScreen> {
                       final rangoBlock = porRangoEstatus.isEmpty
                           ? null
                           : buildEstatusChartBlock(
-                              titulo: 'Rango de Estatus',
+                              titulo: 'Estatus',
                               entries: porRangoEstatus,
                               total: total,
                               colorFn: AppColors.rangoEstatusColor,
@@ -535,7 +533,7 @@ class _BalanceScreenState extends ConsumerState<BalanceScreen> {
                   pctLiberadoPorBarra: pctLiberadoMensual,
                 ),
                  Text(
-                  '% acumulado de predios liberados al cierre de cada mes (sobre el total del proyecto/segmento)',
+                  '% acumulado según la columna Liberación al cierre de cada mes (sobre el total del proyecto/segmento)',
                   style: TextStyle(fontSize: 11, color: AppColors.textSecondary),
                 ),
 
@@ -550,7 +548,7 @@ class _BalanceScreenState extends ConsumerState<BalanceScreen> {
                   pctLiberadoPorBarra: pctLiberadoSemanal,
                 ),
                  Text(
-                  '% acumulado de predios liberados al cierre de cada semana (últimas 8 semanas, sobre el total del proyecto/segmento)',
+                  '% acumulado según la columna Liberación al cierre de cada semana (últimas 8 semanas, sobre el total del proyecto/segmento)',
                   style: TextStyle(fontSize: 11, color: AppColors.textSecondary),
                 ),
 

@@ -22,7 +22,7 @@ const mesAbrev = ['Ene', 'Feb', 'Mar', 'Abr', 'May', 'Jun', 'Jul', 'Ago', 'Sep',
 
 /// Una columna de 1 km dentro de una fila de cadenamiento: `km` es el
 /// kilometro entero que abre el segmento `[km, km+1)` y `pct` el porcentaje
-/// (0-1) de ese segmento cubierto por predios en estatus "Liberado".
+/// (0-1) de ese segmento cubierto por predios liberados según `cop`.
 class CadenamientoColumna {
   final int km;
   final double pct;
@@ -63,8 +63,8 @@ DateTime weekStart(int idx, {int totalSemanas = sparkWeeks}) {
   return hoy.subtract(Duration(days: 7 * semanasAtras + 6));
 }
 
-/// % acumulado de `predios` en estatus "Liberado" (fuente única:
-/// `Predio.estatusSimplificado` sobre `rangoEstatus`) cuya fecha de
+/// % acumulado de `predios` marcados como liberados (`Predio.cop`, columna
+/// "Liberación") cuya fecha de
 /// liberación (`copFecha`, o `updatedAt`/`createdAt` como respaldo si no
 /// se capturó) cae antes de cada fecha de corte en `finesDePeriodo`
 /// (exclusiva). A diferencia de un conteo por periodo, esto incluye
@@ -77,7 +77,7 @@ List<double> cumulativePctLiberado(
   final total = predios.length;
   if (total == 0) return List.filled(finesDePeriodo.length, 0);
 
-  final liberados = predios.where((p) => Predio.estatusSimplificado(p.rangoEstatus) == 'Liberado').toList();
+  final liberados = predios.where((p) => p.cop).toList();
   return finesDePeriodo.map((finExclusivo) {
     final acumulados = liberados.where((p) {
       final fecha = p.copFecha ?? p.updatedAt ?? p.createdAt;
@@ -159,19 +159,17 @@ Color tipoLiberacionColor(String tipo) {
 }
 
 /// % liberado por segmento/tramo/frente (0-100), en el mismo orden que
-/// `porTramo.keys`, usando `Predio.estatusSimplificado` sobre
-/// `rangoEstatus` -misma fuente única que el resto de la app- en vez del
-/// flag `cop`.
+/// `porTramo.keys`, usando el campo `Predio.cop` (columna "Liberación").
 List<double> pctLiberadoPorTramo(Map<String, int> porTramo, List<Predio> todosPredios) {
   return porTramo.entries.map((e) {
     final liberadosTramo = todosPredios
-        .where((p) => p.tramo == e.key && Predio.estatusSimplificado(p.rangoEstatus) == 'Liberado')
+        .where((p) => p.tramo == e.key && p.cop)
         .length;
     return e.value > 0 ? liberadosTramo / e.value * 100 : 0.0;
   }).toList();
 }
 
-/// Ordena el conteo por "Rango de estatus" según `Predio.rangoEstatusOpciones`
+/// Ordena el conteo por "Estatus" según `Predio.rangoEstatusOpciones`
 /// (el catálogo vigente, mismo orden que el dropdown en "Editar predio"),
 /// para que la dona y su leyenda sean siempre consistentes entre
 /// renders. Cualquier valor fuera del catálogo (dato legado) se agrega al
@@ -213,8 +211,7 @@ String formatKmLength(double km) {
 /// Aplana el cadenamiento del proyecto (uno o varios bloques de
 /// Segmento/Tramo/Frente, cada uno con varios PK's) en filas del diagrama,
 /// calculando para cada km entero el % cubierto por predios de Gestión en
-/// estatus "Liberado" (fuente única: `Predio.estatusSimplificado` sobre
-/// `rangoEstatus`, no el flag `cop`).
+/// cuyo campo `cop` (columna "Liberación") está activo.
 ///
 /// El PK de cada fila se identifica por letra+numero (p.ej. "S13" =
 /// Segmento + numero_id "13"), el mismo formato que ya usa "Editar
@@ -263,7 +260,7 @@ List<CadenamientoFila> buildFilasCadenamiento(
           final solapeFin = math.min(pFin, segFin);
           final solape = solapeFin - solapeIni;
           if (solape <= 0) continue;
-          if (Predio.estatusSimplificado(p.rangoEstatus) == 'Liberado') {
+          if (p.cop) {
             liberadoLen += solape;
           }
         }

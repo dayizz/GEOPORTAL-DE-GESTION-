@@ -99,7 +99,7 @@ Widget buildAvanceDdvStatusBar({
         Row(
           mainAxisAlignment: MainAxisAlignment.spaceBetween,
           children: [
-            const Text('Estatus DDV', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w700)),
+            const Text('Liberación DDV', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w700)),
             Text('${fmt.format(total)} predios', style:  TextStyle(fontSize: 12, color: AppColors.textSecondary)),
           ],
         ),
@@ -256,8 +256,8 @@ Widget buildStackedPctBars({
 }
 
 /// Bloque reutilizable "título + dona + leyenda" para desgloses por
-/// categoría (Rango de Estatus, Tipo de Liberación).
-/// `borderColorFn` es opcional: "Rango de Estatus" lo usa para distinguir
+/// categoría (Estatus, Tipo de Liberación).
+/// `borderColorFn` es opcional: "Estatus" lo usa para distinguir
 /// pares de categorías que comparten color de relleno.
 Widget buildEstatusChartBlock({
   required String titulo,
