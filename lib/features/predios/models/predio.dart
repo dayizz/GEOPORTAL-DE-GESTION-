@@ -15,7 +15,15 @@ class Predio {
   final double? kmInicio;
   final double? kmFin;
   final double? kmLineales;
-  final double? kmEfectivos;
+  final double? _kmEfectivos;
+  double? get kmEfectivos => _kmEfectivos ?? calcularKmEfectivos(kmInicio, kmFin);
+
+  static double? calcularKmEfectivos(double? inicio, double? fin) {
+    if (inicio == null || fin == null || !inicio.isFinite || !fin.isFinite || fin < inicio) {
+      return null;
+    }
+    return double.parse((fin - inicio).toStringAsFixed(9));
+  }
   final double? superficie; // M2
   final double? superficieFirmada;
   final bool cop; // Convenio de Ocupación Previa
@@ -96,7 +104,7 @@ class Predio {
     this.kmInicio,
     this.kmFin,
     this.kmLineales,
-    this.kmEfectivos,
+    double? kmEfectivos,
     this.superficie,
     this.superficieFirmada,
     this.cop = false,
@@ -126,7 +134,7 @@ class Predio {
     this.rangoEstatus = 'No liberado',
     this.rangoEstatusFecha,
     this.polygonRefId,
-  });
+  }) : _kmEfectivos = kmEfectivos;
 
   factory Predio.fromMap(Map<String, dynamic> map) {
     String? pickText(List<String> keys) {
@@ -161,7 +169,7 @@ class Predio {
       if (compact.contains('FEDERAL')) return 'FEDERAL';
       if (compact.contains('GUBERNAMENTAL') || compact.contains('GUBERNAM') || compact.contains('GOBIERNO')) return 'GUBERNAMENTAL';
       if (compact.contains('PRIVAD') || compact == 'PRI') return 'PRIVADA';
-      return upper.isEmpty ? 'PRIVADA' : upper;
+      return upper.isEmpty ? 'DESCONOCIDO' : upper;
     }
 
     // Normalizar geometría: puede venir como string JSON o como Map
@@ -408,7 +416,7 @@ class Predio {
       kmInicio: kmInicio ?? this.kmInicio,
       kmFin: kmFin ?? this.kmFin,
       kmLineales: kmLineales ?? this.kmLineales,
-      kmEfectivos: kmEfectivos ?? this.kmEfectivos,
+      kmEfectivos: kmEfectivos ?? _kmEfectivos,
       superficie: superficie ?? this.superficie,
       superficieFirmada: superficieFirmada ?? this.superficieFirmada,
       cop: cop ?? this.cop,

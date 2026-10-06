@@ -42,7 +42,8 @@ class _PredioFormScreenState extends ConsumerState<PredioFormScreen> {
     'Viaducto',
     'DDV Troncal',
     'Carretera',
-    'SICA',
+    'Cruce/Transversal',
+    'ZICA',
     'Sin afectación',
   ];
 
@@ -163,7 +164,10 @@ class _PredioFormScreenState extends ConsumerState<PredioFormScreen> {
         _propietarioNombreCtrl.text = predio.propietarioNombre ?? '';
         _setTramoFromValue(predio.tramo);
         _tipoPropiedad = predio.tipoPropiedad;
-        _estructura = _estructuraOpciones.contains(predio.estructura) ? predio.estructura : null;
+        final estructura = predio.estructura?.trim().toUpperCase() == 'SICA'
+            ? 'ZICA'
+            : predio.estructura;
+        _estructura = _estructuraOpciones.contains(estructura) ? estructura : null;
         _proyecto = predio.proyecto;
         _cop = predio.cop;
         _poligonoInsertado = predio.poligonoInsertado;
@@ -478,7 +482,10 @@ class _PredioFormScreenState extends ConsumerState<PredioFormScreen> {
           municipio: _municipioCtrl.text.isEmpty ? null : _municipioCtrl.text.trim(),
           kmInicio: _kmInicioCtrl.text.isEmpty ? null : double.tryParse(_kmInicioCtrl.text),
           kmFin: _kmFinCtrl.text.isEmpty ? null : double.tryParse(_kmFinCtrl.text),
-          kmEfectivos: _kmEfectivosCtrl.text.isEmpty ? null : double.tryParse(_kmEfectivosCtrl.text),
+          kmEfectivos: double.tryParse(_kmEfectivosCtrl.text.trim()) ?? Predio.calcularKmEfectivos(
+            double.tryParse(_kmInicioCtrl.text.trim()),
+            double.tryParse(_kmFinCtrl.text.trim()),
+          ),
           superficie: _superficieCtrl.text.isEmpty ? null : double.tryParse(_superficieCtrl.text),
           superficieFirmada: _superficieFirmadaCtrl.text.trim().isEmpty
               ? null
@@ -526,7 +533,10 @@ class _PredioFormScreenState extends ConsumerState<PredioFormScreen> {
           municipio: _municipioCtrl.text.isEmpty ? null : _municipioCtrl.text.trim(),
           kmInicio: _kmInicioCtrl.text.isEmpty ? null : double.tryParse(_kmInicioCtrl.text),
           kmFin: _kmFinCtrl.text.isEmpty ? null : double.tryParse(_kmFinCtrl.text),
-          kmEfectivos: _kmEfectivosCtrl.text.isEmpty ? null : double.tryParse(_kmEfectivosCtrl.text),
+          kmEfectivos: double.tryParse(_kmEfectivosCtrl.text.trim()) ?? Predio.calcularKmEfectivos(
+            double.tryParse(_kmInicioCtrl.text.trim()),
+            double.tryParse(_kmFinCtrl.text.trim()),
+          ),
           superficie: _superficieCtrl.text.isEmpty ? null : double.tryParse(_superficieCtrl.text),
           superficieFirmada: _superficieFirmadaCtrl.text.trim().isEmpty
               ? null
@@ -573,7 +583,10 @@ class _PredioFormScreenState extends ConsumerState<PredioFormScreen> {
           'municipio': _municipioCtrl.text.isEmpty ? null : _municipioCtrl.text.trim(),
           'km_inicio': _kmInicioCtrl.text.isEmpty ? null : double.tryParse(_kmInicioCtrl.text),
           'km_fin': _kmFinCtrl.text.isEmpty ? null : double.tryParse(_kmFinCtrl.text),
-          'km_efectivos': _kmEfectivosCtrl.text.isEmpty ? null : double.tryParse(_kmEfectivosCtrl.text),
+          'km_efectivos': double.tryParse(_kmEfectivosCtrl.text.trim()) ?? Predio.calcularKmEfectivos(
+            double.tryParse(_kmInicioCtrl.text.trim()),
+            double.tryParse(_kmFinCtrl.text.trim()),
+          ),
           'superficie': _superficieCtrl.text.isEmpty ? null : double.tryParse(_superficieCtrl.text),
           'superficie_firmada': _superficieFirmadaCtrl.text.trim().isEmpty
               ? null

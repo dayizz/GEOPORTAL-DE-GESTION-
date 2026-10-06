@@ -1,3 +1,4 @@
+import 'dart:math' as math;
 import 'package:fl_chart/fl_chart.dart';
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
@@ -80,10 +81,12 @@ Widget buildAvanceDdvStatusBar({
   required int total,
   required int liberado,
   required int noLiberado,
+  int negociacion = 0,
 }) {
   final totalSafe = total <= 0 ? 1 : total;
   final pctLiber = (liberado / totalSafe).clamp(0.0, 1.0);
   final pctNoLib = (noLiberado / totalSafe).clamp(0.0, 1.0);
+  final pctNegociacion = (negociacion / totalSafe).clamp(0.0, 1.0);
   final fmt = NumberFormat('#,##0', 'es_MX');
 
   return Container(
@@ -99,7 +102,7 @@ Widget buildAvanceDdvStatusBar({
         Row(
           mainAxisAlignment: MainAxisAlignment.spaceBetween,
           children: [
-            const Text('Liberación DDV (según Estatus)', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w700)),
+            const Text('Liberación', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w700)),
             Text('${fmt.format(total)} predios', style:  TextStyle(fontSize: 12, color: AppColors.textSecondary)),
           ],
         ),
@@ -112,15 +115,20 @@ Widget buildAvanceDdvStatusBar({
               children: [
                 if (pctLiber > 0)
                   Expanded(
-                    flex: (pctLiber * 100).round().clamp(1, 100),
+                    flex: liberado,
                     child: Container(color: AppColors.secondary),
+                  ),
+                if (pctNegociacion > 0)
+                  Expanded(
+                    flex: negociacion,
+                    child: Container(color: Colors.yellow.shade600),
                   ),
                 if (pctNoLib > 0)
                   Expanded(
-                    flex: (pctNoLib * 100).round().clamp(1, 100),
-                    child: Container(color: AppColors.warning),
+                    flex: noLiberado,
+                    child: Container(color: AppColors.danger),
                   ),
-                if (pctLiber == 0 && pctNoLib == 0) Expanded(child: Container(color: AppColors.border)),
+                if (pctLiber == 0 && pctNoLib == 0 && pctNegociacion == 0) Expanded(child: Container(color: AppColors.border)),
               ],
             ),
           ),
@@ -131,7 +139,8 @@ Widget buildAvanceDdvStatusBar({
           runSpacing: 8,
           children: [
             _ddvLegend('Liberado', AppColors.secondary, fmt.format(liberado), pctLiber),
-            _ddvLegend('No Liberado', AppColors.warning, fmt.format(noLiberado), pctNoLib),
+            _ddvLegend('Negociación', Colors.yellow.shade600, fmt.format(negociacion), pctNegociacion),
+            _ddvLegend('No Liberado', AppColors.danger, fmt.format(noLiberado), pctNoLib),
           ],
         ),
       ],
@@ -273,13 +282,15 @@ Widget buildEstatusChartBlock({
       Text(titulo, style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w600)),
       const SizedBox(height: 12),
       SizedBox(
-        height: 200,
+        height: math.max(200.0, entries.length * 28.0),
         child: Row(
           children: [
             Expanded(
               child: PieChart(
                 PieChartData(
-                  sections: entries.map((e) {
+                  sections: total == 0
+                      ? [PieChartSectionData(color: AppColors.border, value: 1, title: 'Sin datos', radius: 60)]
+                      : entries.where((e) => e.value > 0).map((e) {
                     final pct = total > 0 ? e.value / total * 100 : 0.0;
                     return PieChartSectionData(
                       color: colorFn(e.key),

@@ -210,7 +210,8 @@ const List<String> estructuraOpciones = [
   'Viaducto',
   'DDV Troncal',
   'Carretera',
-  'SICA',
+  'Cruce/Transversal',
+  'ZICA',
   'Sin afectación',
 ];
 
@@ -224,6 +225,7 @@ String? normalizeEstructura(String? value) {
   final limpio = _limpiarBase(value);
   if (limpio.isEmpty) return null;
   final limpioUpper = limpio.toUpperCase();
+  if (limpioUpper == 'SICA') return 'ZICA';
   for (final opcion in estructuraOpciones) {
     if (stripAccents(opcion).toUpperCase() == limpioUpper) return opcion;
   }

@@ -1,8 +1,13 @@
+import '../utils/resumen_tramos.dart';
+import 'widgets/resumen_tramos_widget.dart';
+import 'dart:math' as math;
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../features/predios/providers/predios_provider.dart';
 import '../../../features/predios/models/predio.dart';
 import '../../../core/constants/app_colors.dart';
+import '../../../core/utils/import_normalization.dart' as norm;
 import '../../../shared/widgets/app_scaffold.dart';
 import '../../auth/providers/auth_provider.dart';
 import '../../estructura/models/proyecto_item.dart';
@@ -24,6 +29,8 @@ class _BalanceScreenState extends ConsumerState<BalanceScreen> {
 
   String _proyectoActual = 'TQI';
   String? _segmentoActual;
+  GrupoInfraestructuraBalance _grupoActual =
+      GrupoInfraestructuraBalance.predios;
   List<String> _segmentos = [];
 
   @override
@@ -52,9 +59,14 @@ class _BalanceScreenState extends ConsumerState<BalanceScreen> {
     final clave = predator.claveCatastral.trim().toUpperCase();
     final compact = clave.replaceAll(RegExp(r'[^A-Z0-9]'), '');
     if (compact.startsWith('TQI') || compact.startsWith('QI')) return 'TQI';
-    if (compact.startsWith('TSNL') || compact.startsWith('SNL') || compact.startsWith('SL')) return 'TSNL';
+    if (compact.startsWith('TSNL') ||
+        compact.startsWith('SNL') ||
+        compact.startsWith('SL'))
+      return 'TSNL';
     if (compact.startsWith('TAP') || compact.startsWith('AP')) return 'TAP';
-    if (compact.startsWith('TMQ') || compact.startsWith('TQM') || compact.startsWith('QM')) {
+    if (compact.startsWith('TMQ') ||
+        compact.startsWith('TQM') ||
+        compact.startsWith('QM')) {
       return 'TMQ';
     }
 
@@ -118,7 +130,11 @@ class _BalanceScreenState extends ConsumerState<BalanceScreen> {
           child: Column(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
-              const Icon(Icons.error_outline, size: 48, color: AppColors.danger),
+              const Icon(
+                Icons.error_outline,
+                size: 48,
+                color: AppColors.danger,
+              ),
               const SizedBox(height: 12),
               Text(e.toString()),
               const SizedBox(height: 16),
@@ -134,41 +150,81 @@ class _BalanceScreenState extends ConsumerState<BalanceScreen> {
               .where((predator) => _predioProyecto(predator) == proyectoActivo)
               .toList();
 
+          final proyectosItems =
+              ref.watch(proyectosProvider).valueOrNull ??
+              const <ProyectoItem>[];
+          ProyectoItem? proyectoItemActivo;
+          for (final p in proyectosItems) {
+            if (p.nombre.trim().toUpperCase() == proyectoActivo) {
+              proyectoItemActivo = p;
+              break;
+            }
+          }
+
           // Extraer segmentos únicos del proyecto
           final segmentos = proyectoPredios
               .where((p) => p.tramo.isNotEmpty)
-              .map((p) => p.tramo)
+              .map((p) => claveTramoBalance(p.tramo, proyectoItemActivo))
+              .where((codigo) => codigo != 'S15' && codigo != '15' && codigo != 'S15A')
               .toSet()
               .toList();
           segmentos.sort();
 
           // Actualizar la lista de segmentos si cambió el proyecto
-          if (_segmentos.isEmpty || _segmentos.length != segmentos.length ||
-              (!_segmentoActualExists(segmentos))) {
+          {
             _segmentos = segmentos;
-            if (_segmentoActual != null && !segmentos.contains(_segmentoActual)) {
+            if (_segmentoActual != null &&
+                !segmentos.contains(_segmentoActual)) {
               _segmentoActual = null;
             }
           }
 
           // Filtrar por segmento si hay uno seleccionado
-          final prediosFiltrados = _segmentoActual != null
-              ? proyectoPredios.where((p) => p.tramo == _segmentoActual).toList()
+          final registrosFiltrados = _segmentoActual != null
+              ? proyectoPredios
+                    .where((p) => claveTramoBalance(p.tramo, proyectoItemActivo) == _segmentoActual)
+                    .toList()
               : proyectoPredios;
 
-          final total = prediosFiltrados.length;
-          final porTramo = groupCountBy(prediosFiltrados, (predator) => predator.tramo);
+          final grupos = agruparInfraestructuraBalance(registrosFiltrados);
+          final prediosFiltrados = grupos[_grupoActual]!;
+          final tituloGrupo = switch (_grupoActual) {
+            GrupoInfraestructuraBalance.estacionesEdificios =>
+              'Estaciones y Edificios Auxiliares',
+            GrupoInfraestructuraBalance.cruces => 'Cruces/Transversales',
+            _ => 'Predios',
+          };
+          final enInvestigacion =
+              grupos[GrupoInfraestructuraBalance.nulos]!.length +
+              grupos[GrupoInfraestructuraBalance.sinAfectacion]!.length +
+              grupos[GrupoInfraestructuraBalance.otros]!.length;
 
-          final prediosLiberados = prediosFiltrados.where(predioEstaLiberado).length;
+          final total = prediosFiltrados.length;
+
+
+          final prediosLiberados = prediosFiltrados
+              .where(predioEstaLiberado)
+              .length;
+          final prediosNegociacion = prediosFiltrados.where((p) =>
+              norm.stripAccents(p.rangoEstatus).trim().toUpperCase() ==
+              'NEGOCIACION').length;
           final prediosNoLiberados = (total - prediosLiberados).clamp(0, total);
 
-          final kmEfectivosLiberados = prediosFiltrados
+          final usaM2 = _grupoActual == GrupoInfraestructuraBalance.estacionesEdificios;
+          final unidad = usaM2 ? 'm²' : 'km';
+          double medidaPredio(Predio p) => medidaPredioBalance(p, usaM2: usaM2);
+          final medidaLiberada = prediosFiltrados
               .where(predioEstaLiberado)
-              .fold<double>(0, (sum, predator) => sum + (predator.kmEfectivos ?? 0));
+              .fold<double>(
+                0,
+                (sum, predator) => sum + medidaPredio(predator),
+              );
 
           // Agrupar por tipo de liberación usando primero el valor capturado
           // en Gestión ("Sin tipo"/"Sin liberación" ya consolidados).
-          final porTipoLiberacion = porTipoLiberacionConsolidado(prediosFiltrados);
+          final porTipoLiberacion = tiposDeRegistrosLiberados(
+            prediosFiltrados,
+          );
 
           // Distribución por "Estatus" (Liberado, Negociación,
           // Posible DOT, Instrucción UVSR, Con ingreso, No liberado, L
@@ -178,46 +234,48 @@ class _BalanceScreenState extends ConsumerState<BalanceScreen> {
             groupCountBy(prediosFiltrados, (predator) => predator.rangoEstatus),
           );
 
-          final prediosPrivada = prediosFiltrados.where((p) => p.tipoPropiedad.toUpperCase() == 'PRIVADA').toList();
-          final prediosSocialDominio = prediosFiltrados
-              .where((p) => p.tipoPropiedad.toUpperCase() == 'SOCIAL' || p.tipoPropiedad.toUpperCase() == 'DOMINIO PLENO')
+          final prediosPrivada = prediosFiltrados
+              .where((p) => p.tipoPropiedad.trim().toUpperCase() == 'PRIVADA')
               .toList();
+          final prediosSocialDominio = prediosFiltrados
+              .where(
+                (p) => const {
+                  'SOCIAL',
+                  'DOMINIO PLENO',
+                  'FEDERAL',
+                  'GUBERNAMENTAL',
+                  'ESTATAL',
+                  'MUNICIPAL',
+                }.contains(p.tipoPropiedad.trim().toUpperCase()),
+              )
+              .toList();
+          final propiedadDesconocida = prediosFiltrados.where((p) => const {
+            'DESCONOCIDO', '', 'NULO', 'NULL',
+          }.contains(p.tipoPropiedad.trim().toUpperCase())).length;
 
-          // "Avance Mensual"/"Avance Semanal": % acumulado de predios en
-          // que Gestión muestra como liberados al cierre de cada periodo.
-          final pctLiberadoMensual = cumulativePctLiberado(
-            prediosFiltrados,
-            finesDePeriodo: List.generate(
-              sparkMonths,
-              (i) {
-                final now = DateTime.now();
-                final mes = DateTime(now.year, now.month - (sparkMonths - 1 - i));
-                return DateTime(mes.year, mes.month + 1, 1);
-              },
-            ),
+          // Base: suma de los cadenamientos registrados, sin exigir longitud
+          // a los códigos que solo existen en los datos de Gestión.
+            final medidaTotal = usaM2
+              ? prediosFiltrados.fold<double>(0, (sum, p) => sum + medidaPredio(p))
+              : resumenTramosBalance(proyectoItemActivo, [])
+              .fold<double>(0, (sum, fila) => sum + (fila.longitud ?? 0));
+          final ahora = DateTime.now();
+          final meses = List.generate(6, (i) => DateTime(ahora.year, ahora.month - 5 + i));
+          final semanas = List.generate(12, (i) => weekStart(i, totalSemanas: 12));
+          final pctLiberadoMensual = pctMedidaLiberadaPorPeriodo(
+            prediosFiltrados, medidaTotal: medidaTotal, medida: medidaPredio, inicios: meses,
+            fines: meses.map((m) => DateTime(m.year, m.month + 1)).toList(),
           );
-          final pctLiberadoSemanal = cumulativePctLiberado(
-            prediosFiltrados,
-            finesDePeriodo: List.generate(
-              sparkWeeks,
-              (i) => weekStart(i).add(const Duration(days: 7)),
-            ),
+          final pctLiberadoSemanal = pctMedidaLiberadaPorPeriodo(
+            prediosFiltrados, medidaTotal: medidaTotal, medida: medidaPredio, inicios: semanas,
+            fines: semanas.map((s) => s.add(const Duration(days: 7))).toList(),
           );
 
-          // Diagrama por Cadenamiento: usa el cadenamiento registrado en
-          // Estructura > Proyectos para el proyecto activo. Se calcula sobre
-          // TODOS los predios del proyecto (no respeta el filtro de
-          // segmento de arriba), ya que el propio diagrama ya desglosa por
-          // segmento/tramo/frente.
-          final proyectosItems = ref.watch(proyectosProvider).valueOrNull ?? const <ProyectoItem>[];
-          ProyectoItem? proyectoItemActivo;
-          for (final p in proyectosItems) {
-            if (p.nombre.trim().toUpperCase() == proyectoActivo) {
-              proyectoItemActivo = p;
-              break;
-            }
-          }
-          final filasCadenamiento = buildFilasCadenamiento(proyectoItemActivo, proyectoPredios);
+          // El cadenamiento utiliza el mismo grupo y segmento que los indicadores.
+          final filasCadenamiento = buildFilasCadenamiento(
+            proyectoItemActivo,
+            prediosFiltrados,
+          );
 
           return SingleChildScrollView(
             padding: const EdgeInsets.fromLTRB(20, 14, 20, 20),
@@ -225,118 +283,199 @@ class _BalanceScreenState extends ConsumerState<BalanceScreen> {
               mainAxisAlignment: MainAxisAlignment.start,
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Align(
-                  alignment: Alignment.centerLeft,
-                  child: Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      const Text(
-                        'Proyecto:',
-                        style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: Color(0xFF555555)),
-                      ),
-                      const SizedBox(width: 10),
-                      DropdownButtonHideUnderline(
-                        child: Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
-                          decoration: BoxDecoration(
-                            border: Border.all(color: const Color(0xFFDCDCDC)),
-                            borderRadius: BorderRadius.circular(10),
-                            color: Colors.white,
-                          ),
-                          child: DropdownButton<String>(
-                            value: proyectoActivo,
-                            isDense: true,
-                            icon: const Icon(Icons.keyboard_arrow_down_rounded, size: 18, color: Color(0xFF9A9A9A)),
-                            style: const TextStyle(fontSize: 14, color: Colors.black87, fontWeight: FontWeight.w600),
-                            items: proyectosDisponibles
-                                .map((p) => DropdownMenuItem(value: p, child: Text(p)))
-                                .toList(),
-                            onChanged: (v) {
-                              if (v != null) {
-                                setState(() {
-                                  _proyectoActual = v;
-                                  _segmentoActual = null;
-                                });
-                              }
-                            },
+                Wrap(
+                  spacing: 24,
+                  runSpacing: 12,
+                  crossAxisAlignment: WrapCrossAlignment.center,
+                  children: [
+                    Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        const Text(
+                          'Proyecto:',
+                          style: TextStyle(
+                            fontSize: 13,
+                            fontWeight: FontWeight.w600,
+                            color: Color(0xFF555555),
                           ),
                         ),
-                      ),
-                    ],
-                  ),
+                        const SizedBox(width: 10),
+                        DropdownButtonHideUnderline(
+                          child: Container(
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 12,
+                              vertical: 4,
+                            ),
+                            decoration: BoxDecoration(
+                              border: Border.all(
+                                color: const Color(0xFFDCDCDC),
+                              ),
+                              borderRadius: BorderRadius.circular(10),
+                              color: Colors.white,
+                            ),
+                            child: DropdownButton<String>(
+                              value: proyectoActivo,
+                              isDense: true,
+                              icon: const Icon(
+                                Icons.keyboard_arrow_down_rounded,
+                                size: 18,
+                                color: Color(0xFF9A9A9A),
+                              ),
+                              style: const TextStyle(
+                                fontSize: 14,
+                                color: Colors.black87,
+                                fontWeight: FontWeight.w600,
+                              ),
+                              items: proyectosDisponibles
+                                  .map(
+                                    (p) => DropdownMenuItem(
+                                      value: p,
+                                      child: Text(p),
+                                    ),
+                                  )
+                                  .toList(),
+                              onChanged: (v) {
+                                if (v != null) {
+                                  setState(() {
+                                    _proyectoActual = v;
+                                    _segmentoActual = null;
+                                  });
+                                }
+                              },
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+
+                    Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        const Text('Ver como:', style: TextStyle(fontSize: 13)),
+                        const SizedBox(width: 10),
+                        DropdownButtonHideUnderline(
+                          child: Container(
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 12,
+                              vertical: 4,
+                            ),
+                            decoration: BoxDecoration(
+                              border: Border.all(
+                                color: const Color(0xFFDCDCDC),
+                              ),
+                              borderRadius: BorderRadius.circular(10),
+                              color: Colors.white,
+                            ),
+                            child: DropdownButton<String>(
+                              value:
+                                  _grupoActual ==
+                                      GrupoInfraestructuraBalance
+                                          .estacionesEdificios
+                                  ? 'grupo:estaciones'
+                                  : _grupoActual ==
+                                        GrupoInfraestructuraBalance.cruces
+                                  ? 'grupo:cruces'
+                                  : _segmentoActual == null
+                                  ? 'Proyecto'
+                                  : 'segmento:$_segmentoActual',
+                              isDense: true,
+                              style: const TextStyle(
+                                fontSize: 14,
+                                color: Colors.black87,
+                              ),
+                              items: [
+                                const DropdownMenuItem(
+                                  value: 'Proyecto',
+                                  child: Text('Proyecto'),
+                                ),
+                                const DropdownMenuItem(
+                                  value: 'grupo:estaciones',
+                                  child: Text(
+                                    'Estaciones y Edificios Auxiliares',
+                                  ),
+                                ),
+                                const DropdownMenuItem(
+                                  value: 'grupo:cruces',
+                                  child: Text('Cruces/Transversales'),
+                                ),
+                                ..._segmentos.map(
+                                  (s) => DropdownMenuItem(
+                                    value: 'segmento:$s',
+                                    child: Text(s),
+                                  ),
+                                ),
+                              ],
+                              onChanged: (v) {
+                                setState(() {
+                                  _grupoActual = switch (v) {
+                                    'grupo:estaciones' =>
+                                      GrupoInfraestructuraBalance
+                                          .estacionesEdificios,
+                                    'grupo:cruces' =>
+                                      GrupoInfraestructuraBalance.cruces,
+                                    _ => GrupoInfraestructuraBalance.predios,
+                                  };
+                                  _segmentoActual =
+                                      v != null && v.startsWith('segmento:')
+                                      ? v.substring('segmento:'.length)
+                                      : null;
+                                });
+                              },
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ],
                 ),
 
                 const SizedBox(height: 24),
-                Text('Avance de Proyecto', style: Theme.of(context).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.bold)),
-                const SizedBox(height: 16),
-
-                LayoutBuilder(
-                  builder: (context, constraints) {
-                    final cards = [
-                      buildKpiPanel(
-                        label: 'Total Predios',
-                        value: fmtInt.format(total),
-                        color: AppColors.primary,
-                        icon: Icons.terrain_outlined,
-                      ),
-                      buildKpiPanel(
-                        label: 'Km Efectivos Liberados',
-                        value: fmtInt.format(kmEfectivosLiberados),
-                        color: AppColors.secondary,
-                        icon: Icons.straighten,
-                      ),
-                      buildKpiPanel(
-                        label: 'Predios Liberados',
-                        value: fmtInt.format(prediosLiberados),
-                        color: AppColors.secondary,
-                        icon: Icons.check_circle_outline,
-                      ),
-                      buildKpiPanel(
-                        label: 'Pendiente Liberar',
-                        value: fmtInt.format(prediosNoLiberados),
-                        color: AppColors.warning,
-                        icon: Icons.pending_outlined,
-                      ),
-                    ];
-
-                    final isWide = constraints.maxWidth >= 920;
-                    if (isWide) {
-                      return SizedBox(
-                        height: 96,
-                        child: Row(
-                          crossAxisAlignment: CrossAxisAlignment.stretch,
-                          children: [
-                            for (var i = 0; i < cards.length; i++) ...[
-                              Expanded(child: cards[i]),
-                              if (i < cards.length - 1) const SizedBox(width: 12),
-                            ],
-                          ],
-                        ),
-                      );
-                    }
-
-                    return Column(
-                      children: [
-                        Row(
-                          children: [
-                            Expanded(child: cards[0]),
-                            const SizedBox(width: 12),
-                            Expanded(child: cards[1]),
-                          ],
-                        ),
-                        const SizedBox(height: 12),
-                        Row(
-                          children: [
-                            Expanded(child: cards[2]),
-                            const SizedBox(width: 12),
-                            Expanded(child: cards[3]),
-                          ],
-                        ),
-                      ],
-                    );
-                  },
+                Text(
+                  'Avance general',
+                  style: Theme.of(
+                    context,
+                  ).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.bold),
                 ),
-
+                const SizedBox(height: 4),
+                Text(tituloGrupo),
+                const SizedBox(height: 12),
+                _panelesConteo([
+                  buildKpiPanel(
+                    label: 'Total de registros clasificados',
+                    value: fmtInt.format(total),
+                    color: AppColors.primary,
+                    icon: Icons.summarize_outlined,
+                  ),
+                  buildKpiPanel(
+                    label: 'Total no liberados',
+                    value: fmtInt.format(prediosNoLiberados),
+                    color: AppColors.danger,
+                    icon: Icons.pending_outlined,
+                  ),
+                  buildKpiPanel(
+                    label: 'Total liberados',
+                    value: fmtInt.format(prediosLiberados),
+                    color: AppColors.secondary,
+                    icon: Icons.check_circle_outline,
+                  ),
+                  Tooltip(
+                    message:
+                        'Nulos, sin afectación y sin clasificación del proyecto o segmento seleccionado.',
+                    child: buildKpiPanel(
+                      label: 'Total de registros en investigación',
+                      value: fmtInt.format(enInvestigacion),
+                      color: Colors.grey,
+                      icon: Icons.help_outline,
+                    ),
+                  ),
+                  buildKpiPanel(
+                    label: usaM2 ? 'M² liberados' : 'Km efectivos liberados',
+                    value:
+                      '${NumberFormat('#,##0.###', 'es_MX').format(medidaLiberada)} $unidad',
+                    color: AppColors.secondary,
+                    icon: Icons.straighten,
+                  ),
+                ]),
                 const SizedBox(height: 20),
                 // Barra de Avance DDV - extendida en toda la fila
                 IntrinsicHeight(
@@ -347,7 +486,13 @@ class _BalanceScreenState extends ConsumerState<BalanceScreen> {
                         child: Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
-                            const Text('Avance DDV', style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600)),
+                            const Text(
+                              'Avance de liberación',
+                              style: TextStyle(
+                                fontSize: 16,
+                                fontWeight: FontWeight.w600,
+                              ),
+                            ),
                             const SizedBox(height: 12),
                             if (total == 0)
                               Container(
@@ -357,14 +502,21 @@ class _BalanceScreenState extends ConsumerState<BalanceScreen> {
                                   borderRadius: BorderRadius.circular(14),
                                   border: Border.all(color: AppColors.border),
                                 ),
-                                child:  Row(
+                                child: Row(
                                   mainAxisAlignment: MainAxisAlignment.center,
                                   children: [
-                                    Icon(Icons.info_outline, color: AppColors.textSecondary, size: 20),
+                                    Icon(
+                                      Icons.info_outline,
+                                      color: AppColors.textSecondary,
+                                      size: 20,
+                                    ),
                                     SizedBox(width: 8),
                                     Text(
-                                      'No hay predios cargados para este proyecto',
-                                      style: TextStyle(color: AppColors.textSecondary, fontSize: 14),
+                                      'No hay registros para la selección actual',
+                                      style: TextStyle(
+                                        color: AppColors.textSecondary,
+                                        fontSize: 14,
+                                      ),
                                     ),
                                   ],
                                 ),
@@ -374,7 +526,8 @@ class _BalanceScreenState extends ConsumerState<BalanceScreen> {
                                 context: context,
                                 total: total,
                                 liberado: prediosLiberados,
-                                noLiberado: prediosNoLiberados,
+                                noLiberado: prediosNoLiberados - prediosNegociacion,
+                                negociacion: prediosNegociacion,
                               ),
                           ],
                         ),
@@ -400,9 +553,12 @@ class _BalanceScreenState extends ConsumerState<BalanceScreen> {
                       final tipoLiberacionBlock = porTipoLiberacion.isEmpty
                           ? null
                           : buildEstatusChartBlock(
-                              titulo: 'Tipo de Liberación',
+                              titulo: 'Tipo de liberación (liberados)',
                               entries: porTipoLiberacion.entries.toList(),
-                              total: porTipoLiberacion.values.fold(0, (a, b) => a + b),
+                              total: porTipoLiberacion.values.fold(
+                                0,
+                                (a, b) => a + b,
+                              ),
                               colorFn: tipoLiberacionColor,
                               fmtInt: fmtInt,
                             );
@@ -413,8 +569,11 @@ class _BalanceScreenState extends ConsumerState<BalanceScreen> {
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
                             if (rangoBlock != null) Expanded(child: rangoBlock),
-                            if (rangoBlock != null && tipoLiberacionBlock != null) const SizedBox(width: 24),
-                            if (tipoLiberacionBlock != null) Expanded(child: tipoLiberacionBlock),
+                            if (rangoBlock != null &&
+                                tipoLiberacionBlock != null)
+                              const SizedBox(width: 24),
+                            if (tipoLiberacionBlock != null)
+                              Expanded(child: tipoLiberacionBlock),
                           ],
                         );
                       }
@@ -422,7 +581,8 @@ class _BalanceScreenState extends ConsumerState<BalanceScreen> {
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
                           if (rangoBlock != null) rangoBlock,
-                          if (rangoBlock != null && tipoLiberacionBlock != null) const SizedBox(height: 20),
+                          if (rangoBlock != null && tipoLiberacionBlock != null)
+                            const SizedBox(height: 20),
                           if (tipoLiberacionBlock != null) tipoLiberacionBlock,
                         ],
                       );
@@ -430,40 +590,13 @@ class _BalanceScreenState extends ConsumerState<BalanceScreen> {
                   ),
 
                 const SizedBox(height: 32),
-                Text('Avance por Tipo de Propiedad', style: Theme.of(context).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.bold)),
-                const SizedBox(height: 16),
-
-                Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    const Text('Ver por:', style: TextStyle(fontSize: 13)),
-                    const SizedBox(width: 10),
-                    DropdownButtonHideUnderline(
-                      child: Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
-                        decoration: BoxDecoration(
-                          border: Border.all(color: const Color(0xFFDCDCDC)),
-                          borderRadius: BorderRadius.circular(10),
-                          color: Colors.white,
-                        ),
-                        child: DropdownButton<String>(
-                          value: _segmentoActual ?? 'Proyecto',
-                          isDense: true,
-                          style: const TextStyle(fontSize: 14, color: Colors.black87),
-                          items: [
-                            const DropdownMenuItem(value: 'Proyecto', child: Text('Proyecto')),
-                            ..._segmentos.map((s) => DropdownMenuItem(value: s, child: Text(s))),
-                          ],
-                          onChanged: (v) {
-                            setState(() {
-                              _segmentoActual = v == 'Proyecto' ? null : v;
-                            });
-                          },
-                        ),
-                      ),
-                    ),
-                  ],
+                Text(
+                  'Avance por Tipo de Propiedad',
+                  style: Theme.of(
+                    context,
+                  ).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.bold),
                 ),
+                const SizedBox(height: 16),
 
                 const SizedBox(height: 20),
 
@@ -471,43 +604,60 @@ class _BalanceScreenState extends ConsumerState<BalanceScreen> {
                   crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
                     buildTipoPropiedadCard(
-                      titulo: 'Propiedad Privada',
+                      titulo: 'PRIVADA',
                       predios: prediosPrivada,
                       fmtInt: fmtInt,
                     ),
                     const SizedBox(height: 16),
                     buildTipoPropiedadCard(
-                      titulo: 'Propiedad social/Dominio pleno',
+                      titulo: 'SOCIAL/DOMINIO PLENO',
                       predios: prediosSocialDominio,
                       fmtInt: fmtInt,
                     ),
+                    if (propiedadDesconocida > 0) ...[
+                      const SizedBox(height: 12),
+                      Text(
+                        'Registros con tipo de propiedad desconocido o nulo: ${fmtInt.format(propiedadDesconocida)}. No incluidos en los grupos anteriores.',
+                        style: const TextStyle(color: Colors.grey, fontSize: 12),
+                      ),
+                    ],
                   ],
                 ),
 
                 const SizedBox(height: 32),
-                Text('Avance por Segmento/Tramo/Frente', style: Theme.of(context).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.bold)),
+                Text(
+                  'Avance por Segmento/Tramo/Frente',
+                  style: Theme.of(
+                    context,
+                  ).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.bold),
+                ),
                 const SizedBox(height: 12),
-                buildLiberadoLegend(),
-                const SizedBox(height: 16),
-
-                if (porTramo.isEmpty)
-                   Text('Sin datos de tramos para este proyecto', style: TextStyle(color: AppColors.textSecondary))
-                else
-                  buildStackedPctBars(
-                    labels: porTramo.keys.toList(),
-                    pctLiberadoPorBarra: pctLiberadoPorTramo(porTramo, prediosFiltrados),
-                  ),
+                ResumenTramosWidget(
+                  usaM2: usaM2,
+                  filas: resumenTramosBalance(proyectoItemActivo, prediosFiltrados,
+                    segmento: _segmentoActual),
+                ),
 
                 const SizedBox(height: 32),
-                Text('Diagrama por Cadenamiento', style: Theme.of(context).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.bold)),
+                if (!usaM2) ...[
+                Text(
+                  'Diagrama por Cadenamiento',
+                  style: Theme.of(
+                    context,
+                  ).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.bold),
+                ),
                 const SizedBox(height: 4),
-                 Text(
+                Text(
                   'Cada celda = 1 km. Color según % liberado dentro del km, calculado en vivo desde Gestión.',
-                  style: TextStyle(fontSize: 12, color: AppColors.textSecondary, fontStyle: FontStyle.italic),
+                  style: TextStyle(
+                    fontSize: 12,
+                    color: AppColors.textSecondary,
+                    fontStyle: FontStyle.italic,
+                  ),
                 ),
                 const SizedBox(height: 16),
                 if (filasCadenamiento.isEmpty)
-                   Text(
+                  Text(
                     'Sin cadenamiento registrado para este proyecto (Configuración > Estructura > Proyectos).',
                     style: TextStyle(color: AppColors.textSecondary),
                   )
@@ -518,38 +668,45 @@ class _BalanceScreenState extends ConsumerState<BalanceScreen> {
                   ],
 
                 const SizedBox(height: 12),
-                Text('Avance Mensual', style: Theme.of(context).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.bold)),
+                ],
+                Text('Avance por ${usaM2 ? 'm²' : 'km efectivos'} liberados · ${usaM2 ? 'Superficie' : 'Longitud'} total: ${NumberFormat('#,##0.###', 'es_MX').format(medidaTotal)} $unidad'),
                 const SizedBox(height: 12),
-                buildLiberadoLegend(),
-                const SizedBox(height: 16),
-
-                buildStackedPctBars(
-                  labels: List.generate(sparkMonths, (i) {
-                    final now = DateTime.now();
-                    final mes = DateTime(now.year, now.month - (sparkMonths - 1 - i));
-                    return mesAbrev[mes.month - 1];
-                  }),
-                  pctLiberadoPorBarra: pctLiberadoMensual,
+                Wrap(
+                  spacing: 20,
+                  runSpacing: 8,
+                  children: [
+                    buildLegendItem('$unidad liberados en el periodo', AppColors.secondary),
+                    buildLegendItem(usaM2 ? 'Resto de la superficie total' : 'Resto de la longitud total', AppColors.danger),
+                  ],
                 ),
-                 Text(
-                  '% acumulado liberado según Estatus (como en Gestión), al cierre de cada mes',
-                  style: TextStyle(fontSize: 11, color: AppColors.textSecondary),
-                ),
-
-                const SizedBox(height: 32),
-                Text('Avance Semanal', style: Theme.of(context).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.bold)),
                 const SizedBox(height: 12),
-                buildLiberadoLegend(),
-                const SizedBox(height: 16),
-
-                buildStackedPctBars(
-                  labels: List.generate(sparkWeeks, (i) => DateFormat('d/MM').format(weekStart(i))),
-                  pctLiberadoPorBarra: pctLiberadoSemanal,
-                ),
-                 Text(
-                  '% acumulado liberado según Estatus (como en Gestión), al cierre de cada semana',
-                  style: TextStyle(fontSize: 11, color: AppColors.textSecondary),
-                ),
+                LayoutBuilder(builder: (context, constraints) => SingleChildScrollView(
+                  scrollDirection: Axis.horizontal,
+                  child: SizedBox(width: math.max(1100.0, constraints.maxWidth),
+                    child: Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                      Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                        Text('Avance mensual · Últimos 6 meses', style: Theme.of(context).textTheme.titleLarge),
+                        const SizedBox(height: 16),
+                        buildStackedPctBars(
+                          labels: meses.map((m) => DateFormat('MM/yyyy').format(m)).toList(),
+                          pctLiberadoPorBarra: pctLiberadoMensual,
+                        ),
+                      ])),
+                      const SizedBox(width: 24),
+                      Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                        Text('Avance semanal · Últimas 12 semanas', style: Theme.of(context).textTheme.titleLarge),
+                        const SizedBox(height: 16),
+                        buildStackedPctBars(
+                          labels: semanas.map((s) => DateFormat('d/MM').format(s)).toList(),
+                          pctLiberadoPorBarra: pctLiberadoSemanal,
+                        ),
+                      ])),
+                    ]),
+                  ),
+                )),
+                const SizedBox(height: 8),
+                Text('$unidad liberados en cada periodo / ${usaM2 ? 'superficie' : 'longitud'} total × 100. Sin registros de liberación en el periodo: 0%.',
+                  style: TextStyle(fontSize: 11, color: Colors.grey)),
 
                 const SizedBox(height: 40),
               ],
@@ -560,8 +717,27 @@ class _BalanceScreenState extends ConsumerState<BalanceScreen> {
     );
   }
 
-  bool _segmentoActualExists(List<String> segmentos) {
-    if (_segmentoActual == null) return true;
-    return segmentos.contains(_segmentoActual);
+  Widget _panelesConteo(List<Widget> paneles) {
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final ancho = math.max(constraints.maxWidth, 1000.0);
+        return SingleChildScrollView(
+          scrollDirection: Axis.horizontal,
+          child: SizedBox(
+            width: ancho,
+            height: 96,
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                for (var i = 0; i < paneles.length; i++) ...[
+                  Expanded(child: paneles[i]),
+                  if (i < paneles.length - 1) const SizedBox(width: 12),
+                ],
+              ],
+            ),
+          ),
+        );
+      },
+    );
   }
 }

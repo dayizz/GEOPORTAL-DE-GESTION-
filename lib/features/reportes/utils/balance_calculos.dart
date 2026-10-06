@@ -18,13 +18,82 @@ import '../../predios/models/predio.dart';
 const sparkMonths = 6;
 const sparkWeeks = 8;
 
+enum GrupoInfraestructuraBalance {
+  predios,
+  estacionesEdificios,
+  sinAfectacion,
+  nulos,
+  cruces,
+  otros,
+}
+
+/// Cada registro pertenece a un solo grupo, antes de calcular su avance.
+GrupoInfraestructuraBalance grupoInfraestructuraBalance(String? estructura) {
+  final tipo = norm
+      .stripAccents(estructura ?? '')
+      .trim()
+      .toUpperCase()
+      .replaceAll(RegExp(r'\s+'), ' ');
+  switch (tipo) {
+    case 'ESTACION':
+    case 'EDIFICIO AUXILIAR':
+    case 'ZICA':
+    case 'SICA': // Nombre anterior de ZICA.
+      return GrupoInfraestructuraBalance.estacionesEdificios;
+    case 'VIADUCTO':
+    case 'TRONCAL':
+    case 'DDV TRONCAL':
+    case 'CARRETERA':
+      return GrupoInfraestructuraBalance.predios;
+    case 'SIN AFECTACION':
+      return GrupoInfraestructuraBalance.sinAfectacion;
+    case 'CRUCE/TRANSVERSAL':
+    case 'CRUCES/TRANSVERSALES':
+      return GrupoInfraestructuraBalance.cruces;
+    case '':
+    case 'NULL':
+    case 'NULO':
+      return GrupoInfraestructuraBalance.nulos;
+    default:
+      return GrupoInfraestructuraBalance.otros;
+  }
+}
+
+Map<GrupoInfraestructuraBalance, List<Predio>> agruparInfraestructuraBalance(
+  Iterable<Predio> predios,
+) {
+  final grupos = {
+    for (final grupo in GrupoInfraestructuraBalance.values) grupo: <Predio>[],
+  };
+  for (final predio in predios) {
+    grupos[grupoInfraestructuraBalance(predio.estructura)]!.add(predio);
+  }
+  return grupos;
+}
+
 /// Gestión muestra la columna "Liberación" derivándola del campo "Estatus".
 /// Balance usa esta misma regla para que sus conteos coincidan con la tabla,
 /// incluso en registros antiguos donde el booleano `cop` quedó desfasado.
 bool predioEstaLiberado(Predio predio) =>
     Predio.estatusSimplificado(predio.rangoEstatus) == 'Liberado';
 
-const mesAbrev = ['Ene', 'Feb', 'Mar', 'Abr', 'May', 'Jun', 'Jul', 'Ago', 'Sep', 'Oct', 'Nov', 'Dic'];
+double medidaPredioBalance(Predio predio, {required bool usaM2}) =>
+  usaM2 ? (predio.superficie ?? 0) : (predio.kmEfectivos ?? 0);
+
+const mesAbrev = [
+  'Ene',
+  'Feb',
+  'Mar',
+  'Abr',
+  'May',
+  'Jun',
+  'Jul',
+  'Ago',
+  'Sep',
+  'Oct',
+  'Nov',
+  'Dic',
+];
 
 /// Una columna de 1 km dentro de una fila de cadenamiento: `km` es el
 /// kilometro entero que abre el segmento `[km, km+1)` y `pct` el porcentaje
@@ -50,7 +119,10 @@ class CadenamientoFila {
   });
 }
 
-Map<String, int> groupCountBy<T>(Iterable<Predio> predios, T Function(Predio) selector) {
+Map<String, int> groupCountBy<T>(
+  Iterable<Predio> predios,
+  T Function(Predio) selector,
+) {
   final result = <String, int>{};
   for (final predio in predios) {
     final key = selector(predio).toString();
@@ -91,6 +163,38 @@ List<double> cumulativePctLiberado(
     }).length;
     return acumulados / total * 100;
   }).toList();
+}
+
+/// Porcentaje acumulado por kilómetros; conserva el criterio temporal de Balance.
+List<double> cumulativePctKmLiberado(
+  List<Predio> predios, {
+  required double longitudKm,
+  required List<DateTime> finesDePeriodo,
+}) {
+  if (longitudKm <= 0) return List.filled(finesDePeriodo.length, 0);
+  return finesDePeriodo.map((fin) {
+    final km = predios.where((p) => predioEstaLiberado(p) &&
+        (p.copFecha ?? p.updatedAt ?? p.createdAt).isBefore(fin))
+        .fold<double>(0, (sum, p) => sum + (p.kmEfectivos ?? 0));
+    return km / longitudKm * 100;
+  }).toList();
+}
+
+List<double> pctMedidaLiberadaPorPeriodo(List<Predio> predios, {
+  required double medidaTotal,
+  double Function(Predio)? medida,
+  required List<DateTime> inicios,
+  required List<DateTime> fines,
+}) {
+  return List.generate(inicios.length, (i) {
+    if (medidaTotal <= 0) return 0.0;
+    final medidaLiberada = predios.where((p) {
+      final fecha = p.copFecha ?? p.rangoEstatusFecha;
+      return predioEstaLiberado(p) && fecha != null &&
+          !fecha.isBefore(inicios[i]) && fecha.isBefore(fines[i]);
+    }).fold<double>(0, (sum, p) => sum + (medida?.call(p) ?? p.kmEfectivos ?? 0));
+    return medidaLiberada / medidaTotal * 100;
+  });
 }
 
 String _normalizeLiberacionToken(String? raw) {
@@ -144,7 +248,37 @@ Map<String, int> porTipoLiberacionConsolidado(List<Predio> predios) {
   return porTipoLiberacion;
 }
 
+/// Conteo del tipo capturado únicamente para registros liberados.
+Map<String, int> tiposDeRegistrosLiberados(Iterable<Predio> predios) {
+  final conteos = <String, int>{
+    'COP': 0,
+    'DOT': 0,
+    'AOP': 0,
+    'EXPROPIACION': 0,
+    'ANUENCIA POR OFICIO': 0,
+    'MINUTA': 0,
+    'SIN TIPO': 0,
+  };
+  for (final predio in predios.where(predioEstaLiberado)) {
+    var tipo = norm.stripAccents(predio.tipoLiberacion ?? '')
+        .trim().toUpperCase().replaceAll(RegExp(r'\s+'), ' ');
+    if (tipo == 'ESPROPIACION') tipo = 'EXPROPIACION';
+    if (!conteos.containsKey(tipo)) tipo = 'SIN TIPO';
+    conteos[tipo] = conteos[tipo]! + 1;
+  }
+  return conteos;
+}
+
 Color tipoLiberacionColor(String tipo) {
+  switch (norm.stripAccents(tipo).trim().toUpperCase()) {
+    case 'EXPROPIACION':
+    case 'ESPROPIACION':
+      return Colors.deepPurple;
+    case 'ANUENCIA POR OFICIO':
+      return Colors.teal;
+    case 'MINUTA':
+      return Colors.orange;
+  }
   final normalized = _normalizeTipoLiberacionLabel(tipo);
   switch (normalized) {
     case 'COP':
@@ -166,7 +300,10 @@ Color tipoLiberacionColor(String tipo) {
 
 /// % liberado por segmento/tramo/frente (0-100), en el mismo orden que
 /// `porTramo.keys`, usando la misma regla que la columna "Liberación" de Gestión.
-List<double> pctLiberadoPorTramo(Map<String, int> porTramo, List<Predio> todosPredios) {
+List<double> pctLiberadoPorTramo(
+  Map<String, int> porTramo,
+  List<Predio> todosPredios,
+) {
   return porTramo.entries.map((e) {
     final liberadosTramo = todosPredios
         .where((p) => p.tramo == e.key && predioEstaLiberado(p))
@@ -181,17 +318,16 @@ List<double> pctLiberadoPorTramo(Map<String, int> porTramo, List<Predio> todosPr
 /// renders. Cualquier valor fuera del catálogo (dato legado) se agrega al
 /// final, ordenado alfabéticamente.
 List<MapEntry<String, int>> ordenarRangoEstatus(Map<String, int> porRango) {
-  final orden = Predio.rangoEstatusOpciones;
-  final entries = porRango.entries.toList();
-  entries.sort((a, b) {
-    final ia = orden.indexOf(a.key);
-    final ib = orden.indexOf(b.key);
-    final ra = ia == -1 ? orden.length : ia;
-    final rb = ib == -1 ? orden.length : ib;
-    if (ra != rb) return ra.compareTo(rb);
-    return a.key.compareTo(b.key);
-  });
-  return entries;
+  final conteos = {for (final opcion in Predio.rangoEstatusOpciones) opcion: 0};
+  String normalizar(String valor) => norm.stripAccents(valor).trim().toUpperCase();
+  for (final entry in porRango.entries) {
+    final coincidencias = Predio.rangoEstatusOpciones.where(
+      (opcion) => normalizar(opcion) == normalizar(entry.key),
+    );
+    final clave = coincidencias.isEmpty ? entry.key : coincidencias.first;
+    conteos[clave] = (conteos[clave] ?? 0) + entry.value;
+  }
+  return conteos.entries.toList();
 }
 
 /// Extrae solo los dígitos de un T/F/S o numero_id de cadenamiento y los
@@ -240,12 +376,19 @@ List<CadenamientoFila> buildFilasCadenamiento(
       if (codigo.isEmpty) continue;
 
       final numeroPk = soloDigitos(pk.numeroId);
+      final esAlfanumerico = RegExp(r'[a-zA-Z]').hasMatch(pk.numeroId);
       final predios = proyectoPredios
-          .where((p) =>
-              numeroPk.isNotEmpty &&
-              soloDigitos(p.tramo) == numeroPk &&
-              p.kmInicio != null &&
-              p.kmFin != null)
+          .where(
+            (p) =>
+                (esAlfanumerico
+                    ? p.tramo.trim().toUpperCase() == codigo
+                    : numeroPk.isNotEmpty && soloDigitos(p.tramo) == numeroPk &&
+                        !RegExp(r'[a-zA-Z]').hasMatch(
+                          p.tramo.trim().replaceFirst(RegExp(r'^[STFstf]'), ''),
+                        )) &&
+                p.kmInicio != null &&
+                p.kmFin != null,
+          )
           .toList(growable: false);
 
       final primeraColumna = ini.floor();
@@ -275,12 +418,14 @@ List<CadenamientoFila> buildFilasCadenamiento(
         columnas.add(CadenamientoColumna(km, pct));
       }
 
-      filas.add(CadenamientoFila(
-        codigo: codigo,
-        pkInicioKm: ini,
-        pkFinKm: fin,
-        columnas: columnas,
-      ));
+      filas.add(
+        CadenamientoFila(
+          codigo: codigo,
+          pkInicioKm: ini,
+          pkFinKm: fin,
+          columnas: columnas,
+        ),
+      );
     }
   }
 

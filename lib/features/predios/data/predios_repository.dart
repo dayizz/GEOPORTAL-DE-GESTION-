@@ -101,7 +101,7 @@ class PrediosRepository {
           '',
       'propietario_nombre': raw['propietario_nombre']?.toString(),
       'tramo': raw['tramo']?.toString() ?? '',
-      'tipo_propiedad': raw['tipo_propiedad']?.toString() ?? 'PRIVADA',
+      'tipo_propiedad': raw['tipo_propiedad']?.toString() ?? 'DESCONOCIDO',
       'estructura': (raw['estructura'] ?? raw['tipo_infraestructura'] ?? raw['TIPO DE INFRAESTRUCTURA'])?.toString(),
       'ejido': raw['ejido']?.toString(),
       'estado': raw['estado']?.toString(),

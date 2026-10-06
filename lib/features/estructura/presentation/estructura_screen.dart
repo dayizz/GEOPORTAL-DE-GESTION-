@@ -1285,15 +1285,14 @@ class _ProyectosTab extends ConsumerWidget {
                         ),
                         const SizedBox(width: 4),
                         SizedBox(
-                          width: 64,
+                          width: 100,
                           child: TextField(
                             controller: fila.numeroIdCtrl,
-                            keyboardType: TextInputType.number,
+                            keyboardType: TextInputType.text,
                             inputFormatters: [
-                              FilteringTextInputFormatter.digitsOnly,
-                              LengthLimitingTextInputFormatter(2),
+                              FilteringTextInputFormatter.allow(RegExp(r'[a-zA-Z0-9]')),
                             ],
-                            decoration: const InputDecoration(labelText: 'Num. ID', isDense: true),
+                            decoration: const InputDecoration(labelText: 'Num. ID', hintText: 'Ej. 12A', isDense: true),
                           ),
                         ),
                         const SizedBox(width: 8),
