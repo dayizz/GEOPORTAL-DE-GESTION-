@@ -8,10 +8,12 @@ import '../../utils/balance_calculos.dart';
 class ResumenTramosWidget extends StatelessWidget {
   final List<ResumenTramoBalance> filas;
   final bool usaM2;
+  final bool esCruces;
   const ResumenTramosWidget({
     super.key,
     required this.filas,
     this.usaM2 = false,
+    this.esCruces = false,
   });
 
   @override
@@ -22,7 +24,9 @@ class ResumenTramosWidget extends StatelessWidget {
             0,
             (s, p) => s + medidaPredioBalance(p, usaM2: true),
           )
-        : f.longitud;
+        : esCruces
+            ? f.predios.fold<double>(0, (s, p) => s + (p.kmEfectivos ?? 0))
+            : f.longitud;
     double liberado(ResumenTramoBalance f) => usaM2
         ? f.predios
               .where(predioEstaLiberado)
@@ -46,7 +50,10 @@ class ResumenTramosWidget extends StatelessWidget {
     final detalleMunicipios = usaM2
         ? resumenMunicipioInfraestructuraBalance(filas)
         : const <ResumenMunicipioInfraestructuraBalance>[];
-    final columnas = <DataColumn>[
+    final columnas = esCruces ? [
+      for (final titulo in ['T/F/S', 'Cruces o\ntransversales', 'Km inicio', 'Km fin', 'Longitud total\n(km)', 'Longitud liberada\n(km)'])
+        DataColumn(label: Text(titulo, style: const TextStyle(fontWeight: FontWeight.bold))),
+    ] : <DataColumn>[
       DataColumn(
         label: Text(
           'T/F/S',
@@ -99,7 +106,16 @@ class ResumenTramosWidget extends StatelessWidget {
           ),
         ),
     ];
-    final filasTabla = usaM2
+    final filasTabla = esCruces ? [
+      for (final fila in filas) DataRow(cells: [
+        DataCell(Text(fila.codigo)),
+        DataCell(Text('${fila.predios.length}')),
+        DataCell(Text(formatMedida(fila.inicio))),
+        DataCell(Text(formatMedida(fila.fin))),
+        DataCell(Text(formatMedida(total(fila)))),
+        DataCell(Text(formatMedida(liberado(fila)))),
+      ]),
+    ] : usaM2
         ? [
             for (final detalle in detalleMunicipios)
               DataRow(
@@ -136,28 +152,46 @@ class ResumenTramosWidget extends StatelessWidget {
         Text(
           usaM2
               ? 'Avance de m² = superficie de registros liberados / superficie total × 100.'
-              : 'Avance de km = km efectivos liberados / longitud del cadenamiento × 100.',
+              : esCruces
+                  ? 'Longitud total: suma de km efectivos de los cruces. Longitud liberada: suma de los liberados. Km inicio y fin: límites del T/F/S.'
+                  : 'Avance de km = km efectivos liberados / longitud del cadenamiento × 100.',
         ),
-        const SizedBox(height: 12),
+        const SizedBox(height: 6),
+        Wrap(spacing: 12, runSpacing: 4, children: [
+          for (final entry in <String, Color>{
+            '<25%': AppColors.danger, '25–<50%': Colors.orange,
+            '50–<75%': Colors.yellow.shade700, '≥75%': AppColors.secondary,
+          }.entries)
+            Row(mainAxisSize: MainAxisSize.min, children: [
+              Container(width: 8, height: 8, color: entry.value),
+              const SizedBox(width: 4),
+              Text(entry.key, style: const TextStyle(fontSize: 10)),
+            ]),
+        ]),
+        const SizedBox(height: 8),
         LayoutBuilder(
           builder: (context, constraints) => SingleChildScrollView(
             scrollDirection: Axis.horizontal,
             child: SizedBox(
-              width: math.max(1350.0, constraints.maxWidth),
+              width: math.max(1150.0, constraints.maxWidth),
               child: Row(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Expanded(
                     flex: 7,
                     child: DataTable(
-                      columnSpacing: 12,
+                      columnSpacing: 8,
+                      dataRowMinHeight: 32,
+                      dataRowMaxHeight: 36,
+                      dataTextStyle: TextStyle(fontSize: 11, color: AppColors.textPrimary),
+                      headingTextStyle: TextStyle(fontSize: 11, color: AppColors.textPrimary),
                       horizontalMargin: 8,
-                      headingRowHeight: 64,
+                      headingRowHeight: 48,
                       columns: columnas,
                       rows: filasTabla,
                     ),
                   ),
-                  const SizedBox(width: 24),
+                  const SizedBox(width: 16),
                   Expanded(
                     flex: 4,
                     child: Column(
@@ -168,24 +202,25 @@ class ResumenTramosWidget extends StatelessWidget {
                           '$unidad liberados por T/F/S',
                           style: const TextStyle(fontWeight: FontWeight.bold),
                         ),
-                        const SizedBox(height: 20),
+                        const SizedBox(height: 12),
                         for (final f in filas)
                           Padding(
-                            padding: const EdgeInsets.only(bottom: 14),
+                            padding: const EdgeInsets.only(bottom: 8),
                             child: Column(
                               crossAxisAlignment: CrossAxisAlignment.start,
                               children: [
                                 Text(
                                   '${f.codigo}: ${formatMedida(liberado(f))} $unidad · ${pct(porcentaje(f))}',
+                                  style: const TextStyle(fontSize: 11),
                                 ),
-                                const SizedBox(height: 6),
+                                const SizedBox(height: 4),
                                 LinearProgressIndicator(
                                   value: ((porcentaje(f) ?? 0) / 100).clamp(
                                     0.0,
                                     1.0,
                                   ),
-                                  minHeight: 16,
-                                  color: AppColors.secondary,
+                                  minHeight: 10,
+                                  color: colorSemaforoAvance(porcentaje(f)),
                                   backgroundColor: AppColors.border,
                                   borderRadius: BorderRadius.circular(4),
                                 ),
@@ -200,7 +235,7 @@ class ResumenTramosWidget extends StatelessWidget {
             ),
           ),
         ),
-        if (!usaM2 && filas.any((f) => f.longitud == null))
+        if (!usaM2 && !esCruces && filas.any((f) => f.longitud == null))
           const Padding(
             padding: EdgeInsets.only(top: 8),
             child: Text(
@@ -211,4 +246,12 @@ class ResumenTramosWidget extends StatelessWidget {
       ],
     );
   }
+}
+
+Color colorSemaforoAvance(double? porcentaje) {
+  if (porcentaje == null) return Colors.grey;
+  if (porcentaje < 25) return AppColors.danger;
+  if (porcentaje < 50) return Colors.orange;
+  if (porcentaje < 75) return Colors.yellow.shade700;
+  return AppColors.secondary;
 }

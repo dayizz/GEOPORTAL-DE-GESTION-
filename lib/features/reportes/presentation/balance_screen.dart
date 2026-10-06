@@ -278,7 +278,9 @@ class _BalanceScreenState extends ConsumerState<BalanceScreen> {
           final filasCadenamiento = buildFilasCadenamiento(
             proyectoItemActivo,
             prediosFiltrados,
-          );
+          ).where((fila) => _segmentoActual == null ||
+              claveTramoBalance(fila.codigo, proyectoItemActivo) ==
+              claveTramoBalance(_segmentoActual!, proyectoItemActivo)).toList();
 
           return SingleChildScrollView(
             padding: const EdgeInsets.fromLTRB(20, 14, 20, 20),
@@ -664,6 +666,7 @@ class _BalanceScreenState extends ConsumerState<BalanceScreen> {
                 ),
                 const SizedBox(height: 12),
                 ResumenTramosWidget(
+                  esCruces: _grupoActual == GrupoInfraestructuraBalance.cruces,
                   usaM2: usaM2,
                   filas: resumenTramosBalance(proyectoItemActivo, prediosFiltrados,
                     segmento: _segmentoActual),

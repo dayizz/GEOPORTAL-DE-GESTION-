@@ -554,16 +554,21 @@ Widget buildCadenamientoCelda(CadenamientoColumna columna, double ancho) {
         const SizedBox(height: 2),
         Container(
           width: ancho,
-          height: 26,
+          height: 44,
           alignment: Alignment.center,
           decoration: BoxDecoration(
             color: color.withValues(alpha: 0.22),
             borderRadius: BorderRadius.circular(4),
             border: Border.all(color: color.withValues(alpha: 0.45)),
           ),
-          child: Text(
-            '${(columna.pct * 100).round()}%',
-            style: TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: color),
+          child: RotatedBox(
+            quarterTurns: 3,
+            child: Text(
+              '${(columna.pct * 100).round()}%',
+              maxLines: 1,
+              softWrap: false,
+              style: TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: color),
+            ),
           ),
         ),
       ],
