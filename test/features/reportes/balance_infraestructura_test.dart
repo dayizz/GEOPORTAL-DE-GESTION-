@@ -78,6 +78,32 @@ void main() {
     );
   });
 
+  test('desglosa estaciones, edificios auxiliares y ZICA sin alterar el total', () {
+    Predio registro(String estructura) => Predio(
+      id: estructura,
+      claveCatastral: estructura,
+      tramo: 'T1',
+      tipoPropiedad: 'PRIVADA',
+      createdAt: DateTime(2026),
+      estructura: estructura,
+    );
+    final estacionesEdificios = [
+      registro('Estación'),
+      registro('ESTACIONES'),
+      registro('Edificio auxiliar'),
+      registro('Edificios auxiliares'),
+      registro('ZICA'),
+      registro('SICA'),
+    ];
+    final conteos = conteoCategoriasEstacionesBalance(estacionesEdificios);
+
+    expect(conteos[CategoriaEstacionesBalance.estaciones], 2);
+    expect(conteos[CategoriaEstacionesBalance.edificiosAuxiliares], 2);
+    expect(conteos[CategoriaEstacionesBalance.zica], 2);
+    expect(conteos.values.fold<int>(0, (total, conteo) => total + conteo),
+        estacionesEdificios.length);
+  });
+
   test('el balance usa superficie para estaciones y km efectivos para predios', () {
     final estacion = Predio(
       id: 'estacion', claveCatastral: '1', tramo: 'T1',

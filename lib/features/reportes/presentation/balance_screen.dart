@@ -200,6 +200,9 @@ class _BalanceScreenState extends ConsumerState<BalanceScreen> {
               grupos[GrupoInfraestructuraBalance.otros]!.length;
 
           final total = prediosFiltrados.length;
+          final conteosEstaciones = conteoCategoriasEstacionesBalance(
+            prediosFiltrados,
+          );
 
 
           final prediosLiberados = prediosFiltrados
@@ -446,6 +449,34 @@ class _BalanceScreenState extends ConsumerState<BalanceScreen> {
                     color: AppColors.primary,
                     icon: Icons.summarize_outlined,
                   ),
+                  if (usaM2) ...[
+                    buildKpiPanel(
+                      label: 'Predios para estaciones',
+                      value: fmtInt.format(
+                        conteosEstaciones[CategoriaEstacionesBalance.estaciones],
+                      ),
+                      color: AppColors.secondary,
+                      icon: Icons.train_outlined,
+                    ),
+                    buildKpiPanel(
+                      label: 'Predios para edificios auxiliares',
+                      value: fmtInt.format(
+                        conteosEstaciones[
+                          CategoriaEstacionesBalance.edificiosAuxiliares
+                        ],
+                      ),
+                      color: AppColors.primary,
+                      icon: Icons.business_outlined,
+                    ),
+                    buildKpiPanel(
+                      label: 'Predios para ZICA',
+                      value: fmtInt.format(
+                        conteosEstaciones[CategoriaEstacionesBalance.zica],
+                      ),
+                      color: AppColors.warning,
+                      icon: Icons.location_city_outlined,
+                    ),
+                  ],
                   buildKpiPanel(
                     label: 'Total no liberados',
                     value: fmtInt.format(prediosNoLiberados),
@@ -720,7 +751,10 @@ class _BalanceScreenState extends ConsumerState<BalanceScreen> {
   Widget _panelesConteo(List<Widget> paneles) {
     return LayoutBuilder(
       builder: (context, constraints) {
-        final ancho = math.max(constraints.maxWidth, 1000.0);
+        final ancho = math.max(
+          constraints.maxWidth,
+          paneles.length > 5 ? 1380.0 : 1000.0,
+        );
         return SingleChildScrollView(
           scrollDirection: Axis.horizontal,
           child: SizedBox(

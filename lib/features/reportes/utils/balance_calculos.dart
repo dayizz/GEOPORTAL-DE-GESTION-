@@ -27,19 +27,37 @@ enum GrupoInfraestructuraBalance {
   otros,
 }
 
+enum CategoriaEstacionesBalance { estaciones, edificiosAuxiliares, zica }
+
+String _normalizarEstructuraBalance(String? estructura) => norm
+    .stripAccents(estructura ?? '')
+    .trim()
+    .toUpperCase()
+    .replaceAll(RegExp(r'\s+'), ' ');
+
+CategoriaEstacionesBalance? categoriaEstacionesBalance(String? estructura) {
+  switch (_normalizarEstructuraBalance(estructura)) {
+    case 'ESTACION':
+    case 'ESTACIONES':
+      return CategoriaEstacionesBalance.estaciones;
+    case 'EDIFICIO AUXILIAR':
+    case 'EDIFICIOS AUXILIARES':
+      return CategoriaEstacionesBalance.edificiosAuxiliares;
+    case 'ZICA':
+    case 'SICA':
+      return CategoriaEstacionesBalance.zica;
+    default:
+      return null;
+  }
+}
+
 /// Cada registro pertenece a un solo grupo, antes de calcular su avance.
 GrupoInfraestructuraBalance grupoInfraestructuraBalance(String? estructura) {
-  final tipo = norm
-      .stripAccents(estructura ?? '')
-      .trim()
-      .toUpperCase()
-      .replaceAll(RegExp(r'\s+'), ' ');
+  final tipo = _normalizarEstructuraBalance(estructura);
+  if (categoriaEstacionesBalance(estructura) != null) {
+    return GrupoInfraestructuraBalance.estacionesEdificios;
+  }
   switch (tipo) {
-    case 'ESTACION':
-    case 'EDIFICIO AUXILIAR':
-    case 'ZICA':
-    case 'SICA': // Nombre anterior de ZICA.
-      return GrupoInfraestructuraBalance.estacionesEdificios;
     case 'VIADUCTO':
     case 'TRONCAL':
     case 'DDV TRONCAL':
@@ -69,6 +87,19 @@ Map<GrupoInfraestructuraBalance, List<Predio>> agruparInfraestructuraBalance(
     grupos[grupoInfraestructuraBalance(predio.estructura)]!.add(predio);
   }
   return grupos;
+}
+
+Map<CategoriaEstacionesBalance, int> conteoCategoriasEstacionesBalance(
+  Iterable<Predio> predios,
+) {
+  final conteos = {
+    for (final categoria in CategoriaEstacionesBalance.values) categoria: 0,
+  };
+  for (final predio in predios) {
+    final categoria = categoriaEstacionesBalance(predio.estructura);
+    if (categoria != null) conteos[categoria] = conteos[categoria]! + 1;
+  }
+  return conteos;
 }
 
 /// Gestión muestra la columna "Liberación" derivándola del campo "Estatus".
