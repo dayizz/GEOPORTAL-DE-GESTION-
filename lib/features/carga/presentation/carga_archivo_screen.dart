@@ -1,3 +1,4 @@
+import '../../mapa/utils/trazo_metadata.dart';
 import 'dart:async';
 import 'dart:convert';
 import 'dart:math' as math;
@@ -63,6 +64,7 @@ class _CargaArchivoScreenState extends ConsumerState<CargaArchivoScreen> {
 
   // Encuesta previa de importacion
   String? _tipoArchivoImportacion; // geojson | xlsx
+  String _tipoLineaImportacion = tiposLinea.first;
   String? _contenidoGeoJsonImportacion; // predios | envolvente | pks
   String? _proyectoImportacion; // TQI | TSNL | TAP | TMQ
 
@@ -505,6 +507,7 @@ class _CargaArchivoScreenState extends ConsumerState<CargaArchivoScreen> {
         var tipo = initialTipo;
         var contenido = initialContenido;
         var proyecto = initialProyecto;
+        var tipoLinea = _tipoLineaImportacion;
 
         return StatefulBuilder(
           builder: (context, setModalState) {
@@ -565,6 +568,15 @@ class _CargaArchivoScreenState extends ConsumerState<CargaArchivoScreen> {
                       ),
                     ],
                     const SizedBox(height: 16),
+                    if (tipo == 'geojson' && contenido == 'envolvente') ...[
+                      DropdownButtonFormField<String>(
+                        value: tipoLinea,
+                        decoration: const InputDecoration(labelText: 'Tipo de línea', border: OutlineInputBorder()),
+                        items: tiposLinea.map((t) => DropdownMenuItem(value: t, child: Text(t))).toList(),
+                        onChanged: (v) => setModalState(() => tipoLinea = v ?? tipoLinea),
+                      ),
+                      const SizedBox(height: 16),
+                    ],
                     const Text(
                       '3. Proyecto al que pertenece',
                       style: TextStyle(fontWeight: FontWeight.w600),
@@ -602,6 +614,7 @@ class _CargaArchivoScreenState extends ConsumerState<CargaArchivoScreen> {
                   onPressed: proyecto == null
                       ? null
                       : () {
+                          _tipoLineaImportacion = tipoLinea;
                           Navigator.of(dialogContext).pop(
                             _ImportSurveyResult(
                               tipoArchivo: tipo,
@@ -863,7 +876,8 @@ class _CargaArchivoScreenState extends ConsumerState<CargaArchivoScreen> {
     final importedFiles = ref.read(cargaProvider);
     final file = importedFiles.firstWhere((f) => f.id == fileId);
     if (_isEnvolventeImport(fileName: file.name, features: file.features)) {
-      ref.read(importedFeaturesProvider.notifier).state = file.features;
+      ref.read(importedFeaturesProvider.notifier).state = combinarTrazos(
+        ref.read(importedFeaturesProvider), file.features);
       ref.read(pksPointFeaturesProvider.notifier).state = const [];
     } else if (_isPksPointImport(fileName: file.name, features: file.features)) {
       ref.read(pksPointFeaturesProvider.notifier).state = file.features;
@@ -1605,7 +1619,8 @@ class _CargaArchivoScreenState extends ConsumerState<CargaArchivoScreen> {
       );
 
       // ENVOLVENTE se renderiza solo en mapa; no pasa por Gestión.
-      ref.read(importedFeaturesProvider.notifier).state = normalizedFeatures;
+      ref.read(importedFeaturesProvider.notifier).state = combinarTrazos(
+        ref.read(importedFeaturesProvider), normalizedFeatures);
       ref.read(pksPointFeaturesProvider.notifier).state = const [];
       ref.read(importacionAsyncProvider.notifier).completar(
         total: normalizedFeatures.length,
@@ -1713,6 +1728,9 @@ class _CargaArchivoScreenState extends ConsumerState<CargaArchivoScreen> {
         '__import_kind': 'envolvente',
         '__envolvente': true,
         'categoria': 'ENVOLVENTE',
+        '__tipo_linea': _tipoLineaImportacion,
+        '__proyecto_trazo': _proyectoImportacion ?? proyectoTrazo(feature),
+        '__tfs_trazo': divisionTrazo(feature),
         if (bbox != null) '__bbox': bbox,
       };
 

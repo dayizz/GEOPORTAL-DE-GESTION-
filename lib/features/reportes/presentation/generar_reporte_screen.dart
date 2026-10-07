@@ -1,5 +1,6 @@
+import '../utils/balance_calculos.dart';
+import '../utils/resumen_tramos.dart';
 import 'dart:typed_data';
-import 'dart:math' as math;
 import 'package:flutter/material.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -71,9 +72,10 @@ class _GenerarReporteScreenState extends ConsumerState<GenerarReporteScreen> {
 
   Future<List<Uint8List>> _rasterizeWebPreview(Uint8List pdfBytes) async {
     final pages = <Uint8List>[];
-    await for (final page in Printing.raster(pdfBytes, pages: const [0, 1], dpi: 120)) {
+    // Renderizar las páginas que realmente existen: el reporte puede
+    // contener una sola hoja y no debe solicitar una segunda inexistente.
+    await for (final page in Printing.raster(pdfBytes, dpi: 120)) {
       pages.add(await page.toPng());
-      if (pages.length >= 2) break;
     }
     return pages;
   }
@@ -179,7 +181,7 @@ class _GenerarReporteScreenState extends ConsumerState<GenerarReporteScreen> {
 
   List<String> _segmentosDelProyecto(List<Predio> prediosProyecto) {
     final segmentos = prediosProyecto
-        .map((p) => p.tramo.trim())
+        .map((p) => claveTramoBalance(p.tramo))
         .where((t) => t.isNotEmpty && t != '-')
         .toSet()
         .toList();
@@ -189,9 +191,9 @@ class _GenerarReporteScreenState extends ConsumerState<GenerarReporteScreen> {
 
   String _origenNumericoLabel() {
     if (_datosNumericosDe == 'Segmento' && _segmentoSeleccionado != null) {
-      return 'Segmento (${_segmentoSeleccionado!})';
+      return 'T/F/S (${_segmentoSeleccionado!})';
     }
-    return 'Proyecto';
+    return _datosNumericosDe;
   }
 
   String _normalizarTextoPdf(String value, String fallback) {
@@ -201,125 +203,6 @@ class _GenerarReporteScreenState extends ConsumerState<GenerarReporteScreen> {
         .trimRight();
     if (cleaned.trim().isEmpty) return fallback;
     return cleaned;
-  }
-
-  String _buildDonutSvg({
-    required int completado,
-    required int total,
-    required String colorHex,
-  }) {
-    final progress = total > 0 ? (completado / total).clamp(0.0, 1.0) : 0.0;
-    const radius = 38.0;
-    final circumference = 2 * math.pi * radius;
-    final dash = circumference * progress;
-    final gap = circumference - dash;
-    final percent = (progress * 100).round();
-
-    return '''
-<svg xmlns="http://www.w3.org/2000/svg" width="120" height="120" viewBox="0 0 120 120">
-  <g transform="rotate(-90 60 60)">
-    <circle cx="60" cy="60" r="$radius" fill="none" stroke="#E5E7EB" stroke-width="14"/>
-    <circle cx="60" cy="60" r="$radius" fill="none" stroke="$colorHex" stroke-width="14" stroke-linecap="round" stroke-dasharray="$dash $gap"/>
-  </g>
-  <text x="60" y="58" text-anchor="middle" font-family="Helvetica" font-size="9" font-weight="700" fill="#111827">$percent%</text>
-  <text x="60" y="72" text-anchor="middle" font-family="Helvetica" font-size="9" fill="#6B7280">$completado/$total</text>
-</svg>
-''';
-  }
-
-  pw.Widget _buildPdfDonutCard({
-    required String titulo,
-    required int completado,
-    required int totalReferencia,
-  }) {
-    return pw.SizedBox(
-      height: 94,
-      child: pw.Column(
-        crossAxisAlignment: pw.CrossAxisAlignment.center,
-        children: [
-          pw.SizedBox(
-            height: 10,
-            child: pw.Center(
-              child: pw.Text(
-                titulo,
-                style: pw.TextStyle(fontSize: _fontSize, font: notoSansBold),
-                textAlign: pw.TextAlign.center,
-              ),
-            ),
-          ),
-          pw.SizedBox(height: 0),
-          pw.SizedBox(
-            width: 74,
-            height: 74,
-            child: pw.SvgImage(
-              svg: _buildDonutSvg(
-                completado: completado,
-                total: totalReferencia,
-                colorHex: '#611232',
-              ),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  pw.Widget _buildPdfTipoPropiedadSection({
-    required String titulo,
-    required List<Predio> predios,
-  }) {
-    final total = predios.length;
-    final liberados = predios.where((p) => p.cop).length;
-    final identificados = predios.where((p) => p.identificacion).length;
-    final levantados = predios.where((p) => p.levantamiento).length;
-    final negociados = predios.where((p) => p.negociacion).length;
-
-    return pw.Column(
-      crossAxisAlignment: pw.CrossAxisAlignment.start,
-      children: [
-        pw.SizedBox(
-          height: 9,
-          child: pw.Align(
-            alignment: pw.Alignment.topLeft,
-            child: pw.Text(
-              titulo,
-              style: pw.TextStyle(fontSize: _fontSize, font: notoSansBold),
-            ),
-          ),
-        ),
-        pw.SizedBox(
-          height: 9,
-          child: pw.Text(
-            'Total de predios: $total',
-            style: pw.TextStyle(fontSize: _fontSize, font: notoSansRegular),
-          ),
-        ),
-        pw.SizedBox(height: 16),
-        _buildPdfDonutCard(
-          titulo: 'Predios liberados',
-          completado: liberados,
-          totalReferencia: total,
-        ),
-        pw.SizedBox(height: 0),
-        _buildPdfDonutCard(
-          titulo: 'Predios con identificación',
-          completado: identificados,
-          totalReferencia: total,
-        ),
-        pw.SizedBox(height: 0),
-        _buildPdfDonutCard(
-          titulo: 'Predios con levantamiento',
-          completado: levantados,
-          totalReferencia: total,
-        ),
-        pw.SizedBox(height: 0),
-        _buildPdfDonutCard(
-          titulo: 'Predios con negociación',
-          completado: negociados,
-          totalReferencia: total,
-        ),
-      ],
-    );
   }
 
   /// Genera el PDF y guarda en bytes para previsualización
@@ -332,32 +215,33 @@ class _GenerarReporteScreenState extends ConsumerState<GenerarReporteScreen> {
       await _ensurePdfAssetsReady();
       final membretadaImage = _membretadaImage!;
 
-      final prediosAsync = ref.read(prediosListProvider);
-      final predios = prediosAsync.asData?.value ?? <Predio>[];
+      final predios = _datosNumericosDe == 'Ninguno' ? <Predio>[] : await ref.refresh(prediosMapaProvider.future);
       final prediosProyecto = predios.where((p) => _predioProyecto(p) == _proyectoActual).toList();
-      final segmentosDisponibles = _segmentosDelProyecto(prediosProyecto);
       final aplicarSegmento =
           _datosNumericosDe == 'Segmento' &&
-          _segmentoSeleccionado != null &&
-          segmentosDisponibles.contains(_segmentoSeleccionado);
+          _segmentoSeleccionado != null;
       final prediosBase = aplicarSegmento
-          ? prediosProyecto.where((p) => p.tramo.trim() == _segmentoSeleccionado).toList()
+          ? prediosProyecto.where((p) => claveTramoBalance(p.tramo) == _segmentoSeleccionado).toList()
           : prediosProyecto;
 
-      final totalPredios = prediosBase.length;
-      final conCop = prediosBase.where((p) => p.cop).length;
-      final sinCop = prediosBase.where((p) => !p.cop).length;
-      final kmEfectivosLiberados = prediosBase
-          .where((p) => p.cop)
+      final clasificados = prediosBase.where((p) => grupoInfraestructuraBalance(p.estructura) == GrupoInfraestructuraBalance.predios).toList();
+      final totalPredios = clasificados.length;
+      final conCop = clasificados.where(predioEstaLiberado).length;
+      final sinCop = totalPredios - conCop;
+      final kmEfectivosLiberados = clasificados.where(predioEstaLiberado)
           .fold<double>(0, (sum, p) => sum + (p.kmEfectivos ?? 0));
-      final superficieLiberada = prediosBase
-          .where((p) => p.cop)
-          .fold<double>(0, (sum, p) => sum + (p.superficie ?? 0));
-
-      final prediosPrivada = prediosBase.where((p) => p.tipoPropiedad.toUpperCase() == 'PRIVADA').toList();
-      final prediosSocialDominio = prediosBase
-          .where((p) => p.tipoPropiedad.toUpperCase() == 'SOCIAL' || p.tipoPropiedad.toUpperCase() == 'DOMINIO PLENO')
-          .toList();
+      final proyectos = await ref.read(proyectosProvider.future);
+      final coincidencias = proyectos.where(
+        (p) => p.nombre.trim().toUpperCase() == _proyectoActual,
+      );
+      final proyecto = coincidencias.isEmpty ? null : coincidencias.first;
+      final tramos = resumenTramosBalance(proyecto, const <Predio>[],
+        segmento: aplicarSegmento ? _segmentoSeleccionado : null);
+      final longitudes = tramos.where((t) => t.longitud != null).toList();
+      final formatoKm = NumberFormat('#,##0.###', 'es_MX');
+      final totalKmTexto = longitudes.isEmpty
+          ? 'Sin longitud registrada'
+          : '${formatoKm.format(longitudes.fold<double>(0, (s, t) => s + t.longitud!))} km';
 
       final pdf = pw.Document(
         theme: pw.ThemeData.withFont(
@@ -507,7 +391,7 @@ class _GenerarReporteScreenState extends ConsumerState<GenerarReporteScreen> {
                         ),
                         pw.SizedBox(height: 20),
                       ],
-                      pw.Column(
+                      if (_datosNumericosDe != 'Ninguno') pw.Column(
                         crossAxisAlignment: pw.CrossAxisAlignment.start,
                         children: [
                           pw.Text(
@@ -516,11 +400,10 @@ class _GenerarReporteScreenState extends ConsumerState<GenerarReporteScreen> {
                           ),
                           pw.SizedBox(height: 10),
                           pw.Text(
-                            'Total de predios: $totalPredios\n'
-                            'Liberados: $conCop\n'
-                            'No liberados: $sinCop\n'
-                            'KM efectivos liberados: ${NumberFormat('#,##0.00', 'es_MX').format(kmEfectivosLiberados)}\n'
-                            'Superficie liberada: ${NumberFormat('#,##0.00', 'es_MX').format(superficieLiberada)} m²',
+                            'Total de predios identificados (clasificados): $totalPredios\n'
+                            'Total de predios liberados: $conCop\n'
+                            'Total de predios no liberados: $sinCop\n'
+                            'Km efectivos liberados: ${formatoKm.format(kmEfectivosLiberados)} km/$totalKmTexto',
                             style: pw.TextStyle(
                               fontSize: _fontSize,
                               font: notoSansRegular,
@@ -529,69 +412,10 @@ class _GenerarReporteScreenState extends ConsumerState<GenerarReporteScreen> {
                           ),
                         ],
                       ),
-                    ],
-                  ),
-                ),
-              ],
-            );
-          },
-        ),
-      );
-
-      pdf.addPage(
-        pw.Page(
-          pageFormat: PdfPageFormat.letter,
-          margin: pw.EdgeInsets.zero,
-          build: (context) {
-            return pw.Stack(
-              children: [
-                pw.Positioned.fill(
-                  child: pw.Image(membretadaImage, fit: pw.BoxFit.fill),
-                ),
-                pw.Padding(
-                  padding: const pw.EdgeInsets.only(left: 60, right: 60, top: 100, bottom: 60),
-                  child: pw.Column(
-                    crossAxisAlignment: pw.CrossAxisAlignment.start,
-                    children: [
+                      pw.SizedBox(height: 25),
+                      pw.Center(child: pw.Text('ATENTAMENTE', style: pw.TextStyle(font: notoSansBold, fontSize: _fontSize))),
                       pw.SizedBox(height: 12),
-                      pw.Text(
-                        'Avance por tipo de propiedad',
-                        style: pw.TextStyle(fontSize: _fontSize, font: notoSansBold),
-                      ),
-                      pw.SizedBox(height: 8),
-                      pw.Row(
-                        crossAxisAlignment: pw.CrossAxisAlignment.start,
-                        children: [
-                          pw.Expanded(
-                            child: _buildPdfTipoPropiedadSection(
-                              titulo: 'Propiedad privada',
-                              predios: prediosPrivada,
-                            ),
-                          ),
-                          pw.SizedBox(width: 22),
-                          pw.Expanded(
-                            child: _buildPdfTipoPropiedadSection(
-                              titulo: 'Propiedad social / dominio pleno',
-                              predios: prediosSocialDominio,
-                            ),
-                          ),
-                        ],
-                      ),
-                      pw.SizedBox(height: 40),
-                      pw.Center(
-                        child: pw.Text(
-                          'ATENTAMENTE',
-                          style: pw.TextStyle(fontSize: _fontSize, font: notoSansBold),
-                        ),
-                      ),
-                      pw.SizedBox(height: 12),
-                      pw.Align(
-                        alignment: pw.Alignment.centerLeft,
-                        child: pw.Text(
-                          firmaIniciales,
-                          style: pw.TextStyle(fontSize: 4.5, font: notoSansRegular),
-                        ),
-                      ),
+                      pw.Text(firmaIniciales, style: pw.TextStyle(font: notoSansRegular, fontSize: 4.5)),
                     ],
                   ),
                 ),
@@ -649,9 +473,12 @@ class _GenerarReporteScreenState extends ConsumerState<GenerarReporteScreen> {
   Future<void> _generarPdf() async {
     // Siempre regenerar para evitar descargar una versión en caché.
     final pdfBytes = await _generarPreviewPdf();
-    if (pdfBytes == null) return;
-    _previewPdfBytes = pdfBytes;
-    _previewTimestamp = DateTime.now().millisecondsSinceEpoch;
+    if (pdfBytes == null || !mounted) return;
+    setState(() {
+      _previewPdfBytes = pdfBytes;
+      _previewTimestamp = DateTime.now().millisecondsSinceEpoch;
+      if (kIsWeb) _webPreviewImagesFuture = _rasterizeWebPreview(pdfBytes);
+    });
 
     try {
       // Generar nombre automático: REPORTE_NUMERO_PROYECTO_FECHA
@@ -759,7 +586,7 @@ class _GenerarReporteScreenState extends ConsumerState<GenerarReporteScreen> {
 
   /// Vista del formulario
   Widget _buildFormView(List<String> proyectosDisponibles) {
-    final prediosAsync = ref.watch(prediosListProvider);
+    final prediosAsync = ref.watch(prediosMapaProvider);
     final predios = prediosAsync.asData?.value ?? <Predio>[];
     final prediosProyecto = predios.where((p) => _predioProyecto(p) == _proyectoActual).toList();
     final segmentosDisponibles = _segmentosDelProyecto(prediosProyecto);
@@ -984,6 +811,12 @@ class _GenerarReporteScreenState extends ConsumerState<GenerarReporteScreen> {
                   ),
                   const SizedBox(height: 6),
                   RadioListTile<String>(
+                    dense: true, contentPadding: EdgeInsets.zero,
+                    value: 'Ninguno', groupValue: _datosNumericosDe,
+                    title: const Text('Ninguno'),
+                    onChanged: (v) => setState(() => _datosNumericosDe = v!),
+                  ),
+                  RadioListTile<String>(
                     dense: true,
                     contentPadding: EdgeInsets.zero,
                     value: 'Proyecto',
@@ -999,7 +832,7 @@ class _GenerarReporteScreenState extends ConsumerState<GenerarReporteScreen> {
                     contentPadding: EdgeInsets.zero,
                     value: 'Segmento',
                     groupValue: _datosNumericosDe,
-                    title: const Text('Segmento'),
+                    title: const Text('T/F/S'),
                     onChanged: (v) {
                       if (v == null) return;
                       setState(() => _datosNumericosDe = v);
@@ -1010,7 +843,7 @@ class _GenerarReporteScreenState extends ConsumerState<GenerarReporteScreen> {
                     DropdownButtonFormField<String>(
                       value: selectedSegmento,
                       decoration: const InputDecoration(
-                        labelText: 'Selecciona segmento',
+                        labelText: 'Selecciona T/F/S',
                         border: OutlineInputBorder(),
                       ),
                       items: segmentosDisponibles
@@ -1241,10 +1074,12 @@ class _GenerarReporteScreenState extends ConsumerState<GenerarReporteScreen> {
                 Container(
                   padding: const EdgeInsets.all(12),
                   color: Colors.white,
-                  child: Row(
+                  child: Wrap(
+                    spacing: 8,
+                    runSpacing: 6,
+                    crossAxisAlignment: WrapCrossAlignment.center,
                     children: [
                       const Icon(Icons.preview, size: 20),
-                      const SizedBox(width: 8),
                       const Text(
                         'Previsualización del Reporte',
                         style: TextStyle(
@@ -1252,7 +1087,6 @@ class _GenerarReporteScreenState extends ConsumerState<GenerarReporteScreen> {
                           fontSize: 16,
                         ),
                       ),
-                      const Spacer(),
                       Text(
                         'REPORTE_${_numeroReporte}_${_proyectoActual}_${DateFormat('yyMMdd').format(DateTime.now())}.pdf',
                         style: TextStyle(

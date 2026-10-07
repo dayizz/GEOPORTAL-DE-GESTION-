@@ -187,7 +187,7 @@ class ResumenTramosWidget extends StatelessWidget {
                       headingTextStyle: TextStyle(fontSize: 11, color: AppColors.textPrimary),
                       horizontalMargin: 8,
                       headingRowHeight: 48,
-                      columns: columnas,
+                      columns: columnas.map((c) => DataColumn(label: Expanded(child: c.label))).toList(),
                       rows: filasTabla,
                     ),
                   ),

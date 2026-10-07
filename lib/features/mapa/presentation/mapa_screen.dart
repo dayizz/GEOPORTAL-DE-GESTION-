@@ -1,3 +1,4 @@
+import '../utils/trazo_metadata.dart';
 import 'dart:convert';
 import 'dart:math' as math;
 import 'dart:typed_data';
@@ -118,7 +119,67 @@ class _MapaScreenState extends ConsumerState<MapaScreen> {
   /// Pixel ratio usado al capturar el mapa para descarga; entre más alto,
   /// mayor resolución/nitidez de la imagen exportada.
   static const double _capturaPixelRatio = 3.0;
-  static const Color _envolventeColor = Color(0xFFFF8C00);
+  // Inicialización diferida para estados que ya existían antes de una
+  // recarga en caliente que incorporó los controles de trazo.
+  Set<String>? _tiposTrazoOcultosState;
+  Set<String>? _proyectosTrazoOcultosState;
+  Set<String>? _divisionesTrazoOcultasState;
+  Set<String> get _tiposTrazoOcultos => _tiposTrazoOcultosState ??= <String>{};
+  Set<String> get _proyectosTrazoOcultos => _proyectosTrazoOcultosState ??= <String>{};
+  Set<String> get _divisionesTrazoOcultas => _divisionesTrazoOcultasState ??= <String>{};
+
+  bool _trazoVisible(Map<String, dynamic> feature) =>
+      !_tiposTrazoOcultos.contains(tipoLineaTrazo(feature)) &&
+      !_proyectosTrazoOcultos.contains(proyectoTrazo(feature)) &&
+      !_divisionesTrazoOcultas.contains('${proyectoTrazo(feature)}|${divisionTrazo(feature)}');
+
+  void _mostrarFiltradoTrazo() {
+    final features = ref.read(importedFeaturesProvider).where(_isEnvolventeFeature).toList();
+    final proyectos = features.map(proyectoTrazo).toSet().toList()..sort();
+    showDialog<void>(context: context, builder: (dialogContext) => StatefulBuilder(
+      builder: (context, setModal) {
+        void cambiar(Set<String> ocultos, String clave, bool visible) {
+          setState(() {
+            if (visible) { ocultos.remove(clave); } else { ocultos.add(clave); }
+            _lastImportedFeatures = null;
+          });
+          setModal(() {});
+        }
+        return AlertDialog(
+          title: const Text('Filtrado de trazo'),
+          content: SizedBox(width: 420, child: SingleChildScrollView(child: Column(
+            mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const Text('Tipos de línea', style: TextStyle(fontWeight: FontWeight.bold)),
+              for (final tipo in tiposLinea) SwitchListTile(
+                contentPadding: EdgeInsets.zero,
+                secondary: Icon(Icons.timeline, color: colorTipoLinea(tipo)),
+                title: Text(tipo), value: !_tiposTrazoOcultos.contains(tipo),
+                onChanged: (v) => cambiar(_tiposTrazoOcultos, tipo, v),
+              ),
+              const Divider(),
+              const Text('Proyectos y T/F/S', style: TextStyle(fontWeight: FontWeight.bold)),
+              if (features.isEmpty) const Text('No hay trazos cargados.'),
+              for (final proyecto in proyectos) ...[
+                SwitchListTile(contentPadding: EdgeInsets.zero,
+                  title: Text(proyecto), value: !_proyectosTrazoOcultos.contains(proyecto),
+                  onChanged: (v) => cambiar(_proyectosTrazoOcultos, proyecto, v)),
+                for (final division in (features.where((f) => proyectoTrazo(f) == proyecto)
+                    .map(divisionTrazo).toSet().toList()..sort()))
+                  Padding(padding: const EdgeInsets.only(left: 16), child: CheckboxListTile(
+                    title: Text(division), dense: true,
+                    value: !_divisionesTrazoOcultas.contains('$proyecto|$division'),
+                    onChanged: _proyectosTrazoOcultos.contains(proyecto) ? null :
+                      (v) => cambiar(_divisionesTrazoOcultas, '$proyecto|$division', v ?? false),
+                  )),
+              ],
+            ],
+          ))),
+          actions: [TextButton(onPressed: () => Navigator.pop(dialogContext), child: const Text('Cerrar'))],
+        );
+      },
+    ));
+  }
   double _currentZoom = _defaultZoom;
   // Memoización de polígonos importados (deben ser de instancia, no static locales)
   List<Map<String, dynamic>>? _lastImportedFeatures;
@@ -672,6 +733,16 @@ class _MapaScreenState extends ConsumerState<MapaScreen> {
                     ),
                     const SizedBox(width: 8),
                     Material(
+                      color: AppColors.surface, elevation: 4,
+                      borderRadius: BorderRadius.circular(10),
+                      child: IconButton(
+                        tooltip: 'Filtrado de trazo',
+                        icon: const Icon(Icons.timeline),
+                        onPressed: _mostrarFiltradoTrazo,
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    Material(
                       color: AppColors.surface,
                       elevation: 4,
                       borderRadius: BorderRadius.circular(10),
@@ -952,15 +1023,16 @@ class _MapaScreenState extends ConsumerState<MapaScreen> {
         final isPks = _isSavedPksFile(file, normalizedName: normalizedName);
 
         if (isEnvelope) {
-          envelopeFeatures.addAll(_tagSavedEnvelopeFeatures(file.features));
+          envelopeFeatures.addAll(_tagSavedEnvelopeFeatures(file.features, proyecto: file.proyecto));
         }
         if (isPks) {
           pksFeatures.addAll(_tagSavedPksFeatures(file.features));
         }
       }
 
-      if (ref.read(importedFeaturesProvider).isEmpty && envelopeFeatures.isNotEmpty) {
-        ref.read(importedFeaturesProvider.notifier).state = envelopeFeatures;
+      if (envelopeFeatures.isNotEmpty) {
+        ref.read(importedFeaturesProvider.notifier).state = combinarTrazos(
+          ref.read(importedFeaturesProvider), envelopeFeatures);
       }
       if (ref.read(pksPointFeaturesProvider).isEmpty && pksFeatures.isNotEmpty) {
         ref.read(pksPointFeaturesProvider.notifier).state = pksFeatures;
@@ -1007,7 +1079,7 @@ class _MapaScreenState extends ConsumerState<MapaScreen> {
   }
 
   List<Map<String, dynamic>> _tagSavedEnvelopeFeatures(
-    List<Map<String, dynamic>> features,
+    List<Map<String, dynamic>> features, {String? proyecto}
   ) =>
       features.map((feature) {
         final rawProperties = feature['properties'];
@@ -1023,6 +1095,7 @@ class _MapaScreenState extends ConsumerState<MapaScreen> {
             '__import_kind': 'envolvente',
             '__envolvente': true,
             'categoria': 'ENVOLVENTE',
+            if (proyecto != null && proyectoTrazo(feature) == 'Sin proyecto') '__proyecto_trazo': proyecto,
           },
         };
       }).toList(growable: false);
@@ -1478,6 +1551,7 @@ class _MapaScreenState extends ConsumerState<MapaScreen> {
     final polygons = <Polygon>[];
     for (int i = 0; i < features.length; i++) {
       final feature = features[i];
+      if (_isEnvolventeFeature(feature) && !_trazoVisible(feature)) continue;
       final geometry = _geometryAsMap(feature['geometry']);
       final extractedPolygons = _extractPolygons(geometry);
       final color = _importedFeatureColor(feature, mode);
@@ -1506,7 +1580,7 @@ class _MapaScreenState extends ConsumerState<MapaScreen> {
   ) {
     final lines = <Polyline>[];
     for (final feature in features) {
-      if (!_isEnvolventeFeature(feature)) continue;
+      if (!_isEnvolventeFeature(feature) || !_trazoVisible(feature)) continue;
       final geometry = _geometryAsMap(feature['geometry']);
       for (final coordinates in _extractLineStrings(geometry)) {
         final points = _lineToLatLng(coordinates);
@@ -1514,7 +1588,7 @@ class _MapaScreenState extends ConsumerState<MapaScreen> {
         lines.add(
           Polyline(
             points: points,
-            color: _envolventeColor,
+            color: colorTipoLinea(tipoLineaTrazo(feature)),
             strokeWidth: 5,
             strokeCap: StrokeCap.round,
             strokeJoin: StrokeJoin.round,
@@ -5424,7 +5498,7 @@ class _MapaScreenState extends ConsumerState<MapaScreen> {
     final props = feature['properties'];
     final propsMap = props is Map ? Map<String, dynamic>.from(props) : <String, dynamic>{};
     if (_isEnvolventeFeature(feature)) {
-      return _envolventeColor;
+      return colorTipoLinea(tipoLineaTrazo(feature));
     }
 
     final allProps = _flattenFeatureProps(feature, propsMap);
@@ -5464,7 +5538,7 @@ class _MapaScreenState extends ConsumerState<MapaScreen> {
       return _importedFeatureColor(feature, mode);
     }
     if (_isEnvolventeFeature(feature)) {
-      return _envolventeColor;
+      return colorTipoLinea(tipoLineaTrazo(feature));
     }
     final props = feature['properties'];
     final propsMap = props is Map ? Map<String, dynamic>.from(props) : <String, dynamic>{};
