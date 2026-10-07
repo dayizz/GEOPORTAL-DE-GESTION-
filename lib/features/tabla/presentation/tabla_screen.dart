@@ -655,10 +655,12 @@ class _TablaScreenState extends ConsumerState<TablaScreen> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Row(
-            crossAxisAlignment: CrossAxisAlignment.center,
+          Flex(
+            direction: MediaQuery.sizeOf(context).width < 700 ? Axis.vertical : Axis.horizontal,
+            crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Expanded(
+              Flexible(
+                flex: MediaQuery.sizeOf(context).width < 700 ? 0 : 1,
                 child: Wrap(
                   crossAxisAlignment: WrapCrossAlignment.center,
                   spacing: 8,

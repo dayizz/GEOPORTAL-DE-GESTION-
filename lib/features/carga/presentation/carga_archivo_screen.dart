@@ -2808,7 +2808,10 @@ class _CargaArchivoScreenState extends ConsumerState<CargaArchivoScreen> {
                 return Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Row(
+                    Wrap(
+                      crossAxisAlignment: WrapCrossAlignment.center,
+                      spacing: 8,
+                      runSpacing: 8,
                       children: [
                         const Icon(Icons.inventory_2_outlined, size: 20),
                         const SizedBox(width: 8),
@@ -2816,7 +2819,6 @@ class _CargaArchivoScreenState extends ConsumerState<CargaArchivoScreen> {
                           'Archivos importados (${importedFiles.length})',
                           style: Theme.of(context).textTheme.titleMedium,
                         ),
-                        const Spacer(),
                         if (puedeEliminar)
                         TextButton.icon(
                           onPressed: (_eliminandoTodos || _eliminandoFileId != null)
@@ -2982,9 +2984,7 @@ class _CargaArchivoScreenState extends ConsumerState<CargaArchivoScreen> {
         isPerfilSupervisorInstitucional(perfilActual) ||
         isPerfilOperativoAuxiliar(perfilActual) ||
         isAdminApproverUser(ref.read(currentUserProvider) ?? FirebaseAuth.instance.currentUser);
-    return Stack(
-      children: [
-        ListTile(
+    final tile = ListTile(
           dense: true,
           contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
           leading: Container(
@@ -3004,7 +3004,9 @@ class _CargaArchivoScreenState extends ConsumerState<CargaArchivoScreen> {
           subtitle: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Row(
+              Wrap(
+                crossAxisAlignment: WrapCrossAlignment.center,
+                runSpacing: 4,
                 children: [
                   Icon(statusIcon, size: 11, color: statusColor),
                   const SizedBox(width: 3),
@@ -3115,7 +3117,23 @@ class _CargaArchivoScreenState extends ConsumerState<CargaArchivoScreen> {
               ),
             ],
           ),
-        ),
+        );
+    return Stack(
+      children: [
+        if (MediaQuery.sizeOf(context).width < 600)
+          Padding(
+            padding: const EdgeInsets.all(12),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                tile.title!,
+                const SizedBox(height: 8),
+                tile.subtitle!,
+                Align(alignment: Alignment.centerRight, child: tile.trailing!),
+              ],
+            ),
+          )
+        else tile,
         if (busy)
           Positioned.fill(
             child: Container(

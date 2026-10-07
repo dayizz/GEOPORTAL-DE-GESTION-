@@ -1,4 +1,3 @@
-import 'dart:math' as math;
 import 'package:fl_chart/fl_chart.dart';
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
@@ -276,67 +275,32 @@ Widget buildEstatusChartBlock({
   required NumberFormat fmtInt,
   Color Function(String)? borderColorFn,
 }) {
-  return Column(
-    crossAxisAlignment: CrossAxisAlignment.start,
-    children: [
-      Text(titulo, style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w600)),
-      const SizedBox(height: 12),
-      SizedBox(
-        height: math.max(200.0, entries.length * 28.0),
-        child: Row(
-          children: [
-            Expanded(
-              child: PieChart(
-                PieChartData(
-                  sections: total == 0
-                      ? [PieChartSectionData(color: AppColors.border, value: 1, title: 'Sin datos', radius: 60)]
-                      : entries.where((e) => e.value > 0).map((e) {
-                    final pct = total > 0 ? e.value / total * 100 : 0.0;
-                    return PieChartSectionData(
-                      color: colorFn(e.key),
-                      value: e.value.toDouble(),
-                      title: '${pct.toStringAsFixed(0)}%',
-                      radius: 60,
-                      titleStyle: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 11),
-                    );
-                  }).toList(),
-                  centerSpaceRadius: 40,
-                  sectionsSpace: 2,
-                ),
-              ),
-            ),
-            const SizedBox(width: 16),
-            Column(
-              mainAxisAlignment: MainAxisAlignment.center,
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: entries
-                  .map((e) => Padding(
-                        padding: const EdgeInsets.symmetric(vertical: 4),
-                        child: Row(
-                          children: [
-                            Container(
-                              width: 12,
-                              height: 12,
-                              decoration: BoxDecoration(
-                                color: colorFn(e.key),
-                                borderRadius: BorderRadius.circular(2),
-                                border: borderColorFn != null
-                                    ? Border.all(color: borderColorFn(e.key), width: 1.5)
-                                    : null,
-                              ),
-                            ),
-                            const SizedBox(width: 8),
-                            Text('${e.key}: ${fmtInt.format(e.value)}', style: const TextStyle(fontSize: 12)),
-                          ],
-                        ),
-                      ))
-                  .toList(),
-            ),
-          ],
-        ),
-      ),
-    ],
-  );
+  final chart = SizedBox(height: 220, child: PieChart(PieChartData(
+    sections: total == 0
+      ? [PieChartSectionData(color: AppColors.border, value: 1, title: 'Sin datos', radius: 60)]
+      : entries.where((e) => e.value > 0).map((e) => PieChartSectionData(
+          color: colorFn(e.key), value: e.value.toDouble(),
+          title: '${(e.value / total * 100).toStringAsFixed(0)}%', radius: 60,
+          titleStyle: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 11),
+        )).toList(),
+    centerSpaceRadius: 40, sectionsSpace: 2,
+  )));
+  final legend = Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+    for (final e in entries) Padding(padding: const EdgeInsets.symmetric(vertical: 4), child: Row(children: [
+      Container(width: 12, height: 12, decoration: BoxDecoration(color: colorFn(e.key),
+        borderRadius: BorderRadius.circular(2),
+        border: borderColorFn == null ? null : Border.all(color: borderColorFn(e.key), width: 1.5))),
+      const SizedBox(width: 8),
+      Expanded(child: Text('${e.key}: ${fmtInt.format(e.value)}', style: const TextStyle(fontSize: 12))),
+    ])),
+  ]);
+  return Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+    Text(titulo, style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w600)),
+    const SizedBox(height: 12),
+    LayoutBuilder(builder: (context, constraints) => constraints.maxWidth < 450
+      ? Column(children: [chart, legend])
+      : Row(children: [Expanded(child: chart), const SizedBox(width: 16), Expanded(child: legend)])),
+  ]);
 }
 
 Widget buildDonaSeparada({
@@ -477,7 +441,9 @@ Widget buildTipoPropiedadCard({
           child: Row(
             children: [
               Expanded(
-                child: Row(
+                child: Wrap(
+                  crossAxisAlignment: WrapCrossAlignment.center,
+                  runSpacing: 4,
                   children: [
                     const Icon(Icons.terrain, size: 20, color: AppColors.primary),
                     const SizedBox(width: 8),
@@ -493,8 +459,10 @@ Widget buildTipoPropiedadCard({
           ),
         ),
         const SizedBox(height: 20),
-        Row(
-          mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+        Wrap(
+          alignment: WrapAlignment.spaceEvenly,
+          spacing: 12,
+          runSpacing: 16,
           children: [
             buildDonaSeparada(
               titulo: 'Identificación',

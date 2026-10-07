@@ -307,6 +307,7 @@ class _BalanceScreenState extends ConsumerState<BalanceScreen> {
                         const SizedBox(width: 10),
                         DropdownButtonHideUnderline(
                           child: Container(
+                            constraints: BoxConstraints(maxWidth: math.min(330, MediaQuery.sizeOf(context).width - 130)),
                             padding: const EdgeInsets.symmetric(
                               horizontal: 12,
                               vertical: 4,
@@ -319,6 +320,7 @@ class _BalanceScreenState extends ConsumerState<BalanceScreen> {
                               color: Colors.white,
                             ),
                             child: DropdownButton<String>(
+                              isExpanded: true,
                               value: proyectoActivo,
                               isDense: true,
                               icon: const Icon(
@@ -335,7 +337,7 @@ class _BalanceScreenState extends ConsumerState<BalanceScreen> {
                                   .map(
                                     (p) => DropdownMenuItem(
                                       value: p,
-                                      child: Text(p),
+                                      child: Text(p, maxLines: 1, overflow: TextOverflow.ellipsis),
                                     ),
                                   )
                                   .toList(),
@@ -360,6 +362,7 @@ class _BalanceScreenState extends ConsumerState<BalanceScreen> {
                         const SizedBox(width: 10),
                         DropdownButtonHideUnderline(
                           child: Container(
+                            constraints: BoxConstraints(maxWidth: math.max(150, math.min(330, MediaQuery.sizeOf(context).width - 145))),
                             padding: const EdgeInsets.symmetric(
                               horizontal: 12,
                               vertical: 4,
@@ -372,6 +375,7 @@ class _BalanceScreenState extends ConsumerState<BalanceScreen> {
                               color: Colors.white,
                             ),
                             child: DropdownButton<String>(
+                              isExpanded: true,
                               value:
                                   _grupoActual ==
                                       GrupoInfraestructuraBalance
@@ -544,11 +548,13 @@ class _BalanceScreenState extends ConsumerState<BalanceScreen> {
                                       size: 20,
                                     ),
                                     SizedBox(width: 8),
-                                    Text(
-                                      'No hay registros para la selección actual',
-                                      style: TextStyle(
-                                        color: AppColors.textSecondary,
-                                        fontSize: 14,
+                                    Expanded(
+                                      child: Text(
+                                        'No hay registros para la selección actual',
+                                        style: TextStyle(
+                                          color: AppColors.textSecondary,
+                                          fontSize: 14,
+                                        ),
                                       ),
                                     ),
                                   ],
@@ -714,30 +720,32 @@ class _BalanceScreenState extends ConsumerState<BalanceScreen> {
                   ],
                 ),
                 const SizedBox(height: 12),
-                LayoutBuilder(builder: (context, constraints) => SingleChildScrollView(
-                  scrollDirection: Axis.horizontal,
-                  child: SizedBox(width: math.max(1100.0, constraints.maxWidth),
-                    child: Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                      Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                        Text('Avance mensual · Últimos 6 meses', style: Theme.of(context).textTheme.titleLarge),
-                        const SizedBox(height: 16),
-                        buildStackedPctBars(
-                          labels: meses.map((m) => DateFormat('MM/yyyy').format(m)).toList(),
-                          pctLiberadoPorBarra: pctLiberadoMensual,
-                        ),
-                      ])),
-                      const SizedBox(width: 24),
-                      Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                        Text('Avance semanal · Últimas 12 semanas', style: Theme.of(context).textTheme.titleLarge),
-                        const SizedBox(height: 16),
-                        buildStackedPctBars(
-                          labels: semanas.map((s) => DateFormat('d/MM').format(s)).toList(),
-                          pctLiberadoPorBarra: pctLiberadoSemanal,
-                        ),
-                      ])),
+                LayoutBuilder(builder: (context, constraints) {
+                  final panels = [
+                    Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                      Text('Avance mensual · Últimos 6 meses', style: Theme.of(context).textTheme.titleLarge),
+                      const SizedBox(height: 16),
+                      buildStackedPctBars(
+                        labels: meses.map((m) => DateFormat('MM/yyyy').format(m)).toList(),
+                        pctLiberadoPorBarra: pctLiberadoMensual,
+                      ),
                     ]),
-                  ),
-                )),
+                    Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                      Text('Avance semanal · Últimas 12 semanas', style: Theme.of(context).textTheme.titleLarge),
+                      const SizedBox(height: 16),
+                      buildStackedPctBars(
+                        labels: semanas.map((s) => DateFormat('d/MM').format(s)).toList(),
+                        pctLiberadoPorBarra: pctLiberadoSemanal,
+                      ),
+                    ]),
+                  ];
+                  if (constraints.maxWidth < 700) {
+                    return Column(children: [panels.first, const SizedBox(height: 24), panels.last]);
+                  }
+                  return Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                    Expanded(child: panels.first), const SizedBox(width: 24), Expanded(child: panels.last),
+                  ]);
+                }),
                 const SizedBox(height: 8),
                 Text('$unidad liberados en cada periodo / ${usaM2 ? 'superficie' : 'longitud'} total × 100. Sin registros de liberación en el periodo: 0%.',
                   style: TextStyle(fontSize: 11, color: Colors.grey)),
@@ -754,6 +762,13 @@ class _BalanceScreenState extends ConsumerState<BalanceScreen> {
   Widget _panelesConteo(List<Widget> paneles) {
     return LayoutBuilder(
       builder: (context, constraints) {
+        if (constraints.maxWidth < 700) {
+          final columnas = constraints.maxWidth >= 380 ? 2 : 1;
+          final anchoPanel = (constraints.maxWidth - (columnas - 1) * 12) / columnas;
+          return Wrap(spacing: 12, runSpacing: 12, children: [
+            for (final panel in paneles) SizedBox(width: anchoPanel, height: 96, child: panel),
+          ]);
+        }
         final ancho = math.max(
           constraints.maxWidth,
           paneles.length > 5 ? 1380.0 : 1000.0,

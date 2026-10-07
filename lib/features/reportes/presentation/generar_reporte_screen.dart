@@ -893,8 +893,7 @@ class _GenerarReporteScreenState extends ConsumerState<GenerarReporteScreen> {
 
   /// Vista de previsualización
   Widget _buildPreviewView(List<String> proyectosDisponibles) {
-    return Row(
-      children: [
+    final panels = <Widget>[
         // Panel izquierdo - formulario (reducido)
         SizedBox(
           width: 400,
@@ -1185,7 +1184,16 @@ class _GenerarReporteScreenState extends ConsumerState<GenerarReporteScreen> {
             ),
           ),
         ),
-      ],
-    );
+      ];
+    return LayoutBuilder(builder: (context, constraints) {
+      if (constraints.maxWidth >= 900) return Row(children: panels);
+      return DefaultTabController(length: 2, child: Column(children: [
+        const TabBar(tabs: [Tab(icon: Icon(Icons.edit_outlined), text: 'Datos'), Tab(icon: Icon(Icons.preview), text: 'Vista previa')]),
+        Expanded(child: TabBarView(children: [
+          SizedBox.expand(child: (panels.first as SizedBox).child),
+          (panels.last as Expanded).child,
+        ])),
+      ]));
+    });
   }
 }

@@ -668,13 +668,15 @@ class _MapaScreenState extends ConsumerState<MapaScreen> {
             ),
           ),
           Positioned(
-            top: 16,
+            top: MediaQuery.sizeOf(context).width < 700 ? 72 : 16,
             right: 16,
+            left: MediaQuery.sizeOf(context).width < 700 ? 16 : null,
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.end,
               children: [
-                Row(
-                  mainAxisSize: MainAxisSize.min,
+                Wrap(
+                  alignment: WrapAlignment.end,
+                  runSpacing: 8,
                   children: [
                     Material(
                       color: AppColors.surface,

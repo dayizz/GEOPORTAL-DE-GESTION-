@@ -133,7 +133,8 @@ class AppScaffold extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final isWide = MediaQuery.of(context).size.width > 768;
+    final size = MediaQuery.sizeOf(context);
+    final isWide = size.width > 768 && size.height >= 700;
     final perfil = ref.watch(currentUserPerfilProvider);
 
     final visibleItems = _navItems
@@ -234,35 +235,27 @@ class AppScaffold extends ConsumerWidget {
     }
 
     return Scaffold(
-      appBar: AppBar(title: Text(title), actions: actions),
-      body: child,
-      bottomNavigationBar: NavigationBar(
-        selectedIndex: selectedIndex,
-        onDestinationSelected: (index) {
-          if (index == visibleItems.length) {
-            _confirmarCierreSesion(context, ref);
-          } else {
-            onTapItem(index);
-          }
-        },
-        labelBehavior: NavigationDestinationLabelBehavior.onlyShowSelected,
-        destinations:
-            visibleItems
-                .map(
-                  (item) => NavigationDestination(
-                    icon: Icon(item.icon),
-                    selectedIcon: Icon(item.icon, color: AppColors.primary),
-                    label: item.label,
-                  ),
-                )
-                .toList()
-              ..add(
-                const NavigationDestination(
-                  icon: Icon(Icons.logout),
-                  label: 'Cerrar sesión',
-                ),
-              ),
+      appBar: AppBar(
+        title: Text(title, maxLines: 1, overflow: TextOverflow.ellipsis),
+        actions: actions,
       ),
+      drawer: Drawer(child: SafeArea(child: ListView(
+        padding: EdgeInsets.zero,
+        children: [
+          const Padding(padding: EdgeInsets.all(20), child: Text('Geoportal',
+            style: TextStyle(fontSize: 22, fontWeight: FontWeight.bold))),
+          for (var i = 0; i < visibleItems.length; i++)
+            ListTile(
+              leading: Icon(visibleItems[i].icon), title: Text(visibleItems[i].label),
+              selected: i == selectedIndex,
+              onTap: () { Navigator.pop(context); onTapItem(i); },
+            ),
+          const Divider(),
+          ListTile(leading: const Icon(Icons.logout), title: const Text('Cerrar sesión'),
+            onTap: () { Navigator.pop(context); _confirmarCierreSesion(context, ref); }),
+        ],
+      ))),
+      body: SafeArea(top: false, child: ClipRect(child: child)),
       floatingActionButton: floatingActionButton,
     );
   }
