@@ -953,19 +953,8 @@ class _TablaScreenState extends ConsumerState<TablaScreen> {
         final colWidths = List<double>.from(rawWidths);
         final totalWidth = math.max(constraints.maxWidth, rawTotal);
 
-        return Scrollbar(
-          controller: _horizontalScroll,
-          thumbVisibility: true,
-          notificationPredicate: (notification) => notification.depth == 0,
-          child: SingleChildScrollView(
-            controller: _horizontalScroll,
-            scrollDirection: Axis.horizontal,
-            child: SizedBox(
-              width: totalWidth,
-              child: Scrollbar(
-                controller: _verticalScroll,
-                thumbVisibility: true,
-                child: Column(
+        final mobile = MediaQuery.sizeOf(context).width < 700;
+        final tabla = Column(
                   children: [
                     // Header fijo
                     _buildHeaderRow(headers, colWidths, totalWidth),
@@ -985,9 +974,40 @@ class _TablaScreenState extends ConsumerState<TablaScreen> {
                       ),
                     ),
                   ],
-                ),
+                );
+        final horizontal = Scrollbar(
+          controller: _horizontalScroll,
+          thumbVisibility: true,
+          trackVisibility: mobile ? true : null,
+          thickness: mobile ? 6 : null,
+          scrollbarOrientation: ScrollbarOrientation.bottom,
+          notificationPredicate: (notification) => notification.depth == 0,
+          child: SingleChildScrollView(
+            controller: _horizontalScroll,
+            scrollDirection: Axis.horizontal,
+            child: SizedBox(
+              width: totalWidth,
+              child: mobile ? tabla : Scrollbar(
+                controller: _verticalScroll,
+                thumbVisibility: true,
+                child: tabla,
               ),
             ),
+          ),
+        );
+        if (!mobile) return horizontal;
+        // La barra vertical queda en el borde visible, no al final de las columnas.
+        return Scrollbar(
+          controller: _verticalScroll,
+          thumbVisibility: true,
+          trackVisibility: true,
+          interactive: true,
+          thickness: 6,
+          scrollbarOrientation: ScrollbarOrientation.right,
+          notificationPredicate: (notification) => notification.metrics.axis == Axis.vertical,
+          child: Padding(
+            padding: const EdgeInsets.only(right: 10, bottom: 10),
+            child: horizontal,
           ),
         );
       },

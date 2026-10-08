@@ -1,3 +1,4 @@
+import '../../../../shared/widgets/mobile_horizontal_scroll.dart';
 import 'package:fl_chart/fl_chart.dart';
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
@@ -575,8 +576,7 @@ Widget buildCadenamientoFilaCard(CadenamientoFila fila) {
             ),
           )
         else
-          SingleChildScrollView(
-            scrollDirection: Axis.horizontal,
+          MobileHorizontalScroll(
             padding: const EdgeInsets.all(10),
             child: Row(
               children: [

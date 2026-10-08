@@ -1,3 +1,4 @@
+import '../../../../shared/widgets/mobile_horizontal_scroll.dart';
 import 'dart:math' as math;
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
@@ -18,6 +19,7 @@ class ResumenTramosWidget extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final mobile = MediaQuery.sizeOf(context).width < 700;
     final unidad = usaM2 ? 'm²' : 'km';
     double? total(ResumenTramoBalance f) => usaM2
         ? f.predios.fold<double>(
@@ -169,32 +171,19 @@ class ResumenTramosWidget extends StatelessWidget {
             ]),
         ]),
         const SizedBox(height: 8),
-        LayoutBuilder(
-          builder: (context, constraints) => SingleChildScrollView(
-            scrollDirection: Axis.horizontal,
-            child: SizedBox(
-              width: math.max(1150.0, constraints.maxWidth),
-              child: Row(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Expanded(
-                    flex: 7,
-                    child: DataTable(
-                      columnSpacing: 8,
-                      dataRowMinHeight: 32,
-                      dataRowMaxHeight: 36,
-                      dataTextStyle: TextStyle(fontSize: 11, color: AppColors.textPrimary),
-                      headingTextStyle: TextStyle(fontSize: 11, color: AppColors.textPrimary),
-                      horizontalMargin: 8,
-                      headingRowHeight: 48,
+        LayoutBuilder(builder: (context, constraints) {
+          final tabla = DataTable(
+                      columnSpacing: mobile ? 6 : 8,
+                      dataRowMinHeight: mobile ? 28 : 32,
+                      dataRowMaxHeight: mobile ? 32 : 36,
+                      dataTextStyle: TextStyle(fontSize: mobile ? 10 : 11, color: AppColors.textPrimary),
+                      headingTextStyle: TextStyle(fontSize: mobile ? 10 : 11, color: AppColors.textPrimary),
+                      horizontalMargin: mobile ? 4 : 8,
+                      headingRowHeight: mobile ? 44 : 48,
                       columns: columnas.map((c) => DataColumn(label: Expanded(child: c.label))).toList(),
                       rows: filasTabla,
-                    ),
-                  ),
-                  const SizedBox(width: 16),
-                  Expanded(
-                    flex: 4,
-                    child: Column(
+                    );
+          final graficas = Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         const SizedBox(height: 16),
@@ -228,13 +217,37 @@ class ResumenTramosWidget extends StatelessWidget {
                             ),
                           ),
                       ],
-                    ),
+                    );
+          if (mobile) {
+            return Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                MobileHorizontalScroll(
+                  child: SizedBox(
+                    width: math.max(usaM2 ? 680.0 : esCruces ? 470.0 : 560.0, constraints.maxWidth),
+                    child: tabla,
                   ),
+                ),
+                const SizedBox(height: 12),
+                graficas,
+              ],
+            );
+          }
+          return SingleChildScrollView(
+            scrollDirection: Axis.horizontal,
+            child: SizedBox(
+              width: math.max(1150.0, constraints.maxWidth),
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Expanded(flex: 7, child: tabla),
+                  const SizedBox(width: 16),
+                  Expanded(flex: 4, child: graficas),
                 ],
               ),
             ),
-          ),
-        ),
+          );
+        }),
         if (!usaM2 && !esCruces && filas.any((f) => f.longitud == null))
           const Padding(
             padding: EdgeInsets.only(top: 8),
