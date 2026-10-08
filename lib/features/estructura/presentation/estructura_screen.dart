@@ -222,10 +222,6 @@ class _CuentasUsuarioTabState extends ConsumerState<_CuentasUsuarioTab> {
     return Scaffold(
       body: Column(
         children: [
-          Padding(
-            padding: const EdgeInsets.fromLTRB(16, 16, 16, 0),
-            child: _buildPermissionsCard(currentPerfil),
-          ),
           if (isAdmin)
             Padding(
               padding: const EdgeInsets.fromLTRB(16, 16, 16, 0),
@@ -283,47 +279,43 @@ class _CuentasUsuarioTabState extends ConsumerState<_CuentasUsuarioTab> {
   }
 
   Widget _buildResumenUsuarios(List<Usuario> usuarios) {
-    final admins = usuarios.where((u) => u.perfil == perfilAdministrador).length;
-    final gestores = usuarios.where((u) => u.perfil == perfilGestorProyecto).length;
-    final operativos = usuarios.where((u) => u.perfil == perfilOperativoAuxiliar).length;
-    final supervisores = usuarios.where((u) => u.perfil == perfilSupervisorInstitucional).length;
+    final perfiles = <String, Color>{
+      'Todos': AppColors.primary,
+      perfilAdministrador: Colors.red,
+      perfilGestorProyecto: Colors.blue,
+      perfilSupervisorInstitucional: Colors.orange,
+      perfilOperativoAuxiliar: Colors.green,
+    };
 
-    Widget metric(String label, int value, Color color) {
-      return Expanded(
-        child: Container(
-          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-          decoration: BoxDecoration(
-            color: color.withValues(alpha: 0.1),
-            borderRadius: BorderRadius.circular(10),
-            border: Border.all(color: color.withValues(alpha: 0.25)),
-          ),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(
-                '$value',
-                style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: color),
-              ),
-              const SizedBox(height: 2),
-              Text(label, style: const TextStyle(fontSize: 12)),
-            ],
-          ),
-        ),
-      );
-    }
-
-    return Row(
-      children: [
-        metric('Total', usuarios.length, AppColors.primary),
-        const SizedBox(width: 8),
-        metric('Admins', admins, Colors.red),
-        const SizedBox(width: 8),
-        metric('Gestores', gestores, Colors.blue),
-        const SizedBox(width: 8),
-        metric('Operativos', operativos, Colors.green),
-        const SizedBox(width: 8),
-        metric('Supervisores', supervisores, Colors.orange),
-      ],
+    return Align(
+      alignment: Alignment.centerLeft,
+      child: Wrap(
+        spacing: 8,
+        runSpacing: 8,
+        children: perfiles.entries.map((entry) {
+          final rol = entry.key;
+          final color = entry.value;
+          final total = rol == 'Todos'
+              ? usuarios.length
+              : usuarios.where((usuario) => usuario.perfil == rol).length;
+          final seleccionado = _selectedRole == rol;
+          return ChoiceChip(
+            label: Text('$rol · $total'),
+            selected: seleccionado,
+            selectedColor: color.withValues(alpha: 0.18),
+            backgroundColor: color.withValues(alpha: 0.06),
+            side: BorderSide(
+              color: seleccionado ? color : color.withValues(alpha: 0.25),
+              width: seleccionado ? 2 : 1,
+            ),
+            labelStyle: TextStyle(
+              color: AppColors.textPrimary,
+              fontWeight: seleccionado ? FontWeight.bold : FontWeight.normal,
+            ),
+            onSelected: (_) => setState(() => _selectedRole = rol),
+          );
+        }).toList(),
+      ),
     );
   }
 
@@ -348,44 +340,7 @@ class _CuentasUsuarioTabState extends ConsumerState<_CuentasUsuarioTab> {
             border: const OutlineInputBorder(),
           ),
         ),
-        const SizedBox(height: 10),
-        Wrap(
-          spacing: 8,
-          runSpacing: 8,
-          children: ['Todos', perfilAdministrador, perfilGestorProyecto, perfilSupervisorInstitucional, perfilOperativoAuxiliar]
-              .map(
-                (rol) => ChoiceChip(
-                  label: Text(rol),
-                  selected: _selectedRole == rol,
-                  onSelected: (_) => setState(() => _selectedRole = rol),
-                ),
-              )
-              .toList(),
-        ),
       ],
-    );
-  }
-
-  Widget _buildPermissionsCard(String perfil) {
-    return Card(
-      child: Padding(
-        padding: const EdgeInsets.all(14),
-        child: Row(
-          children: [
-            const Icon(Icons.admin_panel_settings_outlined, color: AppColors.primary),
-            const SizedBox(width: 12),
-            Expanded(
-              child: Text(
-                'Perfil activo: $perfil. '
-                'Administrador: gestiona usuarios y proyectos '
-                'Gestor: gestiona proyectos y sube informacion '
-                'Operativo: consulta informacion y actualiza datos',
-                style: const TextStyle(fontSize: 13),
-              ),
-            ),
-          ],
-        ),
-      ),
     );
   }
 

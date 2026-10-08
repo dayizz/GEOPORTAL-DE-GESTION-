@@ -1,3 +1,4 @@
+import 'widgets/compact_map_toolbar.dart';
 import '../utils/trazo_metadata.dart';
 import 'dart:convert';
 import 'dart:math' as math;
@@ -223,8 +224,164 @@ class _MapaScreenState extends ConsumerState<MapaScreen> {
     _manualPredioSearchCtrl.dispose();
     super.dispose();
   }
+  List<Widget> _buildMapToolButtons() => [
+    Material(
+      color: AppColors.surface,
+      elevation: 4,
+      borderRadius: BorderRadius.circular(10),
+      child: InkWell(
+        borderRadius: BorderRadius.circular(10),
+        onTap: () => setState(() {
+          _showVisualizacionPanel = !_showVisualizacionPanel;
+          if (_showVisualizacionPanel) {
+            _showLayersPanel = false;
+          }
+        }),
+        child: Container(
+          width: 40,
+          height: 40,
+          alignment: Alignment.center,
+          child: Icon(
+            _showVisualizacionPanel
+                ? Icons.visibility
+                : Icons.visibility_outlined,
+            size: 22,
+            color: _showVisualizacionPanel
+                ? AppColors.primary
+                : AppColors.textPrimary,
+          ),
+        ),
+      ),
+    ),
+    Material(
+      color: AppColors.surface,
+      elevation: 4,
+      borderRadius: BorderRadius.circular(10),
+      child: InkWell(
+        borderRadius: BorderRadius.circular(10),
+        onTap: () => setState(() {
+          _showLayersPanel = !_showLayersPanel;
+          if (_showLayersPanel) {
+            _showVisualizacionPanel = false;
+          }
+        }),
+        child: Container(
+          width: 40,
+          height: 40,
+          alignment: Alignment.center,
+          child: Icon(
+            Icons.layers_outlined,
+            size: 22,
+            color: _showLayersPanel
+                ? AppColors.primary
+                : AppColors.textPrimary,
+          ),
+        ),
+      ),
+    ),
+    Material(
+      color: AppColors.surface, elevation: 4,
+      borderRadius: BorderRadius.circular(10),
+      child: IconButton(
+        tooltip: 'Filtrado de trazo',
+        icon: const Icon(Icons.timeline),
+        onPressed: _mostrarFiltradoTrazo,
+      ),
+    ),
+    Material(
+      color: AppColors.surface,
+      elevation: 4,
+      borderRadius: BorderRadius.circular(10),
+      child: InkWell(
+        borderRadius: BorderRadius.circular(10),
+        onTap: () => setState(() {
+          _showRotationPanel = !_showRotationPanel;
+        }),
+        child: Container(
+          width: 40,
+          height: 40,
+          alignment: Alignment.center,
+          child: Icon(
+            Icons.explore_outlined,
+            size: 22,
+            color: _showRotationPanel
+                ? AppColors.primary
+                : AppColors.textPrimary,
+          ),
+        ),
+      ),
+    ),
+    Material(
+      color: AppColors.surface,
+      elevation: 4,
+      borderRadius: BorderRadius.circular(10),
+      child: InkWell(
+        borderRadius: BorderRadius.circular(10),
+        onTap: () => setState(() {
+          _showFiltrosPanel = !_showFiltrosPanel;
+        }),
+        child: Container(
+          width: 40,
+          height: 40,
+          alignment: Alignment.center,
+          child: Stack(
+            clipBehavior: Clip.none,
+            children: [
+              Icon(
+                _tieneFiltrosMapaActivos
+                    ? Icons.filter_alt
+                    : Icons.filter_alt_outlined,
+                size: 22,
+                color: _showFiltrosPanel || _tieneFiltrosMapaActivos
+                    ? AppColors.primary
+                    : AppColors.textPrimary,
+              ),
+              if (_tieneFiltrosMapaActivos)
+                Positioned(
+                  right: -2,
+                  top: -2,
+                  child: Container(
+                    width: 8,
+                    height: 8,
+                    decoration: const BoxDecoration(
+                      color: AppColors.danger,
+                      shape: BoxShape.circle,
+                    ),
+                  ),
+                ),
+            ],
+          ),
+        ),
+      ),
+    ),
+    Material(
+      color: AppColors.surface,
+      elevation: 4,
+      borderRadius: BorderRadius.circular(10),
+      child: InkWell(
+        borderRadius: BorderRadius.circular(10),
+        onTap: () => setState(() {
+          _showOpacidadPanel = !_showOpacidadPanel;
+        }),
+        child: Container(
+          width: 40,
+          height: 40,
+          alignment: Alignment.center,
+          child: Icon(
+            Icons.opacity_outlined,
+            size: 22,
+            color: _showOpacidadPanel
+                ? AppColors.primary
+                : AppColors.textPrimary,
+          ),
+        ),
+      ),
+    ),
+  ];
+
   @override
   Widget build(BuildContext context) {
+    final isMobile = MediaQuery.sizeOf(context).width < 700;
     ref.listen(currentUserProvider, (previous, user) {
       if (user == null) {
         ref.read(importedFeaturesProvider.notifier).state = const [];
@@ -668,175 +825,24 @@ class _MapaScreenState extends ConsumerState<MapaScreen> {
             ),
           ),
           Positioned(
-            top: MediaQuery.sizeOf(context).width < 700 ? 72 : 16,
-            right: 16,
-            left: MediaQuery.sizeOf(context).width < 700 ? 16 : null,
+            top: isMobile ? 8 : 16,
+            right: isMobile ? 8 : 16,
+            left: isMobile ? 8 : null,
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.end,
               children: [
-                Wrap(
-                  alignment: WrapAlignment.end,
-                  runSpacing: 8,
-                  children: [
-                    Material(
-                      color: AppColors.surface,
-                      elevation: 4,
-                      borderRadius: BorderRadius.circular(10),
-                      child: InkWell(
-                        borderRadius: BorderRadius.circular(10),
-                        onTap: () => setState(() {
-                          _showVisualizacionPanel = !_showVisualizacionPanel;
-                          if (_showVisualizacionPanel) {
-                            _showLayersPanel = false;
-                          }
-                        }),
-                        child: Container(
-                          width: 40,
-                          height: 40,
-                          alignment: Alignment.center,
-                          child: Icon(
-                            _showVisualizacionPanel
-                                ? Icons.visibility
-                                : Icons.visibility_outlined,
-                            size: 22,
-                            color: _showVisualizacionPanel
-                                ? AppColors.primary
-                                : AppColors.textPrimary,
-                          ),
-                        ),
-                      ),
-                    ),
-                    const SizedBox(width: 8),
-                    Material(
-                      color: AppColors.surface,
-                      elevation: 4,
-                      borderRadius: BorderRadius.circular(10),
-                      child: InkWell(
-                        borderRadius: BorderRadius.circular(10),
-                        onTap: () => setState(() {
-                          _showLayersPanel = !_showLayersPanel;
-                          if (_showLayersPanel) {
-                            _showVisualizacionPanel = false;
-                          }
-                        }),
-                        child: Container(
-                          width: 40,
-                          height: 40,
-                          alignment: Alignment.center,
-                          child: Icon(
-                            Icons.layers_outlined,
-                            size: 22,
-                            color: _showLayersPanel
-                                ? AppColors.primary
-                                : AppColors.textPrimary,
-                          ),
-                        ),
-                      ),
-                    ),
-                    const SizedBox(width: 8),
-                    Material(
-                      color: AppColors.surface, elevation: 4,
-                      borderRadius: BorderRadius.circular(10),
-                      child: IconButton(
-                        tooltip: 'Filtrado de trazo',
-                        icon: const Icon(Icons.timeline),
-                        onPressed: _mostrarFiltradoTrazo,
-                      ),
-                    ),
-                    const SizedBox(width: 8),
-                    Material(
-                      color: AppColors.surface,
-                      elevation: 4,
-                      borderRadius: BorderRadius.circular(10),
-                      child: InkWell(
-                        borderRadius: BorderRadius.circular(10),
-                        onTap: () => setState(() {
-                          _showRotationPanel = !_showRotationPanel;
-                        }),
-                        child: Container(
-                          width: 40,
-                          height: 40,
-                          alignment: Alignment.center,
-                          child: Icon(
-                            Icons.explore_outlined,
-                            size: 22,
-                            color: _showRotationPanel
-                                ? AppColors.primary
-                                : AppColors.textPrimary,
-                          ),
-                        ),
-                      ),
-                    ),
-                    const SizedBox(width: 8),
-                    Material(
-                      color: AppColors.surface,
-                      elevation: 4,
-                      borderRadius: BorderRadius.circular(10),
-                      child: InkWell(
-                        borderRadius: BorderRadius.circular(10),
-                        onTap: () => setState(() {
-                          _showFiltrosPanel = !_showFiltrosPanel;
-                        }),
-                        child: Container(
-                          width: 40,
-                          height: 40,
-                          alignment: Alignment.center,
-                          child: Stack(
-                            clipBehavior: Clip.none,
-                            children: [
-                              Icon(
-                                _tieneFiltrosMapaActivos
-                                    ? Icons.filter_alt
-                                    : Icons.filter_alt_outlined,
-                                size: 22,
-                                color: _showFiltrosPanel || _tieneFiltrosMapaActivos
-                                    ? AppColors.primary
-                                    : AppColors.textPrimary,
-                              ),
-                              if (_tieneFiltrosMapaActivos)
-                                Positioned(
-                                  right: -2,
-                                  top: -2,
-                                  child: Container(
-                                    width: 8,
-                                    height: 8,
-                                    decoration: const BoxDecoration(
-                                      color: AppColors.danger,
-                                      shape: BoxShape.circle,
-                                    ),
-                                  ),
-                                ),
-                            ],
-                          ),
-                        ),
-                      ),
-                    ),
-                    const SizedBox(width: 8),
-                    Material(
-                      color: AppColors.surface,
-                      elevation: 4,
-                      borderRadius: BorderRadius.circular(10),
-                      child: InkWell(
-                        borderRadius: BorderRadius.circular(10),
-                        onTap: () => setState(() {
-                          _showOpacidadPanel = !_showOpacidadPanel;
-                        }),
-                        child: Container(
-                          width: 40,
-                          height: 40,
-                          alignment: Alignment.center,
-                          child: Icon(
-                            Icons.opacity_outlined,
-                            size: 22,
-                            color: _showOpacidadPanel
-                                ? AppColors.primary
-                                : AppColors.textPrimary,
-                          ),
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
+                if (isMobile)
+                  CompactMapToolbar(children: [
+                    _buildCapturaToggleButton(),
+                    _buildCapturaPantallaButton(),
+                    _buildLabelsButton(),
+                    ..._buildMapToolButtons(),
+                  ])
+                else
+                  Row(mainAxisSize: MainAxisSize.min, children: [
+                    for (final button in _buildMapToolButtons())
+                      Padding(padding: const EdgeInsets.only(left: 8), child: button),
+                  ]),
                 if (_showVisualizacionPanel) ...[
                   const SizedBox(height: 6),
                   _buildVisualizacionControl(colorMode),
@@ -860,6 +866,7 @@ class _MapaScreenState extends ConsumerState<MapaScreen> {
               ],
             ),
           ),
+          if (!isMobile)
           Positioned(
             top: 16,
             left: 16,
