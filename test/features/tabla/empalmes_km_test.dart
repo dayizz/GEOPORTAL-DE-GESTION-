@@ -1,4 +1,5 @@
 import 'package:flutter_test/flutter_test.dart';
+import 'package:geoportal_predios/core/utils/import_normalization.dart' as norm;
 import 'package:geoportal_predios/features/predios/models/predio.dart';
 import 'package:geoportal_predios/features/tabla/utils/empalmes_km.dart';
 
@@ -8,6 +9,18 @@ Predio predio(String id, double? inicio, double? fin) => Predio(
 );
 
 void main() {
+  test('320+100 como fin e inicio compartido no es empalme', () {
+    expect(detectarEmpalmesKm([
+      predio('X', norm.normalizeKmValue('319+000'), norm.normalizeKmValue('320+100')),
+      predio('Y', norm.normalizeKmValue('320+100'), norm.normalizeKmValue('325+000')),
+    ]), isEmpty);
+  });
+  test('320+100–325+000 y 324+300–328+200 se marcan ambos', () {
+    expect(detectarEmpalmesKm([
+      predio('X', norm.normalizeKmValue('320+100'), norm.normalizeKmValue('325+000')),
+      predio('Y', norm.normalizeKmValue('324+300'), norm.normalizeKmValue('328+200')),
+    ]), {'X', 'Y'});
+  });
   test('marca ambos registros de un empalme parcial sin depender del orden', () {
     expect(detectarEmpalmesKm([
       predio('b', 15, 25), predio('a', 10, 20), predio('c', 30, 40),
