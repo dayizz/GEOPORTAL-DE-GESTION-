@@ -1,3 +1,4 @@
+import '../../../core/utils/import_normalization.dart' as norm;
 import 'widgets/compact_map_toolbar.dart';
 import '../utils/trazo_metadata.dart';
 import 'dart:convert';
@@ -193,24 +194,14 @@ class _MapaScreenState extends ConsumerState<MapaScreen> {
   MapaColorMode? _lastColorModeVisual;
   double? _lastOpacityVisual;
   List<_PredioVisualData>? _lastVisuals;
+  final _ringsCache = Expando<List<List<LatLng>>>('predioRings');
+  final _markerCache = Expando<LatLng>('predioMarker');
   @override
   void initState() {
     super.initState();
-    // `prediosMapaProvider` usa `keepAlive()`: sin esto, datos borrados o
-    // modificados fuera de la app (o antes de la última vez que este
-    // provider se invalidó desde otra pantalla) seguían viéndose en el
-    // mapa hasta un recargo completo de la pestaña -mismo patrón ya usado
-    // en `BalanceScreen` para lo mismo-.
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (mounted) ref.invalidate(prediosMapaProvider);
       if (mounted) _restoreSavedMapLayers();
     });
-  }
-
-  @override
-  void didChangeDependencies() {
-    super.didChangeDependencies();
-    ref.invalidate(prediosMapaProvider);
   }
 
   @override
@@ -405,6 +396,11 @@ class _MapaScreenState extends ConsumerState<MapaScreen> {
     });
     final prediosAsync = ref.watch(prediosMapaProvider);
     final prediosById = ref.watch(prediosMapaByIdProvider);
+    if (_selectedPredio != null && prediosAsync.hasValue && !prediosAsync.isLoading) {
+      _selectedPredio = prediosById[_selectedPredio!.id];
+      _selectedAfectaciones = _selectedPredio == null ? []
+          : _afectacionesDeGrupo(_selectedPredio!, prediosById);
+    }
     final baseLayer = ref.watch(mapaBaseLayerProvider);
     final baseLayerOpacity = ref.watch(mapaLayerOpacityProvider);
     final colorMode = ref.watch(mapaColorModeProvider);
@@ -500,10 +496,11 @@ class _MapaScreenState extends ConsumerState<MapaScreen> {
       child: Stack(
         children: [
           prediosAsync.when(
+            skipLoadingOnReload: true,
             data: (rawPredios) {
               final predios = _applyFiltrosMapa(rawPredios);
               List<_PredioVisualData> visuals;
-              if (_lastPredios == predios && _lastColorModeVisual == colorMode && _lastOpacityVisual == predioOpacity) {
+              if (listEquals(_lastPredios, predios) && _lastColorModeVisual == colorMode && _lastOpacityVisual == predioOpacity) {
                 visuals = _lastVisuals ?? [];
               } else {
                 visuals = _buildVisualData(predios, colorMode, predioOpacity);
@@ -1290,7 +1287,7 @@ class _MapaScreenState extends ConsumerState<MapaScreen> {
                 ],
               ),
               const SizedBox(height: 10),
-              seccion('Estatus', const ['Liberado', 'No liberado'], _filtroEstatusMapa, AppColors.secondary),
+              seccion('Estatus', const ['Liberado', 'No liberado', 'Investigación'], _filtroEstatusMapa, AppColors.secondary),
               seccion('Rango de estatus', Predio.rangoEstatusOpciones, _filtroRangoEstatusMapa, AppColors.secondary),
               seccion('Tipo de propiedad', tipos, _filtroTipoMapa, AppColors.primary),
               seccion('Tipo de liberacion', tiposLiberacion, _filtroTipoLiberacionMapa, AppColors.info),
@@ -1339,14 +1336,26 @@ class _MapaScreenState extends ConsumerState<MapaScreen> {
       (grupos[ownerId] ??= []).add(predio);
     }
 
+    final anteriores = {
+      if (_lastColorModeVisual == mode && _lastOpacityVisual == opacity)
+        for (final visual in _lastVisuals ?? <_PredioVisualData>[])
+          visual.predio.id: visual,
+    };
     final visuales = <_PredioVisualData>[];
     for (final entry in grupos.entries) {
       final ancla = porId[entry.key];
       if (ancla == null || ancla.geometry == null) continue;
       final afectaciones = entry.value;
+      final anterior = anteriores[ancla.id];
+      if (anterior != null && identical(anterior.predio, ancla) &&
+          listEquals(anterior.afectaciones, afectaciones)) {
+        visuales.add(anterior);
+        continue;
+      }
       final color = _grupoColor(afectaciones, mode);
       final borderColor = _grupoBorderColor(afectaciones, mode);
-      final rings = _extractRings(ancla.geometry);
+      final geometry = ancla.geometry!;
+      final rings = _ringsCache[geometry] ??= _extractRings(geometry);
       final polygon = rings.isNotEmpty
           ? Polygon(
               points: rings.first,
@@ -1356,7 +1365,8 @@ class _MapaScreenState extends ConsumerState<MapaScreen> {
               borderStrokeWidth: 1.8,
             )
           : null;
-      final markerPoint = _markerPoint(ancla, rings);
+      final markerPoint = rings.isEmpty ? _markerPoint(ancla, rings)
+          : (_markerCache[geometry] ??= _markerPoint(ancla, rings));
       visuales.add(_PredioVisualData(
         predio: ancla,
         afectaciones: afectaciones,
@@ -1545,11 +1555,8 @@ class _MapaScreenState extends ConsumerState<MapaScreen> {
     return _savedPolygonColor(polygon, mode);
   }
   String _predioEstatus(Predio predio) {
-    if (Predio.estatusSimplificado(predio.rangoEstatus) == 'Liberado') return 'Liberado';
-    if (predio.negociacion || predio.levantamiento || predio.identificacion) {
-      return 'No liberado';
-    }
-    return 'Sin estatus';
+    if (predio.rangoEstatus == 'Investigación') return 'Investigación';
+    return Predio.estatusSimplificado(predio.rangoEstatus);
   }
   bool _isLiberado(String? estatus) => estatus == 'Liberado';
   bool _isNoLiberado(String? estatus) => estatus == 'No liberado';
@@ -3340,6 +3347,7 @@ class _MapaScreenState extends ConsumerState<MapaScreen> {
         items = [
           MapEntry('Liberado', _estatusColor('Liberado')),
           MapEntry('No liberado', _estatusColor('No liberado')),
+          MapEntry('Investigación', _estatusColor('Investigación')),
         ];
         break;
     }
@@ -4197,7 +4205,7 @@ class _MapaScreenState extends ConsumerState<MapaScreen> {
                     label: 'Estatus del predio',
                     value: _estatusPredio,
                     placeholder: 'Sin estatus',
-                    options: const ['Sin estatus', 'Liberado', 'No liberado'],
+                    options: const ['Sin estatus', 'Liberado', 'No liberado', 'Investigación'],
                     onChanged: (v) => setState(() => _estatusPredio = v),
                   ),
                 ),
@@ -5539,6 +5547,9 @@ class _MapaScreenState extends ConsumerState<MapaScreen> {
       final normalized = estatus.trim().toLowerCase();
       if (normalized == 'liberado') return _estatusColor('Liberado');
       if (normalized == 'no liberado') return _estatusColor('No liberado');
+      if (norm.normalizeRangoEstatus(estatus) == 'Investigación') {
+        return _estatusColor('Investigación');
+      }
     }
     return _estatusColor(null);
   }
@@ -5599,16 +5610,7 @@ class _MapaScreenState extends ConsumerState<MapaScreen> {
     return false;
   }
 }
-Color _estatusColor(String? estatus) {
-  switch (estatus) {
-    case 'Liberado':
-      return const Color(0xFF2E9E44); // green
-    case 'No liberado':
-      return const Color(0xFFD63A3A); // red
-    default:
-      return const Color(0xFF6D6D6D); // gray
-  }
-}
+Color _estatusColor(String? estatus) => AppColors.estatusPredioColor(estatus);
 class _PolylabelCell {
   final double x;
   final double y;

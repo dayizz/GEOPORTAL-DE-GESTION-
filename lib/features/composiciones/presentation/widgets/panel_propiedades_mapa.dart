@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../../models/elemento_composicion.dart';
 import 'color_swatch_picker.dart';
 import 'panel_seccion_colapsable.dart';
+import 'panel_propiedades_texto.dart' show composicionesFuentes;
 
 const _opcionesBaseLayer = [
   ('estandar', 'Estándar'),
@@ -64,8 +65,8 @@ Widget _filaNumerica({
             suffixText: sufijo,
           ),
           onChanged: (value) {
-            final parsed = double.tryParse(value);
-            if (parsed != null) onChanged(parsed);
+            final parsed = double.tryParse(value.replaceAll(',', '.'));
+            if (parsed != null && parsed.isFinite) onChanged(parsed);
           },
         ),
       ),
@@ -95,6 +96,9 @@ class PanelPropiedadesMapa extends StatelessWidget {
     required this.onBordeGrosorChanged,
     required this.onBordeColorChanged,
     required this.onBordeOpacidadChanged,
+    required this.onEstiloClaveChanged,
+    required this.onEstiloPksChanged,
+    required this.onBordeEstiloChanged,
   });
 
   final ElementoComposicion elemento;
@@ -110,6 +114,61 @@ class PanelPropiedadesMapa extends StatelessWidget {
   final ValueChanged<double> onBordeGrosorChanged;
   final ValueChanged<String> onBordeColorChanged;
   final ValueChanged<double> onBordeOpacidadChanged;
+  final ValueChanged<EstiloEtiquetaMapa> onEstiloClaveChanged;
+  final ValueChanged<EstiloEtiquetaMapa> onEstiloPksChanged;
+  final ValueChanged<EstiloLinea> onBordeEstiloChanged;
+
+  Widget _estiloEtiqueta(String capa, EstiloEtiquetaMapa estilo,
+      ValueChanged<EstiloEtiquetaMapa> onChanged) {
+    return Column(children: [
+      _filaNumerica(key: ValueKey('tamano_${capa}_${elemento.id}'),
+        label: 'Tamaño de letra', valorTexto: estilo.tamano.toString(),
+        sufijo: 'px', onChanged: (v) {
+          if (v.isFinite && v > 0) onChanged(estilo.copyWith(tamano: v.clamp(1, 96)));
+        }),
+      const SizedBox(height: 8),
+      DropdownButtonFormField<String>(
+        key: ValueKey('fuente_${capa}_${elemento.id}_${estilo.fuente}'),
+        initialValue: estilo.fuente, isExpanded: true,
+        decoration: const InputDecoration(labelText: 'Tipo de letra', isDense: true),
+        items: {...composicionesFuentes, estilo.fuente}.map((f) =>
+          DropdownMenuItem(value: f, child: Text(f, style: const TextStyle(fontSize: 12)))).toList(),
+        onChanged: (v) { if (v != null) onChanged(estilo.copyWith(fuente: v)); },
+      ),
+      const SizedBox(height: 8),
+      Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Expanded(
+            child: ColorSwatchPicker(
+              label: 'Color de letra',
+              colorHex: estilo.colorHex,
+              onChanged: (v) {
+                if (v != null) onChanged(estilo.copyWith(colorHex: v));
+              },
+            ),
+          ),
+          const SizedBox(width: 12),
+          Expanded(
+            child: ColorSwatchPicker(
+              label: 'Color de buffer',
+              colorHex: estilo.bufferColorHex,
+              onChanged: (v) {
+                if (v != null) onChanged(estilo.copyWith(bufferColorHex: v));
+              },
+            ),
+          ),
+        ],
+      ),
+      const SizedBox(height: 8),
+      _filaNumerica(key: ValueKey('buffer_${capa}_${elemento.id}'),
+        label: 'Grosor de buffer', valorTexto: estilo.bufferGrosor.toString(),
+        sufijo: 'px', onChanged: (v) {
+          if (v.isFinite && v >= 0) onChanged(estilo.copyWith(bufferGrosor: v.clamp(0, 20)));
+        }),
+    ]);
+  }
+
 
   @override
   Widget build(BuildContext context) {
@@ -137,6 +196,8 @@ class PanelPropiedadesMapa extends StatelessWidget {
               'Escala',
               style: TextStyle(fontSize: 11, fontWeight: FontWeight.w600),
             ),
+            if (elemento.mapaMostrarClaves ?? false)
+              _estiloEtiqueta('clave', elemento.mapaEstiloClave, onEstiloClaveChanged),
             const SizedBox(height: 6),
             Row(
               children: [
@@ -156,7 +217,7 @@ class PanelPropiedadesMapa extends StatelessWidget {
                       ),
                     ),
                     onChanged: (value) {
-                      final parsed = double.tryParse(value);
+                      final parsed = double.tryParse(value.replaceAll(',', '.'));
                       if (parsed != null && parsed > 0) {
                         onZoomChanged(
                           _escalaAZoom(parsed, latActual).clamp(1, 18),
@@ -260,6 +321,8 @@ class PanelPropiedadesMapa extends StatelessWidget {
                 ),
               ],
             ),
+            if (elemento.mapaMostrarClaves ?? false)
+              _estiloEtiqueta('clave', elemento.mapaEstiloClave, onEstiloClaveChanged),
             const SizedBox(height: 6),
             Row(
               children: [
@@ -278,6 +341,8 @@ class PanelPropiedadesMapa extends StatelessWidget {
                 ),
               ],
             ),
+            if (elemento.mapaMostrarPks ?? false)
+              _estiloEtiqueta('pks', elemento.mapaEstiloPks, onEstiloPksChanged),
             const SizedBox(height: 8),
             const Divider(height: 1),
             const SizedBox(height: 8),
@@ -296,6 +361,17 @@ class PanelPropiedadesMapa extends StatelessWidget {
               ],
             ),
             if (bordeActivo) ...[
+              DropdownButtonFormField<EstiloLinea>(
+                key: ValueKey('borde_estilo_${elemento.id}_${elemento.mapaBordeEstilo.name}'),
+                initialValue: elemento.mapaBordeEstilo,
+                decoration: const InputDecoration(labelText: 'Tipo de línea', isDense: true),
+                items: const [
+                  DropdownMenuItem(value: EstiloLinea.continua, child: Text('Continua', style: TextStyle(fontSize: 12))),
+                  DropdownMenuItem(value: EstiloLinea.segmentada, child: Text('Segmentada', style: TextStyle(fontSize: 12))),
+                  DropdownMenuItem(value: EstiloLinea.punteada, child: Text('Punteada', style: TextStyle(fontSize: 12))),
+                ],
+                onChanged: (v) { if (v != null) onBordeEstiloChanged(v); },
+              ),
               const SizedBox(height: 6),
               Text(
                 'Grosor: ${bordeGrosorActual.toStringAsFixed(1)}',

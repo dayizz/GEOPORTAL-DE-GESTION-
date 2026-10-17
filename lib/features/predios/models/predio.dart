@@ -1,3 +1,4 @@
+import '../../../core/utils/import_normalization.dart' as norm;
 import 'dart:convert';
 
 import 'propietario.dart';
@@ -50,7 +51,9 @@ class Predio {
   final Propietario? propietario;
   final DateTime createdAt;
   final DateTime? updatedAt;
-  final String rangoEstatus; // Liberado, L nueva, Instruccion UVSR, Con ingreso, Negociacion, Posible DOT, No liberado
+  final String _rangoEstatus;
+  String get rangoEstatus => norm.sinTipoInfraestructura(estructura)
+      ? 'Investigación' : norm.normalizeRangoEstatus(_rangoEstatus); // Liberado, L nueva, Instruccion UVSR, Con ingreso, Negociacion, Posible DOT, No liberado
   final DateTime? rangoEstatusFecha; // fecha del último cambio de rangoEstatus
   // Cuando varios registros de Gestión representan afectaciones distintas
   // sobre el mismo predio físico (misma clave catastral repetida, o
@@ -131,10 +134,10 @@ class Predio {
     this.propietario,
     required this.createdAt,
     this.updatedAt,
-    this.rangoEstatus = 'No liberado',
+    String rangoEstatus = 'No liberado',
     this.rangoEstatusFecha,
     this.polygonRefId,
-  }) : _kmEfectivos = kmEfectivos;
+  }) : _kmEfectivos = kmEfectivos, _rangoEstatus = rangoEstatus;
 
   factory Predio.fromMap(Map<String, dynamic> map) {
     String? pickText(List<String> keys) {

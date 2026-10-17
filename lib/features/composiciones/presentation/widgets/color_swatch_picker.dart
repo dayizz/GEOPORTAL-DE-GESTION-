@@ -17,12 +17,14 @@ class ColorSwatchPicker extends StatelessWidget {
     this.permitirSinColor = false,
     this.label,
     this.compacto = false,
+    this.textStyle,
   });
 
   final String? colorHex;
   final ValueChanged<String?> onChanged;
   final bool permitirSinColor;
   final String? label;
+  final TextStyle? textStyle;
   // Si es `true`, omite la etiqueta y solo dibuja el recuadro de color (y el
   // enlace "Sin color", si aplica) -pensado para compartir renglón con otro
   // control, p.ej. el switch de activación de un buffer.
@@ -53,9 +55,9 @@ class ColorSwatchPicker extends StatelessWidget {
           const SizedBox(width: 10),
           GestureDetector(
             onTap: () => onChanged(null),
-            child: const Text(
+            child: Text(
               'Sin color',
-              style: TextStyle(fontSize: 11, color: Colors.black54, decoration: TextDecoration.underline),
+              style: (textStyle ?? const TextStyle(fontSize: 11, color: Colors.black54)).copyWith(decoration: TextDecoration.underline),
             ),
           ),
         ],

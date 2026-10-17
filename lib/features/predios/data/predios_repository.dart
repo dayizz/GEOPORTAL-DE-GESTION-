@@ -1,3 +1,5 @@
+import 'dart:async';
+import '../../../core/utils/import_normalization.dart' as norm;
 import 'dart:convert';
 
 import 'package:cloud_firestore/cloud_firestore.dart';
@@ -80,12 +82,17 @@ class PrediosRepository {
   Map<String, dynamic> _normalizePredioMap(
     DocumentSnapshot<Map<String, dynamic>> doc, {
     Map<String, dynamic>? propietario,
+    Map<String, dynamic>? geometryOverride,
+    bool reuseGeometry = false,
+    Map<String, dynamic>? overrides,
   }) {
-    final raw = Map<String, dynamic>.from(doc.data() ?? const {});
+    final raw = <String, dynamic>{...?doc.data(), ...?overrides};
     final geometryRaw = raw['geometry'];
 
     Map<String, dynamic>? geometry;
-    if (geometryRaw is Map) {
+    if (reuseGeometry) {
+      geometry = geometryOverride;
+    } else if (geometryRaw is Map) {
       geometry = Map<String, dynamic>.from(geometryRaw);
     } else if (geometryRaw is String && geometryRaw.trim().isNotEmpty) {
       try {
@@ -146,6 +153,67 @@ class PrediosRepository {
       map['propietarios'] = propietario;
     }
     return map;
+  }
+
+  /// Una suscripción compartida por las vistas. Procesa solo documentos
+  /// modificados; no consulta propietarios para dibujar el mapa o la tabla.
+  Stream<List<Predio>> watchPredios({
+    String? proyecto,
+    List<String>? proyectosPermitidos,
+  }) {
+    final permitidos = proyectosPermitidos?.map((p) => p.trim().toUpperCase()).toSet();
+    final filtro = proyecto?.trim().toUpperCase();
+    if (permitidos != null && (permitidos.isEmpty ||
+        (filtro != null && !permitidos.contains(filtro)))) {
+      return Stream.value(const <Predio>[]);
+    }
+    final queries = <Query<Map<String, dynamic>>>[
+      if (filtro != null && filtro.isNotEmpty)
+        _predios.where('proyecto', isEqualTo: filtro)
+      else if (permitidos != null)
+        for (final codigo in permitidos)
+          _predios.where('proyecto', isEqualTo: codigo)
+      else _predios,
+    ];
+    final grupos = <int, Map<String, Predio>>{};
+    final geometries = <String, dynamic>{};
+    final subscriptions = <StreamSubscription<QuerySnapshot<Map<String, dynamic>>>>[];
+    late final StreamController<List<Predio>> controller;
+    controller = StreamController<List<Predio>>(
+      onListen: () {
+        for (var i = 0; i < queries.length; i++) {
+          final index = i;
+          subscriptions.add(queries[i].snapshots().listen((snapshot) {
+            final grupo = grupos.putIfAbsent(index, () => {});
+            for (final cambio in snapshot.docChanges) {
+              final doc = cambio.doc;
+              if (cambio.type == DocumentChangeType.removed) {
+                grupo.remove(doc.id);
+                geometries.remove(doc.id);
+                continue;
+              }
+              final anterior = grupo[doc.id];
+              final rawGeometry = doc.data()?['geometry'];
+              final reutilizar = anterior != null && geometries[doc.id] == rawGeometry;
+              final map = _normalizePredioMap(doc,
+                geometryOverride: reutilizar ? anterior.geometry : null,
+                reuseGeometry: reutilizar);
+              final predio = Predio.fromMap(map);
+              grupo[doc.id] = reutilizar
+                  ? predio.copyWith(geometry: anterior.geometry) : predio;
+              geometries[doc.id] = rawGeometry;
+            }
+            if (grupos.length == queries.length) {
+              controller.add([for (final grupo in grupos.values) ...grupo.values]);
+            }
+          }, onError: controller.addError));
+        }
+      },
+      onCancel: () async {
+        await Future.wait(subscriptions.map((s) => s.cancel()));
+      },
+    );
+    return controller.stream;
   }
 
   Future<List<Predio>> getPredios({
@@ -303,6 +371,7 @@ class PrediosRepository {
       'created_at': data['created_at']?.toString() ?? _isoNow(),
       'updated_at': _isoNow(),
     }..remove('id');
+    norm.aplicarEstatusInfraestructura(payload);
     _encodeGeometryForWrite(payload);
 
     await _predios.doc(id).set(payload, SetOptions(merge: true));
@@ -318,14 +387,17 @@ class PrediosRepository {
       ...data,
       'updated_at': _isoNow(),
     }..remove('id');
+    final original = await _predios.doc(id).get();
+    final existente = original.data() ?? <String, dynamic>{};
+    final combinado = <String, dynamic>{...existente, ...payload};
+    if (norm.aplicarEstatusInfraestructura(combinado)) {
+      payload['estructura'] = 'SIN TIPO';
+      payload['rango_estatus'] = 'Investigación';
+    }
     _encodeGeometryForWrite(payload);
 
     await _predios.doc(id).set(payload, SetOptions(merge: true));
-    final updated = await getPredioById(id);
-    if (updated == null) {
-      throw Exception('No se pudo actualizar el predio en Firestore');
-    }
-    return updated;
+    return Predio.fromMap(_normalizePredioMap(original, overrides: payload));
   }
 
   Future<void> deletePredio(String id) async {
@@ -545,6 +617,11 @@ class PrediosRepository {
     if (hermanos.length == 1 && !forzarNuevoRegistro) {
       final doc = hermanos.first;
       final update = _mergeParaActualizar(doc.data(), payload);
+      final combinado = <String, dynamic>{...doc.data(), ...update};
+      if (norm.aplicarEstatusInfraestructura(combinado)) {
+        update['estructura'] = 'SIN TIPO';
+        update['rango_estatus'] = 'Investigación';
+      }
       update['updated_at'] = _isoNow();
       _encodeGeometryForWrite(update);
       await doc.reference.set(update, SetOptions(merge: true));
@@ -587,6 +664,7 @@ class PrediosRepository {
 
   bool _esVacioCampo(String key, dynamic v) {
     if (v == null) return true;
+    if (key == 'estructura' && norm.sinTipoInfraestructura(v.toString())) return true;
     if (v is String) {
       final t = v.trim();
       return t.isEmpty || t == _placeholdersPorCampo[key];

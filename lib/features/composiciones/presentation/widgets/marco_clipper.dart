@@ -1,6 +1,7 @@
 import 'dart:math' as math;
 import 'package:flutter/material.dart';
 import '../../models/elemento_composicion.dart';
+import 'shape_painter.dart' show estiloLineaDe;
 
 /// Recorta el contenido de una ventana de mapa según [FormaMarco]. La
 /// caja delimitadora (selección, manijas de redimensionar) permanece
@@ -47,18 +48,21 @@ class MarcoBorderPainter extends CustomPainter {
     required this.figura,
     required this.color,
     required this.grosor,
+    this.estilo = EstiloLinea.continua,
   });
 
   final FormaMarco figura;
   final Color color;
   final double grosor;
+  final EstiloLinea estilo;
 
   @override
   void paint(Canvas canvas, Size size) {
     canvas.drawPath(
-      MarcoClipper(figura).getClip(size),
+      estiloLineaDe(MarcoClipper(figura).getClip(size), estilo, grosor),
       Paint()
         ..color = color
+        ..strokeCap = estilo == EstiloLinea.punteada ? StrokeCap.round : StrokeCap.butt
         ..strokeWidth = grosor
         ..style = PaintingStyle.stroke,
     );
@@ -66,5 +70,5 @@ class MarcoBorderPainter extends CustomPainter {
 
   @override
   bool shouldRepaint(covariant MarcoBorderPainter oldDelegate) =>
-      oldDelegate.figura != figura || oldDelegate.color != color || oldDelegate.grosor != grosor;
+      oldDelegate.estilo != estilo || oldDelegate.figura != figura || oldDelegate.color != color || oldDelegate.grosor != grosor;
 }

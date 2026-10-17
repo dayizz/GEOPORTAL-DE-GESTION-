@@ -1,3 +1,4 @@
+import '../utils/import_normalization.dart' as norm;
 import 'package:flutter/material.dart';
 
 class AppColors {
@@ -127,8 +128,18 @@ class AppColors {
   static const Color rangoInvestigacion = Color(0xFF808080);     // gris
   static const Color rangoContornoVerde = Color(0xFF00FF00);     // contorno distintivo
 
+  static Color estatusPredioColor(String? estatus) {
+    final normalizado = norm.normalizeRangoEstatus(estatus);
+    if (normalizado == 'Investigación') return rangoInvestigacion;
+    if (const {'Liberado', 'L nueva', 'Instruccion UVSR', 'Con ingreso'}
+        .contains(normalizado)) {
+      return const Color(0xFF2E9E44);
+    }
+    return const Color(0xFFD63A3A);
+  }
+
   static Color rangoEstatusColor(String? rango) {
-    switch ((rango ?? '').toUpperCase().trim()) {
+    switch (norm.normalizeRangoEstatus(rango).toUpperCase()) {
       case 'LIBERADO':
         return rangoLiberado;
       case 'L NUEVA':
@@ -146,7 +157,7 @@ class AppColors {
       case 'INVESTIGACIÓN':
         return rangoInvestigacion;
       default:
-        return rangoDesconocido;
+        return rangoNoLiberado;
     }
   }
 
@@ -155,7 +166,7 @@ class AppColors {
   /// un contorno verde distintivo porque comparten relleno con otro rango
   /// (Posible DOT y Negociacion respectivamente).
   static Color rangoEstatusBorderColor(String? rango) {
-    switch ((rango ?? '').toUpperCase().trim()) {
+    switch (norm.normalizeRangoEstatus(rango).toUpperCase()) {
       case 'INSTRUCCION UVSR':
       case 'CON INGRESO':
         return rangoContornoVerde;

@@ -139,7 +139,7 @@ class _BalanceScreenState extends ConsumerState<BalanceScreen> {
               Text(e.toString()),
               const SizedBox(height: 16),
               ElevatedButton(
-                onPressed: () => ref.refresh(prediosMapaProvider),
+                onPressed: () => ref.invalidate(prediosRemotosProvider),
                 child: const Text('Reintentar'),
               ),
             ],

@@ -1,3 +1,4 @@
+import '../utils/limites_hoja.dart';
 import 'dart:convert';
 
 import 'package:file_picker/file_picker.dart';
@@ -87,7 +88,7 @@ class _ComposicionEditorScreenState
         return;
       }
       setState(() {
-        _composicion = composicion;
+        _composicion = composicion.copyWith(hojas: composicion.hojas.map(aplicarMargenHoja).toList());
         _cargando = false;
       });
       return;
@@ -161,10 +162,19 @@ class _ComposicionEditorScreenState
     }
   }
 
+  List<Predio>? _fuentePrediosMapas;
+  final Map<String, List<Predio>> _prediosMapasPorProyecto = {};
+
   List<Predio> _prediosParaElementoMapa(
     ElementoComposicion elemento,
     List<Predio> todos,
   ) {
+    if (!identical(_fuentePrediosMapas, todos)) {
+      _fuentePrediosMapas = todos;
+      _prediosMapasPorProyecto.clear();
+    }
+    final clave = '${_composicion?.proyecto}|${elemento.mapaProyecto}';
+    return _prediosMapasPorProyecto.putIfAbsent(clave, () {
     final proyectoMapa = elemento.mapaProyecto?.trim().toUpperCase();
     if (proyectoMapa == null || proyectoMapa.isEmpty) {
       return _filtrarPrediosDelProyecto(todos);
@@ -176,6 +186,7 @@ class _ComposicionEditorScreenState
     return todos
         .where((predio) => predio.geometry != null)
         .toList(growable: false);
+    });
   }
 
   /// El `ProyectoItem` (Estructura > Proyectos) que corresponde al
@@ -205,7 +216,7 @@ class _ComposicionEditorScreenState
   void _actualizarHoja(Hoja Function(Hoja hoja) actualizar) {
     setState(() {
       final hojas = List<Hoja>.from(_composicion!.hojas);
-      hojas[_hojaActivaIndex] = actualizar(hojas[_hojaActivaIndex]);
+      hojas[_hojaActivaIndex] = aplicarMargenHoja(actualizar(hojas[_hojaActivaIndex]));
       _composicion = _composicion!.copyWith(hojas: hojas);
     });
   }
@@ -391,6 +402,7 @@ class _ComposicionEditorScreenState
       context,
       _hojaActiva,
       predios: _prediosParaExportar(),
+      pksFeatures: ref.read(pksPointFeaturesProvider),
       proyectoItem: _proyectoItemParaExportar(),
     );
     await _exportService.descargar(
@@ -405,6 +417,7 @@ class _ComposicionEditorScreenState
       context,
       _hojaActiva,
       predios: _prediosParaExportar(),
+      pksFeatures: ref.read(pksPointFeaturesProvider),
       proyectoItem: _proyectoItemParaExportar(),
     );
     await _exportService.descargar(
@@ -419,6 +432,7 @@ class _ComposicionEditorScreenState
       context,
       _composicion!,
       predios: _prediosParaExportar(),
+      pksFeatures: ref.read(pksPointFeaturesProvider),
       proyectoItem: _proyectoItemParaExportar(),
     );
     await _exportService.descargar(
@@ -433,6 +447,7 @@ class _ComposicionEditorScreenState
       context,
       _composicion!,
       predios: _prediosParaExportar(),
+      pksFeatures: ref.read(pksPointFeaturesProvider),
       proyectoItem: _proyectoItemParaExportar(),
     );
     await _exportService.descargar(
@@ -1171,6 +1186,16 @@ class _ComposicionEditorScreenState
                     child: Stack(
                       clipBehavior: Clip.none,
                       children: [
+                        if (hoja.margenMm > 0)
+                          Positioned(
+                            left: hoja.margenMm * scale,
+                            top: hoja.margenMm * scale,
+                            right: hoja.margenMm * scale,
+                            bottom: hoja.margenMm * scale,
+                            child: IgnorePointer(child: DecoratedBox(
+                              decoration: BoxDecoration(border: Border.all(color: Colors.blueGrey.withValues(alpha: 0.4))),
+                            )),
+                          ),
                         for (final elemento in hoja.elementos)
                           ElementoBox(
                             key: ValueKey(elemento.id),
@@ -1178,8 +1203,12 @@ class _ComposicionEditorScreenState
                             scale: scale,
                             hojaAnchoMm: anchoMm,
                             hojaAltoMm: altoMm,
-                            onSnapIndicador: (p) =>
-                                setState(() => _snapIndicadorPx = p),
+                            margenMm: hoja.margenMm,
+                            onSnapIndicador: (p) {
+                              if (_snapIndicadorPx != p) {
+                                setState(() => _snapIndicadorPx = p);
+                              }
+                            },
                             seleccionado:
                                 elemento.id == _elementoSeleccionadoId,
                             onSelect: () => setState(
@@ -1467,6 +1496,9 @@ class _ComposicionEditorScreenState
               elemento.id,
               (e) => e.copyWith(mapaBordeColorHex: v),
             ),
+            onEstiloClaveChanged: (v) => _actualizarElemento(elemento.id, (e) => e.copyWith(mapaEstiloClave: v)),
+            onEstiloPksChanged: (v) => _actualizarElemento(elemento.id, (e) => e.copyWith(mapaEstiloPks: v)),
+            onBordeEstiloChanged: (v) => _actualizarElemento(elemento.id, (e) => e.copyWith(mapaBordeEstilo: v)),
             onBordeOpacidadChanged: (v) => _actualizarElemento(
               elemento.id,
               (e) => e.copyWith(mapaBordeOpacidad: v),

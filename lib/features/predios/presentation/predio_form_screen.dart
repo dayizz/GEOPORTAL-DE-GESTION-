@@ -1,3 +1,5 @@
+import '../../../core/utils/import_normalization.dart' as norm;
+import '../utils/codigo_division.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -36,16 +38,7 @@ class _PredioFormScreenState extends ConsumerState<PredioFormScreen> {
     'ANUENCIA POR OFICIO',
     'MINUTA',
   ];
-  static const List<String> _estructuraOpciones = [
-    'Estacion',
-    'Edificio auxiliar',
-    'Viaducto',
-    'DDV Troncal',
-    'Carretera',
-    'Cruce/Transversal',
-    'ZICA',
-    'Sin afectación',
-  ];
+  static const List<String> _estructuraOpciones = norm.estructuraOpciones;
 
   final _formKey = GlobalKey<FormState>();
   bool _loading = false;
@@ -68,7 +61,7 @@ class _PredioFormScreenState extends ConsumerState<PredioFormScreen> {
   String _tramoTipo = 'TRAMO';
   String _tramoNumero = '1';
   String _tipoPropiedad = 'PRIVADA';
-  String? _estructura;
+  String? _estructura = 'SIN TIPO';
   String? _responsableJuridico;
   String? _proyecto;
   bool _cop = false;
@@ -76,7 +69,7 @@ class _PredioFormScreenState extends ConsumerState<PredioFormScreen> {
   bool _identificacion = false;
   bool _levantamiento = false;
   bool _negociacion = false;
-  String _rangoEstatus = 'No liberado';
+  String _rangoEstatus = 'Investigación';
   String? _rangoEstatusOriginal;
   DateTime? _rangoEstatusFechaOriginal;
   String? _propietarioId;
@@ -86,6 +79,16 @@ class _PredioFormScreenState extends ConsumerState<PredioFormScreen> {
   String? _poligonoDwg;
   String? _planoPdf;
   String? _bdt;
+
+  void _aplicarClasificacionProyecto() {
+    final proyectos = ref.read(proyectosProvider).valueOrNull;
+    final coincidencias = proyectos?.where(
+      (p) => p.nombre.trim().toUpperCase() == _proyecto?.trim().toUpperCase(),
+    );
+    final proyecto = coincidencias == null || coincidencias.isEmpty
+        ? null : coincidencias.first;
+    _setTramoFromValue(normalizarCodigoDivision(_tramo, proyecto));
+  }
 
   String _buildTramoValue() {
     const prefijos = {
@@ -97,19 +100,11 @@ class _PredioFormScreenState extends ConsumerState<PredioFormScreen> {
     return '$prefijo$_tramoNumero';
   }
 
-  /// Carga el T/F/S de un predio existente SIN reescribirlo. Antes, esta
-  /// función siempre reconstruía `_tramo` como "letra+número" (vía
-  /// `_buildTramoValue`), así que abrir y guardar un predio cuyo T/F/S real
-  /// no seguía ese patrón (p.ej. "20", un segmento importado tal cual)
-  /// terminaba renombrándolo a "T20" aunque el usuario nunca tocara ese
-  /// campo. Ahora se conserva el valor real en `_tramo` -solo se usan
-  /// `_tramoTipo`/`_tramoNumero` como ayuda visual en el dropdown+número-,
-  /// y `_tramo` solo se reconstruye cuando el usuario edita esos controles
-  /// explícitamente (ver los `onChanged` en el formulario).
+  /// Separa tipo y número sin perder sufijos alfanuméricos.
   void _setTramoFromValue(String valor) {
     _tramo = valor;
     final limpio = valor.trim().toUpperCase();
-    final match = RegExp(r'^([TFS])\s*(\d+)$').firstMatch(limpio);
+    final match = RegExp(r'^([TFS])\s*(\d+[A-Z0-9]*)$').firstMatch(limpio);
 
     if (match != null) {
       final prefijo = match.group(1)!;
@@ -124,8 +119,7 @@ class _PredioFormScreenState extends ConsumerState<PredioFormScreen> {
     }
 
     _tramoTipo = 'TRAMO';
-    final numero = RegExp(r'(\d+)').firstMatch(limpio)?.group(1);
-    _tramoNumero = numero ?? limpio;
+    _tramoNumero = limpio;
   }
 
   @override
@@ -135,13 +129,19 @@ class _PredioFormScreenState extends ConsumerState<PredioFormScreen> {
       _loadPredio();
     } else {
       _proyecto = widget.proyectoInicial;
+      _tramo = '1';
+      _aplicarClasificacionProyecto();
       _loadingData = false;
     }
   }
 
   Future<void> _loadPredio() async {
     try {
-      final predio = await ref.read(predioDetalleProvider(widget.id!).future);
+      final cached = ref.read(prediosCombinadosProvider).valueOrNull
+          ?.where((p) => p.id == widget.id);
+      final predio = cached != null && cached.isNotEmpty
+          ? cached.first
+          : await ref.read(predioDetalleProvider(widget.id!).future);
       if (predio != null && mounted) {
         _claveCtrl.text = predio.claveCatastral;
         _ejidoCtrl.text = predio.ejido ?? '';
@@ -167,8 +167,10 @@ class _PredioFormScreenState extends ConsumerState<PredioFormScreen> {
         final estructura = predio.estructura?.trim().toUpperCase() == 'SICA'
             ? 'ZICA'
             : predio.estructura;
-        _estructura = _estructuraOpciones.contains(estructura) ? estructura : null;
+        _estructura = norm.sinTipoInfraestructura(estructura)
+            ? 'SIN TIPO' : estructura;
         _proyecto = predio.proyecto;
+        _aplicarClasificacionProyecto();
         _cop = predio.cop;
         _poligonoInsertado = predio.poligonoInsertado;
         _identificacion = predio.identificacion;
@@ -453,6 +455,11 @@ class _PredioFormScreenState extends ConsumerState<PredioFormScreen> {
 
   Future<void> _submit() async {
     if (!_formKey.currentState!.validate()) return;
+    _aplicarClasificacionProyecto();
+    if (norm.sinTipoInfraestructura(_estructura)) {
+      _estructura = 'SIN TIPO';
+      _rangoEstatus = 'Investigación';
+    }
     setState(() => _loading = true);
 
     try {
@@ -621,8 +628,6 @@ class _PredioFormScreenState extends ConsumerState<PredioFormScreen> {
         }
       }
 
-      ref.invalidate(prediosListProvider);
-      ref.invalidate(prediosMapaProvider);
       if (widget.id != null) ref.invalidate(predioDetalleProvider(widget.id!));
 
       if (mounted) {
@@ -705,7 +710,11 @@ class _PredioFormScreenState extends ConsumerState<PredioFormScreen> {
                     validator: (value) => value == null || value.isEmpty
                         ? 'Campo requerido'
                         : null,
-                    onChanged: (value) => setState(() => _proyecto = value),
+                    onChanged: (value) => setState(() {
+                      _proyecto = value;
+                      _setTramoFromValue(_tramo);
+                      _aplicarClasificacionProyecto();
+                    }),
                   );
                 }),
                 TextFormField(
@@ -768,10 +777,16 @@ class _PredioFormScreenState extends ConsumerState<PredioFormScreen> {
                     label: _requiredLabel('Tipo de infraestructura'),
                     hintText: 'Selecciona',
                   ),
-                  items: _estructuraOpciones
+                  items: {..._estructuraOpciones, ?_estructura}
                       .map((tipo) => DropdownMenuItem(value: tipo, child: Text(tipo)))
                       .toList(),
-                  onChanged: (value) => setState(() => _estructura = value),
+                  onChanged: (value) => setState(() {
+                    _estructura = value;
+                    if (norm.sinTipoInfraestructura(value)) {
+                      _rangoEstatus = 'Investigación';
+                      _cop = false;
+                    }
+                  }),
                 ),
               ], minFieldWidth: 210),
               const SizedBox(height: 12),
@@ -853,7 +868,8 @@ class _PredioFormScreenState extends ConsumerState<PredioFormScreen> {
                   value: _negociacion,
                   onChanged: (value) => setState(() {
                     _negociacion = value ?? false;
-                    _rangoEstatus = _negociacion ? 'Negociacion' : _rangoEstatus;
+                    _rangoEstatus = norm.sinTipoInfraestructura(_estructura)
+                        ? 'Investigación' : (_negociacion ? 'Negociacion' : _rangoEstatus);
                   }),
                   dense: true,
                   contentPadding: EdgeInsets.zero,
@@ -871,10 +887,11 @@ class _PredioFormScreenState extends ConsumerState<PredioFormScreen> {
                   items: Predio.rangoEstatusOpciones
                       .map((rango) => DropdownMenuItem(value: rango, child: Text(rango)))
                       .toList(),
-                  onChanged: (value) {
+                  onChanged: norm.sinTipoInfraestructura(_estructura) ? null : (value) {
                     if (value == null) return;
                     setState(() {
-                      _rangoEstatus = value;
+                      _rangoEstatus = norm.sinTipoInfraestructura(_estructura)
+                          ? 'Investigación' : value;
                       _cop = Predio.estatusSimplificado(value) == 'Liberado';
                       _negociacion = Predio.estatusSimplificado(value) == 'No liberado';
                     });

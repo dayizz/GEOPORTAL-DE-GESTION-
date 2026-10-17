@@ -1,3 +1,5 @@
+import '../utils/empalmes_km.dart';
+import '../utils/orden_km.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
@@ -329,7 +331,7 @@ class _TablaScreenState extends ConsumerState<TablaScreen> {
           style: TextStyle(color: AppColors.textSecondary, fontSize: 16),
         ),
       );
-    } else if (prediosAsync.isLoading) {
+    } else if (prediosAsync.isLoading && !prediosAsync.hasValue) {
       content = const Center(child: CircularProgressIndicator());
     } else if (prediosAsync.hasError) {
       content = Center(
@@ -343,7 +345,7 @@ class _TablaScreenState extends ConsumerState<TablaScreen> {
             Text(prediosAsync.error.toString(), textAlign: TextAlign.center),
             const SizedBox(height: 16),
             ElevatedButton(
-              onPressed: () => ref.refresh(prediosListProvider),
+              onPressed: () => ref.invalidate(prediosRemotosProvider),
               child: const Text('Reintentar'),
             ),
           ],
@@ -351,7 +353,7 @@ class _TablaScreenState extends ConsumerState<TablaScreen> {
       );
     } else {
       // Si no hay datos, mostrar mensaje amigable y evitar errores
-      final remoteData = prediosAsync.asData?.value;
+      final remoteData = prediosAsync.valueOrNull;
       final prediosList = remoteData ?? _ultimosPredios;
       if (prediosList.isEmpty) {
         content = Column(
@@ -373,7 +375,8 @@ class _TablaScreenState extends ConsumerState<TablaScreen> {
         _ultimosPredios = prediosList;
         final allPredios = prediosList
             .map((predio) => _prediosOptimistas[predio.id] ?? predio)
-            .toList(growable: false);
+            .toList(growable: false)
+          ..sort(compararPrediosGestion);
         final filtered = _applyFilters(allPredios);
         final totalPages = filtered.isEmpty ? 1 : (filtered.length / _rowsPerPage).ceil();
         final maxPage = totalPages - 1;
@@ -428,20 +431,22 @@ class _TablaScreenState extends ConsumerState<TablaScreen> {
 
         final camposIncompletos = filtered.where(_tieneCamposIncompletos).length;
 
-        // Numeracion estable por proyecto: se calcula sobre TODOS los
+        // Numeración por T/F/S y KM ascendente: se calcula sobre TODOS los
         // predios del proyecto actual (sin busqueda/filtros secundarios ni
         // paginacion), para que el ID de un registro no cambie segun que
         // filtro este activo en el momento.
         final proyectoOrdenado = allPredios
             .where((p) => _predioProyecto(p) == _proyectoActual)
             .toList(growable: false);
+        final empalmesKm = detectarEmpalmesKm(proyectoOrdenado);
         final idPorPredio = <String, int>{
           for (var i = 0; i < proyectoOrdenado.length; i++) proyectoOrdenado[i].id: i + 1,
         };
 
         content = Column(
           children: [
-            _buildTopBar(filtered.length, allPredios, proyectosDisponibles, camposIncompletos),
+            _buildTopBar(filtered.length, allPredios, proyectosDisponibles, camposIncompletos,
+                registrosConEmpalme: empalmesKm.length),
             const Divider(height: 1),
             if (totalPages > 1)
               Padding(
@@ -481,7 +486,7 @@ class _TablaScreenState extends ConsumerState<TablaScreen> {
               child: Stack(
                 children: [
                   Positioned.fill(
-                    child: _buildTable(rowsToRender, idPorPredio),
+                    child: _buildTable(rowsToRender, idPorPredio, empalmesKm),
                   ),
                   if (liberadosIncompletos.isNotEmpty && !_dismissLiberadosAlert)
                     Positioned(
@@ -512,7 +517,9 @@ class _TablaScreenState extends ConsumerState<TablaScreen> {
           onPressed: () {
             final prediosAsync = ref.read(prediosListProvider);
             final prediosList = prediosAsync.asData?.value ?? [];
-            final allPredios = prediosList.map((p) => _prediosOptimistas[p.id] ?? p).toList();
+            final allPredios = prediosList
+                .map((p) => _prediosOptimistas[p.id] ?? p).toList()
+              ..sort(compararPrediosGestion);
             final filtered = _applyFilters(allPredios);
             final proyectoOrdenado = allPredios
                 .where((p) => _predioProyecto(p) == _proyectoActual)
@@ -637,7 +644,7 @@ class _TablaScreenState extends ConsumerState<TablaScreen> {
     }
   }
 
-  Widget _buildTopBar(int visible, List<Predio> allPredios, List<String> proyectosDisponibles, int camposIncompletos) {
+  Widget _buildTopBar(int visible, List<Predio> allPredios, List<String> proyectosDisponibles, int camposIncompletos, {int registrosConEmpalme = 0}) {
     if (proyectosDisponibles.isEmpty) {
       return  Padding(
         padding: EdgeInsets.all(16),
@@ -735,6 +742,12 @@ class _TablaScreenState extends ConsumerState<TablaScreen> {
                   ],
                 ),
               ),
+              Flexible(
+                flex: MediaQuery.sizeOf(context).width < 700 ? 0 : 1,
+                child: Wrap(
+                  spacing: 8,
+                  runSpacing: 6,
+                  children: [
               if (camposIncompletos > 0)
                 Padding(
                   padding: const EdgeInsets.only(left: 8),
@@ -754,6 +767,31 @@ class _TablaScreenState extends ConsumerState<TablaScreen> {
                     ],
                   ),
                 ),
+              if (registrosConEmpalme > 0)
+                Tooltip(
+                  message: '$registrosConEmpalme registros con empalme de kilometraje en el proyecto',
+                  child: Padding(
+                    padding: const EdgeInsets.only(left: 8),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        const Icon(Icons.warning_amber_rounded, color: AppColors.danger, size: 16),
+                        const SizedBox(width: 4),
+                        Text(
+                          'EMPALMES ENTRE KM: ($registrosConEmpalme)',
+                          style: const TextStyle(
+                            fontSize: 12,
+                            fontWeight: FontWeight.w700,
+                            color: AppColors.danger,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+                  ],
+                ),
+              ),
             ],
           ),
           const SizedBox(height: 8),
@@ -892,7 +930,7 @@ class _TablaScreenState extends ConsumerState<TablaScreen> {
     );
   }
 
-  Widget _buildTable(List<Predio> rows, Map<String, int> idPorPredio) {
+  Widget _buildTable(List<Predio> rows, Map<String, int> idPorPredio, Set<String> empalmesKm) {
     if (rows.isEmpty) {
       return Center(
         child: Column(
@@ -970,6 +1008,7 @@ class _TablaScreenState extends ConsumerState<TablaScreen> {
                           colWidths,
                           idx,
                           idPorPredio[rows[idx].id],
+                          empalmesKm.contains(rows[idx].id),
                         ),
                       ),
                     ),
@@ -1055,25 +1094,22 @@ class _TablaScreenState extends ConsumerState<TablaScreen> {
 
     if (updated.id.startsWith('local-')) {
       ref.read(localPrediosProvider.notifier).updatePredio(updated);
-      ref.invalidate(prediosListProvider);
-      ref.invalidate(prediosMapaProvider);
+      setState(() => _prediosOptimistas.remove(updated.id));
       return;
     }
 
     try {
-      final saved = await ref
+      await ref
           .read(prediosRepositoryProvider)
           .updatePredio(updated.id, updated.toMap());
       if (!mounted) return;
       setState(() {
-        _prediosOptimistas[updated.id] = saved;
+        _prediosOptimistas.remove(updated.id);
       });
-      ref.invalidate(prediosListProvider);
-      ref.invalidate(prediosMapaProvider);
     } catch (_) {
       if (!mounted) return;
       setState(() {
-        _prediosOptimistas[previous.id] = previous;
+        _prediosOptimistas.remove(previous.id);
       });
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
@@ -1676,7 +1712,7 @@ class _TablaScreenState extends ConsumerState<TablaScreen> {
       p.kmEfectivos == null ||
       p.superficie == null;
 
-  Widget _buildDataRow(Predio p, List<double> widths, int idx, int? idProyecto) {
+  Widget _buildDataRow(Predio p, List<double> widths, int idx, int? idProyecto, bool empalmeKm) {
     final isEven = idx % 2 == 0;
     final tipoColor = AppColors.tipoPropiedadColor(p.tipoPropiedad);
     return Container(
@@ -1715,9 +1751,9 @@ class _TablaScreenState extends ConsumerState<TablaScreen> {
           // EJIDO
           _dataCell(p.ejido ?? '-', widths[9], requerido: true),
           // KM INICIO
-          _kmCell(p.kmInicio, widths[10], requerido: true),
+          _kmCell(p.kmInicio, widths[10], requerido: true, empalme: empalmeKm),
           // KM FIN
-          _kmCell(p.kmFin, widths[11], requerido: true),
+          _kmCell(p.kmFin, widths[11], requerido: true, empalme: empalmeKm),
           // KM EF
           _numCell(p.kmEfectivos, widths[12], decimals: 4, requerido: true),
           // M²
@@ -1865,7 +1901,7 @@ class _TablaScreenState extends ConsumerState<TablaScreen> {
           ref.read(localPrediosProvider.notifier).updatePredio(updated);
         } else {
           final saved = await repo.updatePredio(updated.id, updated.toMap());
-          _prediosOptimistas[updated.id] = saved;
+          _prediosOptimistas.remove(saved.id);
         }
         actualizados++;
       } catch (_) {
@@ -1983,7 +2019,7 @@ class _TablaScreenState extends ConsumerState<TablaScreen> {
         tooltip: 'Acciones',
         padding: EdgeInsets.zero,
         icon: const Icon(Icons.menu, size: 18, color: AppColors.primary),
-        onSelected: (value) {
+        onSelected: (value) async {
           switch (value) {
             case 'mapa':
               if (!vinculado) {
@@ -1995,7 +2031,9 @@ class _TablaScreenState extends ConsumerState<TablaScreen> {
               }
               break;
             case 'editar':
-              context.push('/predios/${p.id}/editar');
+              await context.push('/predios/${p.id}/editar');
+              if (!mounted) return;
+              setState(() => _prediosOptimistas.remove(p.id));
               break;
             case 'archivos':
               _showEditarArchivosDialog(p);
@@ -2129,25 +2167,33 @@ class _TablaScreenState extends ConsumerState<TablaScreen> {
   /// Celda para "km inicio"/"km fin": siempre se muestran en formato PK
   /// (placa kilométrica) "KM+M", sin importar si el archivo de origen traía
   /// el dato como "12+359" o como "12.359" -son la misma distancia-.
-  Widget _kmCell(double? value, double width, {bool requerido = false}) {
+  Widget _kmCell(double? value, double width, {bool requerido = false, bool empalme = false}) {
     final vacio = requerido && value == null;
     final text = value == null ? '-' : norm.formatKmPk(value);
-    return Container(
+    final cell = Container(
       width: width,
       height: double.infinity,
       alignment: Alignment.centerRight,
       padding: const EdgeInsets.symmetric(horizontal: 6),
-      decoration:  BoxDecoration(
+      decoration: BoxDecoration(
+        color: empalme ? AppColors.danger.withValues(alpha: 0.18) : null,
         border: Border(right: BorderSide(color: AppColors.border, width: 0.5)),
       ),
       child: vacio
           ? const Icon(Icons.error, color: AppColors.danger, size: 16)
           : Text(
         text,
-        style: const TextStyle(fontSize: 12, fontFeatures: [FontFeature.tabularFigures()]),
+        style: TextStyle(
+          color: empalme ? AppColors.danger : null,
+          fontWeight: empalme ? FontWeight.bold : null,
+          fontSize: 12, fontFeatures: const [FontFeature.tabularFigures()],
+        ),
         overflow: TextOverflow.ellipsis,
       ),
     );
+    return empalme
+        ? Tooltip(message: 'Empalme de kilometraje con otro registro del proyecto', child: cell)
+        : cell;
   }
 
   Widget _numCell(double? value, double width, {int decimals = 2, bool requerido = false}) {

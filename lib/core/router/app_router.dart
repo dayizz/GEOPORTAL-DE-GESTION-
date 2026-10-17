@@ -1,4 +1,4 @@
-import 'package:flutter/foundation.dart';
+import 'package:flutter/widgets.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:firebase_auth/firebase_auth.dart';
@@ -62,14 +62,18 @@ final routerProvider = Provider<GoRouter>((ref) {
   ref.listen(currentUserIsAdminProvider, (_, __) => refreshNotifier.refresh());
   ref.listen(currentUserPerfilProvider, (_, __) => refreshNotifier.refresh());
   ref.listen(currentUserProfileProvider, (_, __) => refreshNotifier.refresh());
-  ref.listen(registrationInProgressProvider, (_, __) => refreshNotifier.refresh());
+  ref.listen(
+    registrationInProgressProvider,
+    (_, __) => refreshNotifier.refresh(),
+  );
 
   return GoRouter(
     initialLocation: '/mapa',
     refreshListenable: refreshNotifier,
     redirect: (context, state) {
       final user = FirebaseAuth.instance.currentUser;
-      final canUseLocalSession = localOnlyAuthMode && ref.read(localAuthSessionProvider);
+      final canUseLocalSession =
+          localOnlyAuthMode && ref.read(localAuthSessionProvider);
       // Mientras un registro está en curso, Firebase ya autenticó la cuenta
       // recién creada aunque el código de aprobación aún no se validó — no
       // tratar esa sesión transitoria como un login válido.
@@ -106,128 +110,167 @@ final routerProvider = Provider<GoRouter>((ref) {
       return null;
     },
     routes: [
-      GoRoute(
-        path: '/login',
-        builder: (_, __) => const LoginScreen(),
-      ),
-      GoRoute(
-        path: '/',
-        redirect: (_, __) => '/mapa',
-      ),
-      GoRoute(
-        path: '/mapa',
-        pageBuilder: (_, __) => const NoTransitionPage(
-          child: MapaScreen(),
-        ),
-      ),
-      GoRoute(
-        path: '/predios',
-        builder: (_, __) => const PrediosListScreen(),
-        routes: [
-          GoRoute(
-            path: 'nuevo',
-            builder: (_, state) => PredioFormScreen(
-              proyectoInicial: state.uri.queryParameters['proyecto'],
-            ),
-          ),
-          GoRoute(
-            path: ':id',
-            builder: (_, state) => PredioDetailScreen(id: state.pathParameters['id']!),
-            routes: [
-              GoRoute(
-                path: 'editar',
-                builder: (_, state) => PredioFormScreen(
-                  id: state.pathParameters['id'],
-                ),
-              ),
-            ],
-          ),
-        ],
-      ),
-      GoRoute(
-        path: '/propietarios',
-        builder: (_, __) => const PropietariosListScreen(),
-        routes: [
-          GoRoute(
-            path: 'nuevo',
-            builder: (_, __) => const PropietarioFormScreen(),
-          ),
-          GoRoute(
-            path: ':id',
-            builder: (_, state) =>
-                PropietarioDetailScreen(id: state.pathParameters['id']!),
-            routes: [
-              GoRoute(
-                path: 'editar',
-                builder: (_, state) => PropietarioFormScreen(
-                  id: state.pathParameters['id'],
-                ),
-              ),
-            ],
-          ),
-        ],
-      ),
-      GoRoute(
-        path: '/reportes',
-        pageBuilder: (_, __) => const NoTransitionPage(
-          child: GenerarReporteScreen(),
-        ),
-      ),
-      GoRoute(
-        path: '/balance',
-        pageBuilder: (_, __) => const NoTransitionPage(
-          child: BalanceScreen(),
-        ),
-      ),
+      GoRoute(path: '/login', builder: (_, __) => const LoginScreen()),
+      GoRoute(path: '/', redirect: (_, __) => '/mapa'),
       GoRoute(
         path: '/balance/generar',
         redirect: (_, __) => '/reportes',
       ),
-      GoRoute(
-        path: '/carga',
-        pageBuilder: (_, __) => const NoTransitionPage(
-          child: CargaArchivoScreen(),
+      StatefulShellRoute.indexedStack(
+        builder: (context, state, navigationShell) => KeyedSubtree(
+          key: ValueKey(FirebaseAuth.instance.currentUser?.uid ?? 'local'),
+          child: navigationShell,
         ),
-      ),
-      GoRoute(
-        path: '/tabla',
-        pageBuilder: (_, __) => const NoTransitionPage(
-          child: TablaScreen(),
-        ),
-      ),
-      GoRoute(
-        path: '/proyectos',
-        builder: (_, __) => const ProyectosScreen(),
-      ),
-      GoRoute(
-        path: '/perfil',
-        pageBuilder: (_, __) => const NoTransitionPage(
-          child: PerfilScreen(),
-        ),
-      ),
-      GoRoute(
-        path: '/estructura',
-        pageBuilder: (_, __) => const NoTransitionPage(
-          child: EstructuraScreen(),
-        ),
-      ),
-      GoRoute(
-        path: '/composiciones',
-        pageBuilder: (_, __) => const NoTransitionPage(
-          child: ComposicionesListScreen(),
-        ),
-        routes: [
-          GoRoute(
-            path: 'nuevo',
-            builder: (_, state) => ComposicionEditorScreen(
-              proyectoInicial: state.uri.queryParameters['proyecto'],
-            ),
+        branches: [
+          StatefulShellBranch(
+            routes: [
+              GoRoute(
+                path: '/mapa',
+                pageBuilder: (_, __) =>
+                    const NoTransitionPage(child: MapaScreen()),
+              ),
+            ],
           ),
-          GoRoute(
-            path: ':id',
-            builder: (_, state) => ComposicionEditorScreen(
-              id: state.pathParameters['id']!,
-            ),
+          StatefulShellBranch(
+            routes: [
+              GoRoute(
+                path: '/predios',
+                builder: (_, __) => const PrediosListScreen(),
+                routes: [
+                  GoRoute(
+                    path: 'nuevo',
+                    builder: (_, state) => PredioFormScreen(
+                      proyectoInicial: state.uri.queryParameters['proyecto'],
+                    ),
+                  ),
+                  GoRoute(
+                    path: ':id',
+                    builder: (_, state) =>
+                        PredioDetailScreen(id: state.pathParameters['id']!),
+                    routes: [
+                      GoRoute(
+                        path: 'editar',
+                        builder: (_, state) =>
+                            PredioFormScreen(id: state.pathParameters['id']),
+                      ),
+                    ],
+                  ),
+                ],
+              ),
+            ],
+          ),
+          StatefulShellBranch(
+            routes: [
+              GoRoute(
+                path: '/propietarios',
+                builder: (_, __) => const PropietariosListScreen(),
+                routes: [
+                  GoRoute(
+                    path: 'nuevo',
+                    builder: (_, __) => const PropietarioFormScreen(),
+                  ),
+                  GoRoute(
+                    path: ':id',
+                    builder: (_, state) => PropietarioDetailScreen(
+                      id: state.pathParameters['id']!,
+                    ),
+                    routes: [
+                      GoRoute(
+                        path: 'editar',
+                        builder: (_, state) => PropietarioFormScreen(
+                          id: state.pathParameters['id'],
+                        ),
+                      ),
+                    ],
+                  ),
+                ],
+              ),
+            ],
+          ),
+          StatefulShellBranch(
+            routes: [
+              GoRoute(
+                path: '/reportes',
+                pageBuilder: (_, __) =>
+                    const NoTransitionPage(child: GenerarReporteScreen()),
+              ),
+            ],
+          ),
+          StatefulShellBranch(
+            routes: [
+              GoRoute(
+                path: '/balance',
+                pageBuilder: (_, __) =>
+                    const NoTransitionPage(child: BalanceScreen()),
+              ),
+            ],
+          ),
+          StatefulShellBranch(
+            routes: [
+              GoRoute(
+                path: '/carga',
+                pageBuilder: (_, __) =>
+                    const NoTransitionPage(child: CargaArchivoScreen()),
+              ),
+            ],
+          ),
+          StatefulShellBranch(
+            routes: [
+              GoRoute(
+                path: '/tabla',
+                pageBuilder: (_, __) =>
+                    const NoTransitionPage(child: TablaScreen()),
+              ),
+            ],
+          ),
+          StatefulShellBranch(
+            routes: [
+              GoRoute(
+                path: '/proyectos',
+                builder: (_, __) => const ProyectosScreen(),
+              ),
+            ],
+          ),
+          StatefulShellBranch(
+            routes: [
+              GoRoute(
+                path: '/perfil',
+                pageBuilder: (_, __) =>
+                    const NoTransitionPage(child: PerfilScreen()),
+              ),
+            ],
+          ),
+          StatefulShellBranch(
+            routes: [
+              GoRoute(
+                path: '/estructura',
+                pageBuilder: (_, __) =>
+                    const NoTransitionPage(child: EstructuraScreen()),
+              ),
+            ],
+          ),
+          StatefulShellBranch(
+            routes: [
+              GoRoute(
+                path: '/composiciones',
+                pageBuilder: (_, __) =>
+                    const NoTransitionPage(child: ComposicionesListScreen()),
+                routes: [
+                  GoRoute(
+                    path: 'nuevo',
+                    builder: (_, state) => ComposicionEditorScreen(
+                      proyectoInicial: state.uri.queryParameters['proyecto'],
+                    ),
+                  ),
+                  GoRoute(
+                    path: ':id',
+                    builder: (_, state) => ComposicionEditorScreen(
+                      id: state.pathParameters['id']!,
+                    ),
+                  ),
+                ],
+              ),
+            ],
           ),
         ],
       ),

@@ -1,3 +1,5 @@
+import '../utils/codigo_division.dart';
+import '../../estructura/models/proyecto_item.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../data/predios_repository.dart';
 import '../models/predio.dart';
@@ -36,7 +38,9 @@ class PrediosFiltros {
       busqueda: busqueda ?? this.busqueda,
       usoSuelo: clearUsoSuelo ? null : (usoSuelo ?? this.usoSuelo),
       zona: clearZona ? null : (zona ?? this.zona),
-      propietarioId: clearPropietario ? null : (propietarioId ?? this.propietarioId),
+      propietarioId: clearPropietario
+          ? null
+          : (propietarioId ?? this.propietarioId),
       proyecto: clearProyecto ? null : (proyecto ?? this.proyecto),
     );
   }
@@ -46,81 +50,97 @@ final prediosFiltrosProvider = StateProvider<PrediosFiltros>(
   (ref) => const PrediosFiltros(),
 );
 
-final prediosListProvider = FutureProvider<List<Predio>>((ref) async {
-  ref.keepAlive();
-  final filtros = ref.watch(prediosFiltrosProvider);
+/// La identidad y los permisos forman parte de la suscripción. Al cambiar
+/// de usuario se cancela la fuente anterior y se descarta su contenido.
+final prediosRemotosProvider = StreamProvider<List<Predio>>((ref) {
+  final uid = ref.watch(authStateProvider.select((auth) => auth.valueOrNull?.uid));
+  if (uid == null) return Stream.value(const <Predio>[]);
+  final proyecto = ref.watch(proyectoActivoProvider);
+  final permitidos = ref.watch(currentUserAssignedProjectsProvider);
+  final todos = ref.watch(canAccessAllProjectsProvider);
+  return ref
+      .watch(prediosRepositoryProvider)
+      .watchPredios(
+        proyecto: proyecto,
+        proyectosPermitidos: todos ? null : permitidos,
+      );
+});
+
+final _normalizarDivisionProvider = Provider<Predio Function(Predio)>((ref) {
+  final proyectos = ref.watch(proyectosProvider).valueOrNull ?? <ProyectoItem>[];
+  final cache = Expando<Predio>('divisionNormalizada');
+  return (predio) => cache[predio] ??= _normalizarDivision(predio, proyectos);
+});
+
+final prediosCombinadosProvider = FutureProvider<List<Predio>>((ref) async {
+  final remotos = ref.watch(prediosRemotosProvider.future);
   final locales = ref.watch(localPrediosProvider);
-  // Filtro por proyecto de sesión (null = admin, ve todos)
-  final proyectoSesion = ref.watch(proyectoActivoProvider);
-  final allowedProjects = ref.watch(currentUserAssignedProjectsProvider);
-  final canAccessAllProjects = ref.watch(canAccessAllProjectsProvider);
-  final proyectosValidos = ref.watch(proyectosCodigosProvider);
-  final repo = ref.read(prediosRepositoryProvider);
-  List<Predio> remotos = const [];
-  try {
-    final proyectoFiltro = filtros.proyecto ?? proyectoSesion;
-    remotos = await repo.getPredios(
-      busqueda: filtros.busqueda,
-      usoSuelo: filtros.usoSuelo,
-      zona: filtros.zona,
-      propietarioId: filtros.propietarioId,
-      proyecto: proyectoFiltro,
-      proyectosPermitidos: canAccessAllProjects ? null : allowedProjects,
-      limit: 100000,
-    );
-  } catch (_) {
-    remotos = const [];
-  }
+  final proyectos =
+      ref.watch(proyectosProvider).valueOrNull ?? <ProyectoItem>[];
+  final todos = ref.watch(canAccessAllProjectsProvider);
+  final permitidos = ref.watch(currentUserAssignedProjectsProvider).toSet();
+  final sesion = ref.watch(proyectoActivoProvider);
+  final codigos = proyectos.map((p) => p.nombre.trim().toUpperCase()).toList();
+  final normalizar = ref.watch(_normalizarDivisionProvider);
+  final uid = ref.watch(authStateProvider.select((auth) => auth.valueOrNull?.uid));
+  if (uid == null && !localOnlyAuthMode) return const <Predio>[];
+  final datos = await remotos;
+  final claves = datos.map((p) => p.claveCatastral).toSet();
+  final merged = [
+    ...datos,
+    ...locales.where((p) => !claves.contains(p.claveCatastral)),
+  ];
+  return merged
+      .where((p) {
+        final codigo = _extractProjectoFromPredio(p, codigos);
+        return (todos || permitidos.contains(codigo)) &&
+            (sesion == null || codigo == sesion);
+      })
+      .map(normalizar)
+      .toList(growable: false);
+});
 
-  var localesFiltrados = locales.where((p) {
-    if (filtros.busqueda.isNotEmpty) {
-      final q = filtros.busqueda.toLowerCase();
-      final matchesBusqueda = p.claveCatastral.toLowerCase().contains(q) ||
-          (p.propietarioNombre?.toLowerCase().contains(q) ?? false) ||
-          (p.ejido?.toLowerCase().contains(q) ?? false);
-      if (!matchesBusqueda) return false;
-    }
-    if (filtros.usoSuelo != null && p.usoSuelo != filtros.usoSuelo) {
-      return false;
-    }
-    if (filtros.zona != null && p.zona != filtros.zona) {
-      return false;
-    }
-    if (filtros.propietarioId != null && p.propietarioId != filtros.propietarioId) {
-      return false;
-    }
-    return true;
-  }).toList();
-
-  // Aplicar filtro de proyecto desde filtros UI
-  final proyectoFiltro = filtros.proyecto ?? proyectoSesion;
-  if (proyectoFiltro != null) {
-    remotos = remotos
-        .where((p) => _extractProjectoFromPredio(p, proyectosValidos) == proyectoFiltro)
-        .toList();
-    localesFiltrados = localesFiltrados
-        .where((p) => _extractProjectoFromPredio(p, proyectosValidos) == proyectoFiltro)
-        .toList();
-  }
-
-  final merged = <Predio>[...remotos];
-  final claves = remotos.map((p) => p.claveCatastral).toSet();
-  for (final local in localesFiltrados) {
-    if (!claves.contains(local.claveCatastral)) {
-      merged.add(local);
-    }
-  }
-  return merged;
+final prediosListProvider = FutureProvider<List<Predio>>((ref) async {
+  final filtros = ref.watch(prediosFiltrosProvider);
+  final datos = ref.watch(prediosCombinadosProvider.future);
+  final codigos = ref.watch(proyectosCodigosProvider);
+  final predios = await datos;
+  return predios
+      .where((p) {
+        if (filtros.proyecto != null &&
+            _extractProjectoFromPredio(p, codigos) != filtros.proyecto) {
+          return false;
+        }
+        if (filtros.usoSuelo != null && p.usoSuelo != filtros.usoSuelo) {
+          return false;
+        }
+        if (filtros.zona != null && p.zona != filtros.zona) return false;
+        if (filtros.propietarioId != null &&
+            p.propietarioId != filtros.propietarioId) {
+          return false;
+        }
+        final q = filtros.busqueda.trim().toLowerCase();
+        return q.isEmpty ||
+            p.claveCatastral.toLowerCase().contains(q) ||
+            (p.propietarioNombre?.toLowerCase().contains(q) ?? false) ||
+            (p.ejido?.toLowerCase().contains(q) ?? false);
+      })
+      .toList(growable: false);
 });
 
 /// Extrae el proyecto de un predio según sus campos. [proyectosValidos] es la
 /// lista vigente de códigos dados de alta en Estructura (Firestore).
-String _extractProjectoFromPredio(Predio predio, List<String> proyectosValidos) {
+String _extractProjectoFromPredio(
+  Predio predio,
+  List<String> proyectosValidos,
+) {
   final proyectoDirecto = predio.proyecto?.trim().toUpperCase();
   if (proyectoDirecto != null && proyectoDirecto.isNotEmpty) {
     // 'TQM' es un alias heredado (typo histórico); el código correcto es
     // 'TMQ' (Tren México-Querétaro).
-    if (proyectoDirecto == 'TQM' && proyectosValidos.contains('TMQ')) return 'TMQ';
+    if (proyectoDirecto == 'TQM' && proyectosValidos.contains('TMQ')) {
+      return 'TMQ';
+    }
     return proyectoDirecto;
   }
 
@@ -136,42 +156,15 @@ String _extractProjectoFromPredio(Predio predio, List<String> proyectosValidos) 
   for (final proyecto in proyectosValidos) {
     if (contenido.contains(proyecto)) return proyecto;
   }
-  if (contenido.contains('TQM') && proyectosValidos.contains('TMQ')) return 'TMQ';
+  if (contenido.contains('TQM') && proyectosValidos.contains('TMQ')) {
+    return 'TMQ';
+  }
 
   return 'Sin proyecto';
 }
 
 final prediosMapaProvider = FutureProvider<List<Predio>>((ref) async {
-  ref.keepAlive();
-  final locales = ref.watch(localPrediosProvider);
-  final proyectoSesion = ref.watch(proyectoActivoProvider);
-  final allowedProjects = ref.watch(currentUserAssignedProjectsProvider);
-  final canAccessAllProjects = ref.watch(canAccessAllProjectsProvider);
-  final proyectosValidos = ref.watch(proyectosCodigosProvider);
-  final repo = ref.read(prediosRepositoryProvider);
-  List<Predio> remotos = const [];
-  try {
-    remotos = await repo.getPredios(
-      proyecto: proyectoSesion,
-      proyectosPermitidos: canAccessAllProjects ? null : allowedProjects,
-      limit: 100000,
-    );
-  } catch (_) {
-    remotos = const [];
-  }
-  var localesFiltrados = locales.toList();
-  if (proyectoSesion != null) {
-    remotos = remotos.where((p) => _extractProjectoFromPredio(p, proyectosValidos) == proyectoSesion).toList();
-    localesFiltrados = localesFiltrados.where((p) => _extractProjectoFromPredio(p, proyectosValidos) == proyectoSesion).toList();
-  }
-  final merged = <Predio>[...remotos];
-  final claves = remotos.map((p) => p.claveCatastral).toSet();
-  for (final local in localesFiltrados) {
-    if (!claves.contains(local.claveCatastral)) {
-      merged.add(local);
-    }
-  }
-  return merged;
+  return ref.watch(prediosCombinadosProvider.future);
 });
 
 final prediosMapaByIdProvider = Provider<Map<String, Predio>>((ref) {
@@ -182,14 +175,27 @@ final prediosMapaByIdProvider = Provider<Map<String, Predio>>((ref) {
   );
 });
 
-final predioDetalleProvider = FutureProvider.family<Predio?, String>((ref, id) async {
+final predioDetalleProvider = FutureProvider.family<Predio?, String>((
+  ref,
+  id,
+) async {
+  final proyectos =
+      ref.watch(proyectosProvider).valueOrNull ?? <ProyectoItem>[];
   final locales = ref.watch(localPrediosProvider);
   for (final local in locales) {
-    if (local.id == id) return local;
+    if (local.id == id) return _normalizarDivision(local, proyectos);
   }
+  final cached = ref.watch(prediosCombinadosProvider.select((datos) {
+    for (final predio in datos.valueOrNull ?? <Predio>[]) {
+      if (predio.id == id) return predio;
+    }
+    return null;
+  }));
+  if (cached != null && cached.propietarioId == null) return cached;
   final repo = ref.read(prediosRepositoryProvider);
   try {
-    return await repo.getPredioById(id);
+    final predio = await repo.getPredioById(id);
+    return predio == null ? null : _normalizarDivision(predio, proyectos);
   } catch (_) {
     return null;
   }
@@ -209,7 +215,9 @@ final estadisticasProvider = FutureProvider<Map<String, dynamic>>((ref) async {
     return {
       ...remotas,
       'total': total,
-      'superficie_total': ((remotas['superficie_total'] as num?)?.toDouble() ?? 0) + superficieLocal,
+      'superficie_total':
+          ((remotas['superficie_total'] as num?)?.toDouble() ?? 0) +
+          superficieLocal,
     };
   } catch (_) {
     final porUso = <String, int>{};
@@ -225,3 +233,16 @@ final estadisticasProvider = FutureProvider<Map<String, dynamic>>((ref) async {
     };
   }
 });
+
+Predio _normalizarDivision(Predio predio, List<ProyectoItem> proyectos) {
+  final codigo = _extractProjectoFromPredio(
+    predio,
+    proyectos.map((p) => p.nombre.trim().toUpperCase()).toList(),
+  );
+  final coincidencias = proyectos.where(
+    (p) => p.nombre.trim().toUpperCase() == codigo,
+  );
+  final proyecto = coincidencias.isEmpty ? null : coincidencias.first;
+  final tramo = normalizarCodigoDivision(predio.tramo, proyecto);
+  return tramo == predio.tramo ? predio : predio.copyWith(tramo: tramo);
+}

@@ -1,4 +1,8 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import 'package:google_fonts/google_fonts.dart';
+import '../../models/elemento_composicion.dart';
+import '../../utils/color_hex.dart';
 import 'package:flutter_map/flutter_map.dart';
 import 'package:latlong2/latlong.dart';
 
@@ -51,6 +55,8 @@ class MapaViewportWidget extends StatefulWidget {
     this.baseLayer = 'estandar',
     this.mostrarEtiquetasClave = false,
     this.mostrarPks = false,
+    this.estiloClave = const EstiloEtiquetaMapa(),
+    this.estiloPks = const EstiloEtiquetaMapa(),
     this.rotacion = 0,
     this.opacidadMapa = 1,
     this.opacidadPredios = 0.35,
@@ -73,6 +79,8 @@ class MapaViewportWidget extends StatefulWidget {
 
   /// Si se dibujan las etiquetas de texto de [pksFeatures].
   final bool mostrarPks;
+  final EstiloEtiquetaMapa estiloClave;
+  final EstiloEtiquetaMapa estiloPks;
 
   /// Rotación (grados) del contenido del mapa en sí -no de la ventana que
   /// lo contiene, ver `rotacion` en `ElementoComposicion`-.
@@ -90,10 +98,34 @@ class MapaViewportWidget extends StatefulWidget {
 
 class _MapaViewportWidgetState extends State<MapaViewportWidget> {
   final MapController _mapController = MapController();
+  List<Polygon>? _poligonos;
+  List<Marker>? _etiquetasClave;
+  List<Marker>? _etiquetasPks;
+  Color? _colorImportados;
+
+  @override
+  void dispose() {
+    _mapController.dispose();
+    super.dispose();
+  }
+
 
   @override
   void didUpdateWidget(covariant MapaViewportWidget oldWidget) {
     super.didUpdateWidget(oldWidget);
+    final cambioPredios = !listEquals(widget.predios, oldWidget.predios);
+    if (cambioPredios ||
+        !listEquals(widget.importedFeatures, oldWidget.importedFeatures) ||
+        widget.opacidadPredios != oldWidget.opacidadPredios) {
+      _poligonos = null;
+    }
+    if (widget.estiloClave != oldWidget.estiloClave || cambioPredios || widget.mostrarEtiquetasClave != oldWidget.mostrarEtiquetasClave) {
+      _etiquetasClave = null;
+    }
+    if (widget.estiloPks != oldWidget.estiloPks || !listEquals(widget.pksFeatures, oldWidget.pksFeatures) || widget.mostrarPks != oldWidget.mostrarPks) {
+      _etiquetasPks = null;
+    }
+
     if (widget.lat != oldWidget.lat ||
         widget.lng != oldWidget.lng ||
         widget.zoom != oldWidget.zoom) {
@@ -176,6 +208,41 @@ class _MapaViewportWidgetState extends State<MapaViewportWidget> {
     return LatLng(sumLat / ring.length, sumLng / ring.length);
   }
 
+  Marker _etiqueta(LatLng punto, String texto, EstiloEtiquetaMapa estilo,
+      {Alignment alignment = Alignment.center}) {
+    final base = TextStyle(fontSize: estilo.tamano, fontWeight: FontWeight.w700);
+    final fuente = GoogleFonts.asMap().containsKey(estilo.fuente)
+        ? GoogleFonts.getFont(estilo.fuente, textStyle: base)
+        : base.copyWith(fontFamily: estilo.fuente);
+    final medida = TextPainter(
+      text: TextSpan(text: texto, style: fuente),
+      textDirection: TextDirection.ltr,
+      textScaler: MediaQuery.textScalerOf(context),
+      maxLines: 1,
+    )..layout();
+    final ancho = medida.width + estilo.bufferGrosor * 2 + 4;
+    final alto = medida.height + estilo.bufferGrosor * 2 + 4;
+    medida.dispose();
+    return Marker(
+      point: punto, width: ancho, height: alto, alignment: alignment,
+      child: IgnorePointer(
+        child: Center(child: Stack(alignment: Alignment.center, children: [
+          if (estilo.bufferGrosor > 0)
+            Text(texto, maxLines: 1, style: fuente.copyWith(
+              foreground: Paint()
+                ..style = PaintingStyle.stroke
+                ..strokeJoin = StrokeJoin.round
+                ..strokeWidth = estilo.bufferGrosor * 2
+                ..color = colorFromHex(estilo.bufferColorHex) ?? Colors.white,
+            )),
+          Text(texto, maxLines: 1, style: fuente.copyWith(
+            color: colorFromHex(estilo.colorHex) ?? Colors.black,
+          )),
+        ])),
+      ),
+    );
+  }
+
   List<Marker> _construirEtiquetasClave() {
     if (!widget.mostrarEtiquetasClave) return const [];
     final marcadores = <Marker>[];
@@ -187,48 +254,7 @@ class _MapaViewportWidgetState extends State<MapaViewportWidget> {
       final centro = _centroide(rings.first);
       if (centro == null) continue;
       marcadores.add(
-        Marker(
-          point: centro,
-          width: 160,
-          height: 20,
-          child: IgnorePointer(
-            child: Center(
-              child: Text(
-                clave,
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-                textAlign: TextAlign.center,
-                style: const TextStyle(
-                  fontSize: 9,
-                  fontWeight: FontWeight.w700,
-                  color: Colors.black,
-                  shadows: [
-                    Shadow(
-                      color: Colors.white,
-                      blurRadius: 3,
-                      offset: Offset(1, 1),
-                    ),
-                    Shadow(
-                      color: Colors.white,
-                      blurRadius: 3,
-                      offset: Offset(-1, 1),
-                    ),
-                    Shadow(
-                      color: Colors.white,
-                      blurRadius: 3,
-                      offset: Offset(1, -1),
-                    ),
-                    Shadow(
-                      color: Colors.white,
-                      blurRadius: 3,
-                      offset: Offset(-1, -1),
-                    ),
-                  ],
-                ),
-              ),
-            ),
-          ),
-        ),
+        _etiqueta(centro, clave, widget.estiloClave),
       );
     }
     return marcadores;
@@ -259,49 +285,7 @@ class _MapaViewportWidgetState extends State<MapaViewportWidget> {
       if (label.isEmpty) continue;
       for (final punto in puntos) {
         marcadores.add(
-          Marker(
-            point: punto,
-            width: 160,
-            height: 20,
-            alignment: Alignment.topCenter,
-            child: IgnorePointer(
-              child: Center(
-                child: Text(
-                  label,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  textAlign: TextAlign.center,
-                  style: const TextStyle(
-                    fontSize: 9,
-                    fontWeight: FontWeight.w700,
-                    color: Colors.black,
-                    shadows: [
-                      Shadow(
-                        color: Colors.white,
-                        blurRadius: 3,
-                        offset: Offset(1, 1),
-                      ),
-                      Shadow(
-                        color: Colors.white,
-                        blurRadius: 3,
-                        offset: Offset(-1, 1),
-                      ),
-                      Shadow(
-                        color: Colors.white,
-                        blurRadius: 3,
-                        offset: Offset(1, -1),
-                      ),
-                      Shadow(
-                        color: Colors.white,
-                        blurRadius: 3,
-                        offset: Offset(-1, -1),
-                      ),
-                    ],
-                  ),
-                ),
-              ),
-            ),
-          ),
+          _etiqueta(punto, label, widget.estiloPks, alignment: Alignment.topCenter),
         );
       }
     }
@@ -311,9 +295,14 @@ class _MapaViewportWidgetState extends State<MapaViewportWidget> {
   @override
   Widget build(BuildContext context) {
     final tileTemplate = _tileTemplate();
-    final etiquetas = _construirEtiquetasClave();
-    final etiquetasPks = _construirEtiquetasPks();
-    return ColoredBox(
+    if (_colorImportados != AppColors.primary) {
+      _colorImportados = AppColors.primary;
+      _poligonos = null;
+    }
+    final poligonos = _poligonos ??= [..._construirPoligonos(), ..._construirPoligonosImportados()];
+    final etiquetas = _etiquetasClave ??= _construirEtiquetasClave();
+    final etiquetasPks = _etiquetasPks ??= _construirEtiquetasPks();
+    return RepaintBoundary(child: ColoredBox(
       color: widget.baseLayer == 'sinMapa' ? Colors.white : Colors.transparent,
       child: FlutterMap(
         mapController: _mapController,
@@ -350,15 +339,12 @@ class _MapaViewportWidgetState extends State<MapaViewportWidget> {
               ),
             ),
           PolygonLayer(
-            polygons: [
-              ..._construirPoligonos(),
-              ..._construirPoligonosImportados(),
-            ],
+            polygons: poligonos,
           ),
           if (etiquetas.isNotEmpty) MarkerLayer(markers: etiquetas),
           if (etiquetasPks.isNotEmpty) MarkerLayer(markers: etiquetasPks),
         ],
       ),
-    );
+    ));
   }
 }

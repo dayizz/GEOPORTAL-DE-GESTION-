@@ -107,6 +107,42 @@ TipoGrafica tipoGraficaFromString(String value) {
 /// (un solo `toMap`/`fromMap`, sin necesidad de un registro de
 /// subtipos). El orden dentro de `Hoja.elementos` determina el z-index
 /// (índice 0 = fondo).
+/// Estilo independiente de las etiquetas de una capa del mapa.
+class EstiloEtiquetaMapa {
+  const EstiloEtiquetaMapa({
+    this.tamano = 9,
+    this.colorHex = '#000000',
+    this.fuente = 'Roboto',
+    this.bufferColorHex = '#FFFFFF',
+    this.bufferGrosor = 2,
+  });
+  final double tamano;
+  final String colorHex;
+  final String fuente;
+  final String bufferColorHex;
+  final double bufferGrosor;
+
+  EstiloEtiquetaMapa copyWith({double? tamano, String? colorHex,
+    String? fuente, String? bufferColorHex, double? bufferGrosor}) =>
+      EstiloEtiquetaMapa(tamano: tamano ?? this.tamano,
+        colorHex: colorHex ?? this.colorHex, fuente: fuente ?? this.fuente,
+        bufferColorHex: bufferColorHex ?? this.bufferColorHex,
+        bufferGrosor: bufferGrosor ?? this.bufferGrosor);
+
+  Map<String, dynamic> toMap() => {
+    'tamano': tamano, 'color': colorHex, 'fuente': fuente,
+    'buffer_color': bufferColorHex, 'buffer_grosor': bufferGrosor,
+  };
+
+  factory EstiloEtiquetaMapa.fromMap(Map map) => EstiloEtiquetaMapa(
+    tamano: (map['tamano'] as num?)?.toDouble() ?? 9,
+    colorHex: map['color'] as String? ?? '#000000',
+    fuente: map['fuente'] as String? ?? 'Roboto',
+    bufferColorHex: map['buffer_color'] as String? ?? '#FFFFFF',
+    bufferGrosor: (map['buffer_grosor'] as num?)?.toDouble() ?? 2,
+  );
+}
+
 class ElementoComposicion {
   final String id;
   final TipoElemento tipo;
@@ -190,6 +226,9 @@ class ElementoComposicion {
   final double? mapaBordeGrosor;
   final String? mapaBordeColorHex; // null = negro (ver panel)
   final double? mapaBordeOpacidad;
+  final EstiloEtiquetaMapa mapaEstiloClave;
+  final EstiloEtiquetaMapa mapaEstiloPks;
+  final EstiloLinea mapaBordeEstilo;
 
   // --- Escala gráfica ---
   // Id de un elemento de tipo mapa en la misma hoja del que se deriva la
@@ -250,6 +289,9 @@ class ElementoComposicion {
     this.mapaBordeGrosor,
     this.mapaBordeColorHex,
     this.mapaBordeOpacidad,
+    this.mapaEstiloClave = const EstiloEtiquetaMapa(),
+    this.mapaEstiloPks = const EstiloEtiquetaMapa(),
+    this.mapaBordeEstilo = EstiloLinea.continua,
     this.imagenBase64,
     this.mapaLat,
     this.mapaLng,
@@ -531,6 +573,9 @@ class ElementoComposicion {
     double? mapaBordeGrosor,
     String? mapaBordeColorHex,
     double? mapaBordeOpacidad,
+    EstiloEtiquetaMapa? mapaEstiloClave,
+    EstiloEtiquetaMapa? mapaEstiloPks,
+    EstiloLinea? mapaBordeEstilo,
     bool clearEscalaMapaId = false,
     String? escalaMapaId,
     TipoSimbologia? simbologiaTipo,
@@ -589,6 +634,9 @@ class ElementoComposicion {
       mapaBordeGrosor: mapaBordeGrosor ?? this.mapaBordeGrosor,
       mapaBordeColorHex: mapaBordeColorHex ?? this.mapaBordeColorHex,
       mapaBordeOpacidad: mapaBordeOpacidad ?? this.mapaBordeOpacidad,
+      mapaEstiloClave: mapaEstiloClave ?? this.mapaEstiloClave,
+      mapaEstiloPks: mapaEstiloPks ?? this.mapaEstiloPks,
+      mapaBordeEstilo: mapaBordeEstilo ?? this.mapaBordeEstilo,
       escalaMapaId: clearEscalaMapaId ? null : (escalaMapaId ?? this.escalaMapaId),
       simbologiaTipo: simbologiaTipo ?? this.simbologiaTipo,
       graficaTipo: graficaTipo ?? this.graficaTipo,
@@ -648,6 +696,9 @@ class ElementoComposicion {
         'mapa_borde_grosor': mapaBordeGrosor,
         'mapa_borde_color': mapaBordeColorHex,
         'mapa_borde_opacidad': mapaBordeOpacidad,
+        'mapa_estilo_clave': mapaEstiloClave.toMap(),
+        'mapa_estilo_pks': mapaEstiloPks.toMap(),
+        'mapa_borde_estilo': mapaBordeEstilo.name,
         'escala_mapa_id': escalaMapaId,
         'simbologia_tipo': simbologiaTipo?.name,
         'grafica_tipo': graficaTipo?.name,
@@ -714,6 +765,9 @@ class ElementoComposicion {
       mapaBordeGrosor: (map['mapa_borde_grosor'] as num?)?.toDouble(),
       mapaBordeColorHex: map['mapa_borde_color'] as String?,
       mapaBordeOpacidad: (map['mapa_borde_opacidad'] as num?)?.toDouble(),
+      mapaEstiloClave: EstiloEtiquetaMapa.fromMap(map['mapa_estilo_clave'] as Map? ?? {}),
+      mapaEstiloPks: EstiloEtiquetaMapa.fromMap(map['mapa_estilo_pks'] as Map? ?? {}),
+      mapaBordeEstilo: estiloLineaFromString(map['mapa_borde_estilo'] as String? ?? 'continua'),
       escalaMapaId: map['escala_mapa_id'] as String?,
       simbologiaTipo:
           map['simbologia_tipo'] != null ? tipoSimbologiaFromString(map['simbologia_tipo'] as String) : null,

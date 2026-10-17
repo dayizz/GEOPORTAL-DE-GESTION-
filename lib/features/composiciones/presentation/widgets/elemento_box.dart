@@ -32,6 +32,7 @@ class ElementoBox extends StatefulWidget {
     this.importedFeatures = const [],
     this.pksFeatures = const [],
     this.onSnapIndicador,
+    this.margenMm = 0,
   });
   final List<Map<String, dynamic>> importedFeatures;
 
@@ -47,6 +48,7 @@ class ElementoBox extends StatefulWidget {
   /// horizontal/vertical de la hoja como referencias de alineación.
   final double hojaAnchoMm;
   final double hojaAltoMm;
+  final double margenMm;
 
   /// Reporta (en px del lienzo) el punto de referencia sobre el que se
   /// "imantó" el elemento durante un arrastre/redimensionado -null cuando
@@ -135,10 +137,10 @@ class _ElementoBoxState extends State<ElementoBox> {
   static const _snapUmbralPx = 8.0;
 
   List<Offset> get _esquinasHoja => [
-    Offset.zero,
-    Offset(widget.hojaAnchoMm, 0),
-    Offset(0, widget.hojaAltoMm),
-    Offset(widget.hojaAnchoMm, widget.hojaAltoMm),
+    Offset(widget.margenMm, widget.margenMm),
+    Offset(widget.hojaAnchoMm - widget.margenMm, widget.margenMm),
+    Offset(widget.margenMm, widget.hojaAltoMm - widget.margenMm),
+    Offset(widget.hojaAnchoMm - widget.margenMm, widget.hojaAltoMm - widget.margenMm),
   ];
 
   /// Al mover un elemento, si alguna de sus 4 esquinas queda a menos del
@@ -391,10 +393,10 @@ class _ElementoBoxState extends State<ElementoBox> {
                               });
                             }
                           : null,
-                      onPanStart: _interaccionBoxBloqueada
+                      onPanStart: _interaccionBoxBloqueada || e.tipo == TipoElemento.mapa
                           ? null
                           : (_) => widget.onSelect(),
-                      onPanUpdate: _interaccionBoxBloqueada
+                      onPanUpdate: _interaccionBoxBloqueada || e.tipo == TipoElemento.mapa
                           ? null
                           : (details) => _moverPor(details.delta),
                       onPanEnd: (_) => _reportarSnap(null),
@@ -469,6 +471,8 @@ class _ElementoBoxState extends State<ElementoBox> {
           ClipPath(
             clipper: MarcoClipper(figuraMapa),
             child: MapaViewportWidget(
+              estiloClave: e.mapaEstiloClave,
+              estiloPks: e.mapaEstiloPks,
               lat: e.mapaLat ?? 20.72,
               lng: e.mapaLng ?? -100.35,
               zoom: e.mapaZoom ?? 12,
@@ -490,6 +494,7 @@ class _ElementoBoxState extends State<ElementoBox> {
             IgnorePointer(
               child: CustomPaint(
                 painter: MarcoBorderPainter(
+                  estilo: e.mapaBordeEstilo,
                   figura: figuraMapa,
                   color: (colorFromHex(e.mapaBordeColorHex) ?? Colors.black)
                       .withValues(alpha: e.mapaBordeOpacidad ?? 1),
@@ -552,19 +557,18 @@ class _ElementoBoxState extends State<ElementoBox> {
         top: top - tam / 2,
         child: MouseRegion(
           cursor: cursor,
-          child: GestureDetector(
+          child: Listener(
             behavior: HitTestBehavior.opaque,
-            onPanStart: (_) {
+            onPointerDown: (_) {
               _redimensionando = true;
               widget.onSelect();
             },
-            onPanUpdate: (details) =>
-                _redimensionarDesdeEsquina(esquina, details.delta),
-            onPanEnd: (_) {
+            onPointerMove: (event) => _redimensionarDesdeEsquina(esquina, event.delta),
+            onPointerUp: (_) {
               _redimensionando = false;
               _reportarSnap(null);
             },
-            onPanCancel: () {
+            onPointerCancel: (_) {
               _redimensionando = false;
               _reportarSnap(null);
             },

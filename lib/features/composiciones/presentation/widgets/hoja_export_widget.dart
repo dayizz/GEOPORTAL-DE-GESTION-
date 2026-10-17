@@ -21,6 +21,7 @@ class HojaExportWidget extends StatelessWidget {
     required this.altoPx,
     required this.scale,
     this.predios = const [],
+    this.pksFeatures = const [],
     this.proyectoItem,
   });
 
@@ -29,6 +30,7 @@ class HojaExportWidget extends StatelessWidget {
   final double altoPx;
   final double scale;
   final List<Predio> predios;
+  final List<Map<String, dynamic>> pksFeatures;
   final ProyectoItem? proyectoItem;
 
   @override
@@ -57,6 +59,7 @@ class HojaExportWidget extends StatelessWidget {
                     child: buildElementoContenidoEstatico(
                       e,
                       predios: predios,
+                      pksFeatures: pksFeatures,
                       hojaElementos: hoja.elementos,
                       scale: scale,
                       proyectoItem: proyectoItem,

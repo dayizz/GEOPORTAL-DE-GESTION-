@@ -213,6 +213,7 @@ const List<String> estructuraOpciones = [
   'Cruce/Transversal',
   'ZICA',
   'Sin afectación',
+  'SIN TIPO',
 ];
 
 /// Normaliza "estructura" contra el catálogo vigente, sin importar
@@ -350,4 +351,23 @@ String? normalizeFechaLiberacion(String? value) {
     }
   }
   return null;
+}
+
+/// La ausencia de infraestructura requiere investigación; no equivale a
+/// "Sin afectación", que sí es una clasificación explícita.
+bool sinTipoInfraestructura(String? value) {
+  final texto = (value ?? '').trim().toUpperCase();
+  return texto.isEmpty || texto == '-' || texto == 'NULL' || texto == 'SIN TIPO';
+}
+
+/// Aplica la regla sobre el documento completo (o fusionado) antes de guardar.
+bool aplicarEstatusInfraestructura(Map<String, dynamic> data) {
+  final estructura = data.containsKey('estructura') ? data['estructura']
+      : data['tipo_infraestructura'] ?? data['TIPO DE INFRAESTRUCTURA'];
+  if (sinTipoInfraestructura(estructura?.toString())) {
+    data['estructura'] = 'SIN TIPO';
+    data['rango_estatus'] = 'Investigación';
+    return true;
+  }
+  return false;
 }

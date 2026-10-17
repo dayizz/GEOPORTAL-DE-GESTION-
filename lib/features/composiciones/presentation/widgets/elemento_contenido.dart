@@ -30,6 +30,7 @@ import 'simbologia_widget.dart';
 Widget buildElementoContenidoEstatico(
   ElementoComposicion e, {
   List<Predio> predios = const [],
+  List<Map<String, dynamic>> pksFeatures = const [],
   List<ElementoComposicion> hojaElementos = const [],
   double scale = 1,
   ProyectoItem? proyectoItem,
@@ -75,6 +76,10 @@ Widget buildElementoContenidoEstatico(
           ClipPath(
             clipper: MarcoClipper(figuraMapa),
             child: MapaViewportWidget(
+              mostrarPks: e.mapaMostrarPks ?? false,
+              pksFeatures: pksFeatures,
+              estiloClave: e.mapaEstiloClave,
+              estiloPks: e.mapaEstiloPks,
               lat: e.mapaLat ?? 20.72,
               lng: e.mapaLng ?? -100.35,
               zoom: e.mapaZoom ?? 12,
@@ -90,6 +95,7 @@ Widget buildElementoContenidoEstatico(
             IgnorePointer(
               child: CustomPaint(
                 painter: MarcoBorderPainter(
+                  estilo: e.mapaBordeEstilo,
                   figura: figuraMapa,
                   color: (colorFromHex(e.mapaBordeColorHex) ?? Colors.black)
                       .withValues(alpha: e.mapaBordeOpacidad ?? 1),

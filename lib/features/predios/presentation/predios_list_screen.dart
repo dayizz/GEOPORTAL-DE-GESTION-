@@ -125,7 +125,7 @@ class _PrediosListScreenState extends ConsumerState<PrediosListScreen> {
                     Text(e.toString(), textAlign: TextAlign.center),
                     const SizedBox(height: 16),
                     ElevatedButton(
-                      onPressed: () => ref.refresh(prediosListProvider),
+                      onPressed: () => ref.invalidate(prediosRemotosProvider),
                       child: const Text('Reintentar'),
                     ),
                   ],
