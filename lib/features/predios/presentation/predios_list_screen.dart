@@ -1,3 +1,4 @@
+import '../../mapa/providers/mapa_provider.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
@@ -145,7 +146,10 @@ class _PrediosListScreenState extends ConsumerState<PrediosListScreen> {
     return Card(
       child: InkWell(
         borderRadius: BorderRadius.circular(12),
-        onTap: () => context.push('/predios/${predio.id}'),
+        onTap: () {
+          ref.read(focusPredioIdProvider.notifier).state = predio.id;
+          context.go('/mapa');
+        },
         child: Padding(
           padding: const EdgeInsets.all(14),
           child: Row(

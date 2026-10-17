@@ -10,7 +10,6 @@ import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_map/flutter_map.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:go_router/go_router.dart';
 import 'package:http/http.dart' as http;
 import 'package:latlong2/latlong.dart';
 import '../../../core/constants/app_colors.dart';
@@ -3869,18 +3868,6 @@ class _MapaScreenState extends ConsumerState<MapaScreen> {
                         '${p.rangoEstatus} · KM $kmIniP - $kmFinP',
                         style:  TextStyle(fontSize: 10, color: AppColors.textSecondary),
                       ),
-                      Align(
-                        alignment: Alignment.centerRight,
-                        child: TextButton(
-                          style: TextButton.styleFrom(
-                            padding: EdgeInsets.zero,
-                            minimumSize: const Size(0, 0),
-                            tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                          ),
-                          onPressed: () => context.push('/predios/${p.id}'),
-                          child: const Text('Ver detalle', style: TextStyle(fontSize: 10)),
-                        ),
-                      ),
                     ],
                   ),
                 );
@@ -3895,15 +3882,6 @@ class _MapaScreenState extends ConsumerState<MapaScreen> {
                 _statusChip('Levantamiento', predio.levantamiento),
                 _statusChip('Negociacion', predio.negociacion),
               ],
-            ),
-            const SizedBox(height: 6),
-            SizedBox(
-              width: double.infinity,
-              child: ElevatedButton.icon(
-                icon: const Icon(Icons.info_outline, size: 16),
-                label: const Text('Ver detalle'),
-                onPressed: () => context.push('/predios/${predio.id}'),
-              ),
             ),
           ],
         ),

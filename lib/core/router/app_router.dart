@@ -6,7 +6,6 @@ import '../../features/auth/presentation/login_screen.dart';
 import '../../features/auth/providers/auth_provider.dart';
 import '../../features/mapa/presentation/mapa_screen.dart';
 import '../../features/predios/presentation/predios_list_screen.dart';
-import '../../features/predios/presentation/predio_detail_screen.dart';
 import '../../features/predios/presentation/predio_form_screen.dart';
 import '../../features/predios/presentation/proyectos_screen.dart';
 import '../../features/propietarios/presentation/propietarios_list_screen.dart';
@@ -144,16 +143,13 @@ final routerProvider = Provider<GoRouter>((ref) {
                     ),
                   ),
                   GoRoute(
-                    path: ':id',
+                    path: ':id/editar',
                     builder: (_, state) =>
-                        PredioDetailScreen(id: state.pathParameters['id']!),
-                    routes: [
-                      GoRoute(
-                        path: 'editar',
-                        builder: (_, state) =>
-                            PredioFormScreen(id: state.pathParameters['id']),
-                      ),
-                    ],
+                        PredioFormScreen(id: state.pathParameters['id']),
+                  ),
+                  GoRoute(
+                    path: ':id',
+                    redirect: (_, __) => '/mapa',
                   ),
                 ],
               ),
