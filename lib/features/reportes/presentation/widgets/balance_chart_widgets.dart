@@ -540,6 +540,16 @@ Widget buildCadenamientoCelda(CadenamientoColumna columna, double ancho) {
             ),
           ),
         ),
+        const SizedBox(height: 4),
+        SizedBox(
+          height: 20,
+          child: columna.infraestructuraFerroviaria > 0
+              ? Tooltip(
+                  message: '${columna.infraestructuraFerroviaria} registros de estaciones, edificios auxiliares o ZICA en este km',
+                  child: Icon(Icons.train, size: 18, color: AppColors.primary),
+                )
+              : null,
+        ),
       ],
     ),
   );

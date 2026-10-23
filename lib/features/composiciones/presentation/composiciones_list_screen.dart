@@ -4,6 +4,7 @@ import 'package:go_router/go_router.dart';
 import 'package:intl/intl.dart';
 import '../../../core/constants/app_colors.dart';
 import '../../../shared/widgets/app_scaffold.dart';
+import '../../../shared/widgets/estado_acceso_proyectos.dart';
 import '../../auth/providers/auth_provider.dart';
 import '../../estructura/providers/proyectos_provider.dart';
 import '../models/composicion.dart';
@@ -22,6 +23,14 @@ class _ComposicionesListScreenState extends ConsumerState<ComposicionesListScree
 
   @override
   Widget build(BuildContext context) {
+    final estadoAcceso = estadoAccesoProyectos(ref);
+    if (estadoAcceso != null) {
+      return AppScaffold(
+        currentIndex: 7,
+        title: 'Composiciones',
+        child: estadoAcceso,
+      );
+    }
     ref.watch(proyectosCodigosProvider);
     final canAllProjects = ref.watch(canAccessAllProjectsProvider);
     final proyectosAsignados = ref.watch(currentUserAssignedProjectsProvider);

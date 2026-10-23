@@ -9,11 +9,13 @@ import '../../../features/predios/models/predio.dart';
 import '../../../core/constants/app_colors.dart';
 import '../../../core/utils/import_normalization.dart' as norm;
 import '../../../shared/widgets/app_scaffold.dart';
+import '../../../shared/widgets/estado_acceso_proyectos.dart';
 import '../../auth/providers/auth_provider.dart';
 import '../../estructura/models/proyecto_item.dart';
 import '../../estructura/providers/proyectos_provider.dart';
 import '../utils/balance_calculos.dart';
 import 'widgets/balance_chart_widgets.dart';
+import 'widgets/avance_general_widget.dart';
 import 'package:intl/intl.dart';
 
 class BalanceScreen extends ConsumerStatefulWidget {
@@ -88,6 +90,14 @@ class _BalanceScreenState extends ConsumerState<BalanceScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final estadoAcceso = estadoAccesoProyectos(ref);
+    if (estadoAcceso != null) {
+      return AppScaffold(
+        currentIndex: 1,
+        title: 'Balance',
+        child: estadoAcceso,
+      );
+    }
     ref.watch(proyectosCodigosProvider);
     final prediosAsync = ref.watch(prediosMapaProvider);
     final fmtInt = NumberFormat('#,##0', 'es_MX');
@@ -188,22 +198,13 @@ class _BalanceScreenState extends ConsumerState<BalanceScreen> {
 
           final grupos = agruparInfraestructuraBalance(registrosFiltrados);
           final prediosFiltrados = grupos[_grupoActual]!;
-          final tituloGrupo = switch (_grupoActual) {
-            GrupoInfraestructuraBalance.estacionesEdificios =>
-              'Estaciones y Edificios Auxiliares',
-            GrupoInfraestructuraBalance.cruces => 'Cruces/Transversales',
-            _ => 'Predios',
-          };
           final enInvestigacion =
               grupos[GrupoInfraestructuraBalance.nulos]!.length +
               grupos[GrupoInfraestructuraBalance.sinAfectacion]!.length +
               grupos[GrupoInfraestructuraBalance.otros]!.length;
 
           final total = prediosFiltrados.length;
-          final conteosEstaciones = conteoCategoriasEstacionesBalance(
-            prediosFiltrados,
-          );
-
+          final avanceGeneral = AvanceGeneralBalance(registrosFiltrados);
 
           final prediosLiberados = prediosFiltrados
               .where(predioEstaLiberado)
@@ -216,13 +217,6 @@ class _BalanceScreenState extends ConsumerState<BalanceScreen> {
           final usaM2 = _grupoActual == GrupoInfraestructuraBalance.estacionesEdificios;
           final unidad = usaM2 ? 'm²' : 'km';
           double medidaPredio(Predio p) => medidaPredioBalance(p, usaM2: usaM2);
-          final medidaLiberada = prediosFiltrados
-              .where(predioEstaLiberado)
-              .fold<double>(
-                0,
-                (sum, predator) => sum + medidaPredio(predator),
-              );
-
           // Agrupar por tipo de liberación usando primero el valor capturado
           // en Gestión ("Sin tipo"/"Sin liberación" ya consolidados).
           final porTipoLiberacion = tiposDeRegistrosLiberados(
@@ -278,6 +272,7 @@ class _BalanceScreenState extends ConsumerState<BalanceScreen> {
           final filasCadenamiento = buildFilasCadenamiento(
             proyectoItemActivo,
             prediosFiltrados,
+            infraestructura: registrosFiltrados,
           ).where((fila) => _segmentoActual == null ||
               claveTramoBalance(fila.codigo, proyectoItemActivo) ==
               claveTramoBalance(_segmentoActual!, proyectoItemActivo)).toList();
@@ -446,73 +441,11 @@ class _BalanceScreenState extends ConsumerState<BalanceScreen> {
                   ).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.bold),
                 ),
                 const SizedBox(height: 4),
-                Text(tituloGrupo),
                 const SizedBox(height: 12),
-                _panelesConteo([
-                  buildKpiPanel(
-                    label: 'Total de registros clasificados',
-                    value: fmtInt.format(total),
-                    color: AppColors.primary,
-                    icon: Icons.summarize_outlined,
-                  ),
-                  if (usaM2) ...[
-                    buildKpiPanel(
-                      label: 'Predios para estaciones',
-                      value: fmtInt.format(
-                        conteosEstaciones[CategoriaEstacionesBalance.estaciones],
-                      ),
-                      color: AppColors.secondary,
-                      icon: Icons.train_outlined,
-                    ),
-                    buildKpiPanel(
-                      label: 'Predios para edificios auxiliares',
-                      value: fmtInt.format(
-                        conteosEstaciones[
-                          CategoriaEstacionesBalance.edificiosAuxiliares
-                        ],
-                      ),
-                      color: AppColors.primary,
-                      icon: Icons.business_outlined,
-                    ),
-                    buildKpiPanel(
-                      label: 'Predios para ZICA',
-                      value: fmtInt.format(
-                        conteosEstaciones[CategoriaEstacionesBalance.zica],
-                      ),
-                      color: AppColors.warning,
-                      icon: Icons.location_city_outlined,
-                    ),
-                  ],
-                  buildKpiPanel(
-                    label: 'Total no liberados',
-                    value: fmtInt.format(prediosNoLiberados),
-                    color: AppColors.danger,
-                    icon: Icons.pending_outlined,
-                  ),
-                  buildKpiPanel(
-                    label: 'Total liberados',
-                    value: fmtInt.format(prediosLiberados),
-                    color: AppColors.secondary,
-                    icon: Icons.check_circle_outline,
-                  ),
-                  Tooltip(
-                    message:
-                        'Nulos, sin afectación y sin clasificación del proyecto o segmento seleccionado.',
-                    child: buildKpiPanel(
-                      label: 'Total de registros en investigación',
-                      value: fmtInt.format(enInvestigacion),
-                      color: Colors.grey,
-                      icon: Icons.help_outline,
-                    ),
-                  ),
-                  buildKpiPanel(
-                    label: usaM2 ? 'M² liberados' : 'Km efectivos liberados',
-                    value:
-                      '${NumberFormat('#,##0.###', 'es_MX').format(medidaLiberada)} $unidad',
-                    color: AppColors.secondary,
-                    icon: Icons.straighten,
-                  ),
-                ]),
+                AvanceGeneralWidget(avance: avanceGeneral, grupo: _grupoActual),
+                const SizedBox(height: 8),
+                if (_grupoActual == GrupoInfraestructuraBalance.predios)
+                  Text('Total de registros en investigación: ${fmtInt.format(enInvestigacion)}'),
                 const SizedBox(height: 20),
                 // Barra de Avance DDV - extendida en toda la fila
                 IntrinsicHeight(
@@ -759,37 +692,4 @@ class _BalanceScreenState extends ConsumerState<BalanceScreen> {
     );
   }
 
-  Widget _panelesConteo(List<Widget> paneles) {
-    return LayoutBuilder(
-      builder: (context, constraints) {
-        if (constraints.maxWidth < 700) {
-          final columnas = constraints.maxWidth >= 380 ? 2 : 1;
-          final anchoPanel = (constraints.maxWidth - (columnas - 1) * 12) / columnas;
-          return Wrap(spacing: 12, runSpacing: 12, children: [
-            for (final panel in paneles) SizedBox(width: anchoPanel, height: 96, child: panel),
-          ]);
-        }
-        final ancho = math.max(
-          constraints.maxWidth,
-          paneles.length > 5 ? 1380.0 : 1000.0,
-        );
-        return SingleChildScrollView(
-          scrollDirection: Axis.horizontal,
-          child: SizedBox(
-            width: ancho,
-            height: 96,
-            child: Row(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                for (var i = 0; i < paneles.length; i++) ...[
-                  Expanded(child: paneles[i]),
-                  if (i < paneles.length - 1) const SizedBox(width: 12),
-                ],
-              ],
-            ),
-          ),
-        );
-      },
-    );
-  }
 }

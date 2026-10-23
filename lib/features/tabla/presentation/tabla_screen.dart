@@ -11,6 +11,7 @@ import 'package:excel/excel.dart' hide Border;
 import 'dart:async';
 import 'dart:math' as math;
 import '../../../shared/widgets/app_scaffold.dart';
+import '../../../shared/widgets/estado_acceso_proyectos.dart';
 import '../../../core/constants/app_colors.dart';
 import '../../../core/utils/browser_download.dart';
 import '../../carga/utils/file_download_io.dart';
@@ -306,6 +307,14 @@ class _TablaScreenState extends ConsumerState<TablaScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final estadoAcceso = estadoAccesoProyectos(ref);
+    if (estadoAcceso != null) {
+      return AppScaffold(
+        currentIndex: 3,
+        title: 'Gestión',
+        child: estadoAcceso,
+      );
+    }
     ref.watch(proyectosCodigosProvider);
     final prediosAsync = ref.watch(prediosListProvider);
     final canAllProjects = ref.watch(canAccessAllProjectsProvider);

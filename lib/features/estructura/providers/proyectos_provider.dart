@@ -2,6 +2,7 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../models/proyecto_item.dart';
+import '../../auth/providers/auth_provider.dart';
 
 final proyectosCollectionProvider =
     Provider<CollectionReference<Map<String, dynamic>>>((ref) {
@@ -12,6 +13,10 @@ final proyectosCollectionProvider =
 /// única de verdad: alta/baja de un proyecto en Estructura debe reflejarse
 /// aquí y, por lo tanto, en cualquier pantalla que consuma este provider.
 final proyectosProvider = StreamProvider<List<ProyectoItem>>((ref) {
+  // Firestore exige sesión para leer el catálogo. Reabrir la suscripción
+  // al iniciar/cambiar sesión evita conservar un error de permisos anterior.
+  final uid = ref.watch(currentUserProvider.select((user) => user?.uid));
+  if (uid == null) return Stream.value(const <ProyectoItem>[]);
   final collection = ref.watch(proyectosCollectionProvider);
   return collection
       .snapshots()

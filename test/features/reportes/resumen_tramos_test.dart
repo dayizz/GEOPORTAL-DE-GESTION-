@@ -40,6 +40,7 @@ void main() {
         claveCatastral: 'x',
         tramo: tramo,
         rangoEstatus: estatus,
+        estructura: 'DDV Troncal',
         kmEfectivos: km,
         tipoPropiedad: 'PRIVADA',
         createdAt: DateTime(2026),

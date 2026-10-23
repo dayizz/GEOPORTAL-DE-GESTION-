@@ -1,3 +1,4 @@
+import '../../predios/utils/codigo_division.dart';
 import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
@@ -60,6 +61,7 @@ GrupoInfraestructuraBalance grupoInfraestructuraBalance(String? estructura) {
   switch (tipo) {
     case 'VIADUCTO':
     case 'TRONCAL':
+    case 'DDV':
     case 'DDV TRONCAL':
     case 'CARRETERA':
       return GrupoInfraestructuraBalance.predios;
@@ -132,7 +134,8 @@ const mesAbrev = [
 class CadenamientoColumna {
   final int km;
   final double pct;
-  const CadenamientoColumna(this.km, this.pct);
+  final int infraestructuraFerroviaria;
+  const CadenamientoColumna(this.km, this.pct, {this.infraestructuraFerroviaria = 0});
 }
 
 /// Una fila del diagrama: un PK de cadenamiento (p.ej. "S13") con sus
@@ -392,8 +395,9 @@ String formatKmLength(double km) {
 /// así que basta comparar contra `predio.tramo`.
 List<CadenamientoFila> buildFilasCadenamiento(
   ProyectoItem? proyecto,
-  List<Predio> proyectoPredios,
-) {
+  List<Predio> proyectoPredios, {
+  List<Predio> infraestructura = const [],
+}) {
   if (proyecto == null) return const [];
   final filas = <CadenamientoFila>[];
 
@@ -422,6 +426,9 @@ List<CadenamientoFila> buildFilasCadenamiento(
           )
           .toList(growable: false);
 
+      final instalaciones = infraestructura.where((p) =>
+          categoriaEstacionesBalance(p.estructura) != null &&
+          normalizarCodigoDivision(p.tramo, proyecto) == normalizarCodigoDivision(codigo, proyecto)).toList();
       final primeraColumna = ini.floor();
       final ultimaColumna = fin.ceil() - 1;
       final columnas = <CadenamientoColumna>[];
@@ -446,7 +453,16 @@ List<CadenamientoFila> buildFilasCadenamiento(
         }
 
         final pct = (liberadoLen / anchoSegmento).clamp(0.0, 1.0);
-        columnas.add(CadenamientoColumna(km, pct));
+        final cantidad = instalaciones.where((p) {
+          final inicio = p.kmInicio ?? p.kmFin;
+          final fin = p.kmFin ?? p.kmInicio;
+          if (inicio == null || fin == null || !inicio.isFinite || !fin.isFinite) return false;
+          final desde = math.min(inicio, fin);
+          final hasta = math.max(inicio, fin);
+          if (desde == hasta) return desde >= segInicio && desde < segFin;
+          return desde < segFin && hasta > segInicio;
+        }).length;
+        columnas.add(CadenamientoColumna(km, pct, infraestructuraFerroviaria: cantidad));
       }
 
       filas.add(
@@ -462,4 +478,24 @@ List<CadenamientoFila> buildFilasCadenamiento(
 
   filas.sort((a, b) => a.pkInicioKm.compareTo(b.pkInicioKm));
   return filas;
+}
+
+/// Avance general del proyecto o división ya filtrados por la pantalla.
+class AvanceGeneralBalance {
+  final List<Predio> troncal;
+  final List<Predio> estaciones;
+  final List<Predio> cruces;
+
+  AvanceGeneralBalance(Iterable<Predio> registros)
+      : troncal = registros.where((p) => grupoInfraestructuraBalance(p.estructura) == GrupoInfraestructuraBalance.predios).toList(),
+        estaciones = registros.where((p) => grupoInfraestructuraBalance(p.estructura) == GrupoInfraestructuraBalance.estacionesEdificios).toList(),
+        cruces = registros.where((p) => grupoInfraestructuraBalance(p.estructura) == GrupoInfraestructuraBalance.cruces).toList();
+
+  int get total => troncal.length + estaciones.length;
+  int get liberadosTroncal => troncal.where(predioEstaLiberado).length;
+  int get liberadosEstaciones => estaciones.where(predioEstaLiberado).length;
+  int get noLiberadosTroncal => troncal.length - liberadosTroncal;
+  int get noLiberadosEstaciones => estaciones.length - liberadosEstaciones;
+  double get kmLiberados => troncal.where(predioEstaLiberado).fold(0.0, (sum, p) => sum + medidaPredioBalance(p, usaM2: false));
+  double get m2Liberados => estaciones.where(predioEstaLiberado).fold(0.0, (sum, p) => sum + medidaPredioBalance(p, usaM2: true));
 }
