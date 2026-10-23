@@ -4,6 +4,7 @@ import '../../../predios/models/predio.dart';
 import '../../models/hoja.dart';
 import '../../utils/color_hex.dart';
 import 'elemento_contenido.dart';
+import 'numero_pagina_widget.dart';
 
 /// Render "plano" (sin selección, sin gestos, sin edición) de una [Hoja]
 /// completa a un tamaño de píxeles ya resuelto (`anchoPx`/`altoPx`), para
@@ -17,6 +18,7 @@ class HojaExportWidget extends StatelessWidget {
   const HojaExportWidget({
     super.key,
     required this.hoja,
+    this.indiceHoja = 0,
     required this.anchoPx,
     required this.altoPx,
     required this.scale,
@@ -26,6 +28,7 @@ class HojaExportWidget extends StatelessWidget {
   });
 
   final Hoja hoja;
+  final int indiceHoja;
   final double anchoPx;
   final double altoPx;
   final double scale;
@@ -43,7 +46,7 @@ class HojaExportWidget extends StatelessWidget {
       width: anchoPx,
       height: altoPx,
       child: Container(
-        color: colorFromHex(hoja.colorFondoHex) ?? Colors.white,
+        color: (colorFromHex(hoja.colorFondoHex) ?? Colors.white).withValues(alpha: hoja.opacidadFondo.clamp(0, 1)),
         child: Stack(
           clipBehavior: Clip.none,
           children: [
@@ -66,6 +69,7 @@ class HojaExportWidget extends StatelessWidget {
                     ),
                   ),
                 ),
+            Positioned.fill(child: NumeroPaginaWidget(hoja: hoja, indice: indiceHoja, scale: scale)),
           ],
         ),
       ),

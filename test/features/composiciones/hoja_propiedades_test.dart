@@ -4,7 +4,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:geoportal_predios/features/composiciones/models/hoja.dart';
 import 'package:geoportal_predios/features/composiciones/models/elemento_composicion.dart';
 import 'package:geoportal_predios/features/composiciones/utils/limites_hoja.dart';
-import 'package:geoportal_predios/features/composiciones/presentation/widgets/herramienta_hoja_dialog.dart';
+import 'package:geoportal_predios/features/composiciones/presentation/widgets/panel_propiedades_hoja.dart';
 
 void main() {
   final hoja = Hoja.nueva(nombre: 'Prueba');
@@ -29,9 +29,9 @@ void main() {
           2;
       final cx = result.x + result.width / 2, cy = result.y + result.height / 2;
       expect(cx - halfW, greaterThanOrEqualTo(10 - 1e-8));
-      expect(cx + halfW, lessThanOrEqualTo(200 + 1e-8));
+      expect(cx + halfW, lessThanOrEqualTo(hoja.dimensionesMm.$1 - 10 + 1e-8));
       expect(cy - halfH, greaterThanOrEqualTo(10 - 1e-8));
-      expect(cy + halfH, lessThanOrEqualTo(287 + 1e-8));
+      expect(cy + halfH, lessThanOrEqualTo(hoja.dimensionesMm.$2 - 10 + 1e-8));
       expect(result.width / result.height, closeTo(e.width / e.height, 1e-8));
     });
   }
@@ -53,48 +53,26 @@ void main() {
     expect(result.width, e.width);
     expect(result.height, e.height);
   });
-  testWidgets('medidas, orientación y margen decimal con validación', (
-    tester,
-  ) async {
-    HerramientaHojaResultado? result;
-    await tester.pumpWidget(
-      MaterialApp(
-        home: Builder(
-          builder: (context) => Scaffold(
-            body: TextButton(
-              onPressed: () async {
-                result = await mostrarHerramientaHojaDialog(
-                  context,
-                  hoja: hoja.copyWith(margenMm: 12.5),
-                );
-              },
-              child: const Text('Abrir'),
-            ),
-          ),
-        ),
-      ),
-    );
-    await tester.tap(find.text('Abrir'));
-    await tester.pumpAndSettle();
-    expect(find.text('A4 (210 × 297 mm)'), findsOneWidget);
-    expect(find.byType(Switch), findsNothing);
+  testWidgets('hoja se edita en el panel sin diálogo y valida margen', (tester) async {
+    var actual = hoja;
+    await tester.pumpWidget(MaterialApp(home: Scaffold(body: StatefulBuilder(builder: (context, setState) => SingleChildScrollView(child: SizedBox(width: 252, child: PanelPropiedadesHoja(
+      hoja: actual, onNumeracionChanged: (v) => setState(() => actual = v),
+      onChanged: (v) => setState(() => actual = v),
+    )))))));
+    expect(find.byType(AlertDialog), findsNothing);
+    expect(actual.horizontal, isTrue);
     await tester.tap(find.byType(DropdownButtonFormField<bool>));
     await tester.pumpAndSettle();
-    await tester.tap(find.text('Horizontal').last);
+    await tester.tap(find.text('Vertical').last);
     await tester.pumpAndSettle();
-    expect(find.text('A4 (297 × 210 mm)'), findsOneWidget);
-    await tester.enterText(find.byType(TextFormField), '200');
-    await tester.tap(find.text('Aplicar'));
-    await tester.pumpAndSettle();
-    expect(
-      find.text('El margen debe dejar espacio útil en la hoja.'),
-      findsOneWidget,
-    );
-    await tester.enterText(find.byType(TextFormField), '12,5');
-    await tester.tap(find.text('Aplicar'));
-    await tester.pumpAndSettle();
-    expect(result!.horizontal, isTrue);
-    expect(result!.margenMm, 12.5);
+    expect(actual.horizontal, isFalse);
+    await tester.enterText(find.byType(TextFormField).first, '400');
+    await tester.pump();
+    expect(find.text('Revisa la medida y los márgenes.'), findsOneWidget);
+    expect(actual.margenMm, 10);
+    await tester.enterText(find.byType(TextFormField).first, '12,5');
+    await tester.pump();
+    expect(actual.margenArriba, 12.5);
     expect(tester.takeException(), isNull);
   });
 }

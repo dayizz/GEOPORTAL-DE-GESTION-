@@ -5,11 +5,10 @@ import '../models/hoja.dart';
 /// Conserva la proporción y la rotación al encajar la caja del elemento
 /// dentro del margen. Un margen cero desactiva esta restricción.
 ElementoComposicion limitarElementoAHoja(ElementoComposicion e, Hoja hoja) {
-  final margen = hoja.margenMm;
-  if (!margen.isFinite || margen <= 0) return e;
+  if ([hoja.margenArriba, hoja.margenAbajo, hoja.margenIzquierda, hoja.margenDerecha].every((m) => m <= 0)) return e;
   final (ancho, alto) = hoja.dimensionesMm;
-  final disponibleW = ancho - 2 * margen;
-  final disponibleH = alto - 2 * margen;
+  final disponibleW = ancho - hoja.margenIzquierda - hoja.margenDerecha;
+  final disponibleH = alto - hoja.margenArriba - hoja.margenAbajo;
   if (disponibleW <= 0 || disponibleH <= 0) return e;
   final rad = e.rotacion * math.pi / 180;
   final cos = math.cos(rad).abs();
@@ -25,12 +24,12 @@ ElementoComposicion limitarElementoAHoja(ElementoComposicion e, Hoja hoja) {
   final mitadW = math.min(disponibleW / 2, envolventeW * factor / 2);
   final mitadH = math.min(disponibleH / 2, envolventeH * factor / 2);
   final cx = (e.x + e.width / 2).clamp(
-    margen + mitadW,
-    ancho - margen - mitadW,
+    hoja.margenIzquierda + mitadW,
+    ancho - hoja.margenDerecha - mitadW,
   );
   final cy = (e.y + e.height / 2).clamp(
-    margen + mitadH,
-    alto - margen - mitadH,
+    hoja.margenArriba + mitadH,
+    alto - hoja.margenAbajo - mitadH,
   );
   if ((cx - w / 2 - e.x).abs() < 1e-9 &&
       (cy - h / 2 - e.y).abs() < 1e-9 &&

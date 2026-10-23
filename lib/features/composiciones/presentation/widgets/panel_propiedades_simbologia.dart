@@ -29,8 +29,8 @@ class PanelPropiedadesSimbologia extends StatelessWidget {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        const Text('Simbología por', style: TextStyle(fontSize: 11, fontWeight: FontWeight.w600)),
-        const SizedBox(height: 6),
+        const Text('Simbología por', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600)),
+        const SizedBox(height: 8),
         DropdownButtonFormField<TipoSimbologia>(
           initialValue: elemento.simbologiaTipo ?? TipoSimbologia.estatus,
           isDense: true,

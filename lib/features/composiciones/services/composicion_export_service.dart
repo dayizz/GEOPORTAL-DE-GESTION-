@@ -39,6 +39,7 @@ class ComposicionExportService {
   Future<Uint8List> capturarHojaPng(
     BuildContext context,
     Hoja hoja, {
+    int indiceHoja = 0,
     double dpi = dpiPorDefecto,
     List<Predio> predios = const [],
     List<Map<String, dynamic>> pksFeatures = const [],
@@ -56,6 +57,7 @@ class ComposicionExportService {
     return _screenshotController.captureFromWidget(
       HojaExportWidget(
         hoja: hoja,
+        indiceHoja: indiceHoja,
         anchoPx: anchoPx,
         altoPx: altoPx,
         scale: scale,
@@ -72,13 +74,14 @@ class ComposicionExportService {
   Future<Uint8List> capturarHojaJpg(
     BuildContext context,
     Hoja hoja, {
+    int indiceHoja = 0,
     double dpi = dpiPorDefecto,
     int calidad = 92,
     List<Predio> predios = const [],
     List<Map<String, dynamic>> pksFeatures = const [],
     ProyectoItem? proyectoItem,
   }) async {
-    final pngBytes = await capturarHojaPng(context, hoja, dpi: dpi, predios: predios, pksFeatures: pksFeatures, proyectoItem: proyectoItem);
+    final pngBytes = await capturarHojaPng(context, hoja, indiceHoja: indiceHoja, dpi: dpi, predios: predios, pksFeatures: pksFeatures, proyectoItem: proyectoItem);
     final decodificada = img.decodePng(pngBytes);
     if (decodificada == null) return pngBytes;
     // Los JPG no soportan transparencia; se aplana sobre blanco.
@@ -101,10 +104,11 @@ class ComposicionExportService {
     ProyectoItem? proyectoItem,
   }) async {
     final pdf = pw.Document();
-    for (final hoja in composicion.hojas) {
+    for (var indiceHoja = 0; indiceHoja < composicion.hojas.length; indiceHoja++) {
+      final hoja = composicion.hojas[indiceHoja];
       if (!context.mounted) break;
       final pngBytes =
-          await capturarHojaPng(context, hoja, dpi: dpi, predios: predios, pksFeatures: pksFeatures, proyectoItem: proyectoItem);
+          await capturarHojaPng(context, hoja, indiceHoja: indiceHoja, dpi: dpi, predios: predios, pksFeatures: pksFeatures, proyectoItem: proyectoItem);
       final (anchoMm, altoMm) = hoja.dimensionesMm;
       final pageFormat = PdfPageFormat(anchoMm * PdfPageFormat.mm, altoMm * PdfPageFormat.mm);
       pdf.addPage(
@@ -130,10 +134,11 @@ class ComposicionExportService {
     ProyectoItem? proyectoItem,
   }) async {
     final slides = <PptxSlideImage>[];
-    for (final hoja in composicion.hojas) {
+    for (var indiceHoja = 0; indiceHoja < composicion.hojas.length; indiceHoja++) {
+      final hoja = composicion.hojas[indiceHoja];
       if (!context.mounted) break;
       final pngBytes =
-          await capturarHojaPng(context, hoja, dpi: dpi, predios: predios, pksFeatures: pksFeatures, proyectoItem: proyectoItem);
+          await capturarHojaPng(context, hoja, indiceHoja: indiceHoja, dpi: dpi, predios: predios, pksFeatures: pksFeatures, proyectoItem: proyectoItem);
       final (anchoMm, altoMm) = hoja.dimensionesMm;
       slides.add(PptxSlideImage(pngBytes: pngBytes, anchoMm: anchoMm, altoMm: altoMm));
     }

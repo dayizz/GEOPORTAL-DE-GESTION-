@@ -8,6 +8,7 @@ import '../../models/elemento_composicion.dart';
 import '../../utils/color_hex.dart';
 import 'escala_grafica_widget.dart';
 import 'grafica_widget.dart';
+import 'tabla_widget.dart';
 import 'mapa_viewport_widget.dart';
 import 'marco_clipper.dart';
 import 'norte_widget.dart';
@@ -36,6 +37,8 @@ Widget buildElementoContenidoEstatico(
   ProyectoItem? proyectoItem,
 }) {
   switch (e.tipo) {
+    case TipoElemento.tabla:
+      return TablaWidget(celdas: e.tablaCeldas);
     case TipoElemento.forma:
       return CustomPaint(
         size: Size.infinite,

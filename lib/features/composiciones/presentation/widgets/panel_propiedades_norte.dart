@@ -19,7 +19,7 @@ class PanelPropiedadesNorte extends StatelessWidget {
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Text('Orientación: ${elemento.rotacion.round()}°',
-            style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w600)),
+            style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600)),
         Slider(
           value: elemento.rotacion.clamp(0, 360),
           min: 0,

@@ -99,6 +99,42 @@ Future<String?> showColorWheelDialog(BuildContext context, {String? initialHex})
   );
 }
 
+class ColorWheelPanel extends StatefulWidget {
+  const ColorWheelPanel({super.key, this.initialHex, required this.onChanged});
+  final String? initialHex;
+  final ValueChanged<String> onChanged;
+  @override
+  State<ColorWheelPanel> createState() => _ColorWheelPanelState();
+}
+
+class _ColorWheelPanelState extends State<ColorWheelPanel> {
+  late HSVColor hsv;
+  late TextEditingController hexCtrl;
+  @override
+  void initState() {
+    super.initState();
+    hsv = HSVColor.fromColor(colorFromHex(widget.initialHex) ?? const Color(0xFF1B6CA8));
+    hexCtrl = TextEditingController(text: colorToHex(hsv.toColor()).substring(1));
+  }
+  @override
+  void dispose() { hexCtrl.dispose(); super.dispose(); }
+  void cambiar(HSVColor nuevo) {
+    setState(() { hsv = nuevo; hexCtrl.text = colorToHex(nuevo.toColor()).substring(1); });
+    widget.onChanged(colorToHex(nuevo.toColor()));
+  }
+  @override
+  Widget build(BuildContext context) => Column(mainAxisSize: MainAxisSize.min, children: [
+    _RuedaColor(size: 200, hue: hsv.hue, saturation: hsv.saturation, onChanged: (h, s) => cambiar(hsv.withHue(h).withSaturation(s))),
+    const SizedBox(height: 8),
+    _BarraBrillo(hue: hsv.hue, saturation: hsv.saturation, value: hsv.value, onChanged: (v) => cambiar(hsv.withValue(v))),
+    TextField(controller: hexCtrl, maxLength: 6, decoration: const InputDecoration(labelText: 'Hex', prefixText: '#'), onChanged: (v) {
+      if (!RegExp(r'^[0-9a-fA-F]{6}$').hasMatch(v)) return;
+      final color = colorFromHex('#$v');
+      if (color != null) { setState(() => hsv = HSVColor.fromColor(color)); widget.onChanged(colorToHex(color)); }
+    }),
+  ]);
+}
+
 class _RuedaColor extends StatelessWidget {
   const _RuedaColor({
     required this.size,

@@ -33,6 +33,7 @@ class ElementoBox extends StatefulWidget {
     this.pksFeatures = const [],
     this.onSnapIndicador,
     this.margenMm = 0,
+    this.margenesMm,
   });
   final List<Map<String, dynamic>> importedFeatures;
 
@@ -49,6 +50,7 @@ class ElementoBox extends StatefulWidget {
   final double hojaAnchoMm;
   final double hojaAltoMm;
   final double margenMm;
+  final EdgeInsets? margenesMm;
 
   /// Reporta (en px del lienzo) el punto de referencia sobre el que se
   /// "imantó" el elemento durante un arrastre/redimensionado -null cuando
@@ -137,10 +139,10 @@ class _ElementoBoxState extends State<ElementoBox> {
   static const _snapUmbralPx = 8.0;
 
   List<Offset> get _esquinasHoja => [
-    Offset(widget.margenMm, widget.margenMm),
-    Offset(widget.hojaAnchoMm - widget.margenMm, widget.margenMm),
-    Offset(widget.margenMm, widget.hojaAltoMm - widget.margenMm),
-    Offset(widget.hojaAnchoMm - widget.margenMm, widget.hojaAltoMm - widget.margenMm),
+    Offset(widget.margenesMm?.left ?? widget.margenMm, widget.margenesMm?.top ?? widget.margenMm),
+    Offset(widget.hojaAnchoMm - (widget.margenesMm?.right ?? widget.margenMm), widget.margenesMm?.top ?? widget.margenMm),
+    Offset(widget.margenesMm?.left ?? widget.margenMm, widget.hojaAltoMm - (widget.margenesMm?.bottom ?? widget.margenMm)),
+    Offset(widget.hojaAnchoMm - (widget.margenesMm?.right ?? widget.margenMm), widget.hojaAltoMm - (widget.margenesMm?.bottom ?? widget.margenMm)),
   ];
 
   /// Al mover un elemento, si alguna de sus 4 esquinas queda a menos del

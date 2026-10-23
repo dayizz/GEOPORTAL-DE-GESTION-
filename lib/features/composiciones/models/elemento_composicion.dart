@@ -3,7 +3,7 @@ import 'package:uuid/uuid.dart';
 /// Tipos de elemento soportados dentro de una [Hoja]. Fase 1 solo crea
 /// [forma] y [texto] desde la UI; el resto ya están contemplados en el
 /// esquema para no tener que migrar documentos existentes más adelante.
-enum TipoElemento { forma, texto, mapa, norte, escala, simbologia, grafica, imagen }
+enum TipoElemento { forma, texto, mapa, norte, escala, simbologia, grafica, imagen, tabla }
 
 TipoElemento tipoElementoFromString(String value) {
   return TipoElemento.values.firstWhere(
@@ -13,7 +13,7 @@ TipoElemento tipoElementoFromString(String value) {
 }
 
 /// Tipos de figura para elementos [TipoElemento.forma].
-enum TipoFigura { rectangulo, cuadrado, triangulo, hexagono, pentagono, linea }
+enum TipoFigura { rectangulo, cuadrado, triangulo, hexagono, pentagono, linea, circulo, cruz, estrella }
 
 /// `'lineaPunteada'` era, antes, un [TipoFigura] separado -ahora es
 /// [TipoFigura.linea] con [EstiloLinea.punteada]- se traduce aquí para no
@@ -239,6 +239,7 @@ class ElementoComposicion {
   final TipoSimbologia? simbologiaTipo;
 
   // --- Gráfica (Balance) ---
+  final List<List<String>> tablaCeldas;
   final TipoGrafica? graficaTipo;
   final String? graficaProyecto; // codigo de proyecto a graficar
 
@@ -299,6 +300,7 @@ class ElementoComposicion {
     this.mapaProyecto,
     this.escalaMapaId,
     this.simbologiaTipo,
+    this.tablaCeldas = const [],
     this.graficaTipo,
     this.graficaProyecto,
   });
@@ -444,6 +446,11 @@ class ElementoComposicion {
     );
   }
 
+  factory ElementoComposicion.tabla({required double x, required double y, required List<List<String>> celdas}) => ElementoComposicion(
+    id: const Uuid().v4(), tipo: TipoElemento.tabla, nombreCapa: 'Tabla',
+    x: x, y: y, width: 180, height: 80, tablaCeldas: celdas,
+  );
+
   factory ElementoComposicion.grafica({
     required TipoGrafica tipo,
     required String proyecto,
@@ -519,6 +526,12 @@ class ElementoComposicion {
         return 'Hexágono';
       case TipoFigura.pentagono:
         return 'Pentágono';
+      case TipoFigura.circulo:
+        return 'Círculo';
+      case TipoFigura.cruz:
+        return 'Cruz';
+      case TipoFigura.estrella:
+        return 'Estrella';
       case TipoFigura.linea:
         return 'Línea';
     }
@@ -579,6 +592,7 @@ class ElementoComposicion {
     bool clearEscalaMapaId = false,
     String? escalaMapaId,
     TipoSimbologia? simbologiaTipo,
+    List<List<String>>? tablaCeldas,
     TipoGrafica? graficaTipo,
     String? graficaProyecto,
   }) {
@@ -639,6 +653,7 @@ class ElementoComposicion {
       mapaBordeEstilo: mapaBordeEstilo ?? this.mapaBordeEstilo,
       escalaMapaId: clearEscalaMapaId ? null : (escalaMapaId ?? this.escalaMapaId),
       simbologiaTipo: simbologiaTipo ?? this.simbologiaTipo,
+      tablaCeldas: tablaCeldas ?? this.tablaCeldas,
       graficaTipo: graficaTipo ?? this.graficaTipo,
       graficaProyecto: graficaProyecto ?? this.graficaProyecto,
     );
@@ -701,6 +716,7 @@ class ElementoComposicion {
         'mapa_borde_estilo': mapaBordeEstilo.name,
         'escala_mapa_id': escalaMapaId,
         'simbologia_tipo': simbologiaTipo?.name,
+        'tabla_celdas': tablaCeldas.map((fila) => {'celdas': fila}).toList(),
         'grafica_tipo': graficaTipo?.name,
         'grafica_proyecto': graficaProyecto,
       };
@@ -771,6 +787,7 @@ class ElementoComposicion {
       escalaMapaId: map['escala_mapa_id'] as String?,
       simbologiaTipo:
           map['simbologia_tipo'] != null ? tipoSimbologiaFromString(map['simbologia_tipo'] as String) : null,
+      tablaCeldas: (map['tabla_celdas'] as List? ?? const []).map((fila) => ((fila as Map)['celdas'] as List).map((v) => v?.toString() ?? '').toList()).toList(),
       graficaTipo: map['grafica_tipo'] != null ? tipoGraficaFromString(map['grafica_tipo'] as String) : null,
       graficaProyecto: map['grafica_proyecto'] as String?,
     );

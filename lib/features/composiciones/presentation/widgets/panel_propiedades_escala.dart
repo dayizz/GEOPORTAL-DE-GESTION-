@@ -20,15 +20,15 @@ class PanelPropiedadesEscala extends StatelessWidget {
     if (mapasDisponibles.isEmpty) {
       return const Text(
         'Agrega un elemento de mapa a esta hoja para poder asociarle una escala.',
-        style: TextStyle(fontSize: 11, color: Colors.black54),
+        style: TextStyle(fontSize: 12, color: Colors.black54),
       );
     }
     final valorValido = mapasDisponibles.any((m) => m.id == elemento.escalaMapaId) ? elemento.escalaMapaId : null;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        const Text('Mapa asociado', style: TextStyle(fontSize: 11, fontWeight: FontWeight.w600)),
-        const SizedBox(height: 6),
+        const Text('Mapa asociado', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600)),
+        const SizedBox(height: 8),
         DropdownButtonFormField<String>(
           initialValue: valorValido,
           isDense: true,

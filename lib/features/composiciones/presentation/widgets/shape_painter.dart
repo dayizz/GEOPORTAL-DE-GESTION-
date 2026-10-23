@@ -70,6 +70,26 @@ class ShapePainter extends CustomPainter {
           _ => 6,
         };
         contorno = Path()..addPolygon(_poligonoRegular(size, lados), true);
+      case TipoFigura.circulo:
+        contorno = Path()..addOval(Offset.zero & size);
+      case TipoFigura.cruz:
+        final w = size.width;
+        final h = size.height;
+        contorno = Path()..addPolygon([
+          Offset(w / 3, 0), Offset(2 * w / 3, 0),
+          Offset(2 * w / 3, h / 3), Offset(w, h / 3),
+          Offset(w, 2 * h / 3), Offset(2 * w / 3, 2 * h / 3),
+          Offset(2 * w / 3, h), Offset(w / 3, h),
+          Offset(w / 3, 2 * h / 3), Offset(0, 2 * h / 3),
+          Offset(0, h / 3), Offset(w / 3, h / 3),
+        ], true);
+      case TipoFigura.estrella:
+        contorno = Path()..addPolygon(List.generate(10, (i) {
+          final angulo = -math.pi / 2 + i * math.pi / 5;
+          final radio = i.isEven ? 1.0 : 0.42;
+          return Offset(size.width / 2 * (1 + radio * math.cos(angulo)),
+              size.height / 2 * (1 + radio * math.sin(angulo)));
+        }), true);
       case TipoFigura.linea:
         final y = size.height / 2;
         contorno = Path()

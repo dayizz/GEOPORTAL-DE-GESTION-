@@ -43,8 +43,8 @@ class PanelPropiedadesGrafica extends StatelessWidget {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        const Text('Tipo de gráfica', style: TextStyle(fontSize: 11, fontWeight: FontWeight.w600)),
-        const SizedBox(height: 6),
+        const Text('Tipo de gráfica', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600)),
+        const SizedBox(height: 8),
         DropdownButtonFormField<TipoGrafica>(
           initialValue: elemento.graficaTipo ?? TipoGrafica.kpiPanel,
           isDense: true,
@@ -59,7 +59,7 @@ class PanelPropiedadesGrafica extends StatelessWidget {
         const SizedBox(height: 8),
         Text(
           'Proyecto: ${elemento.graficaProyecto?.isNotEmpty == true ? elemento.graficaProyecto : "(sin proyecto)"}',
-          style: const TextStyle(fontSize: 11, color: Colors.black54),
+          style: const TextStyle(fontSize: 12, color: Colors.black54),
         ),
       ],
     );

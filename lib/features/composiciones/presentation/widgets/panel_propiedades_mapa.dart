@@ -48,7 +48,7 @@ Widget _filaNumerica({
   return Row(
     children: [
       Expanded(
-        child: Text(label, style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w600)),
+        child: Text(label, style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600)),
       ),
       const SizedBox(width: 8),
       SizedBox(
@@ -194,11 +194,11 @@ class PanelPropiedadesMapa extends StatelessWidget {
           children: [
             const Text(
               'Escala',
-              style: TextStyle(fontSize: 11, fontWeight: FontWeight.w600),
+              style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600),
             ),
             if (elemento.mapaMostrarClaves ?? false)
               _estiloEtiqueta('clave', elemento.mapaEstiloClave, onEstiloClaveChanged),
-            const SizedBox(height: 6),
+            const SizedBox(height: 8),
             Row(
               children: [
                 const Text('1 :', style: TextStyle(fontSize: 12)),
@@ -239,16 +239,16 @@ class PanelPropiedadesMapa extends StatelessWidget {
             const SizedBox(height: 12),
             const Text(
               'Forma del marco',
-              style: TextStyle(fontSize: 11, fontWeight: FontWeight.w600),
+              style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600),
             ),
-            const SizedBox(height: 6),
+            const SizedBox(height: 8),
             Wrap(
               spacing: 6,
               runSpacing: 6,
               children: _opcionesFigura.map((o) {
                 final seleccionada = o.$1 == figuraActual;
                 return ChoiceChip(
-                  label: Text(o.$2, style: const TextStyle(fontSize: 11)),
+                  label: Text(o.$2, style: const TextStyle(fontSize: 12)),
                   avatar: Icon(o.$3, size: 15),
                   selected: seleccionada,
                   onSelected: (_) => onFiguraChanged(o.$1),
@@ -263,9 +263,9 @@ class PanelPropiedadesMapa extends StatelessWidget {
           children: [
             const Text(
               'Tipo de mapa',
-              style: TextStyle(fontSize: 11, fontWeight: FontWeight.w600),
+              style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600),
             ),
-            const SizedBox(height: 6),
+            const SizedBox(height: 8),
             DropdownButtonFormField<String>(
               initialValue: baseLayerActual,
               isDense: true,
@@ -310,7 +310,7 @@ class PanelPropiedadesMapa extends StatelessWidget {
                   child: Text(
                     'Etiquetas de clave catastral',
                     style: TextStyle(
-                      fontSize: 11,
+                      fontSize: 12,
                       fontWeight: FontWeight.w600,
                     ),
                   ),
@@ -323,14 +323,14 @@ class PanelPropiedadesMapa extends StatelessWidget {
             ),
             if (elemento.mapaMostrarClaves ?? false)
               _estiloEtiqueta('clave', elemento.mapaEstiloClave, onEstiloClaveChanged),
-            const SizedBox(height: 6),
+            const SizedBox(height: 8),
             Row(
               children: [
                 const Expanded(
                   child: Text(
                     'Etiquetas de PKS',
                     style: TextStyle(
-                      fontSize: 11,
+                      fontSize: 12,
                       fontWeight: FontWeight.w600,
                     ),
                   ),
@@ -351,7 +351,7 @@ class PanelPropiedadesMapa extends StatelessWidget {
                 const Expanded(
                   child: Text(
                     'Borde',
-                    style: TextStyle(fontSize: 11, fontWeight: FontWeight.w600),
+                    style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600),
                   ),
                 ),
                 Switch(
@@ -372,11 +372,11 @@ class PanelPropiedadesMapa extends StatelessWidget {
                 ],
                 onChanged: (v) { if (v != null) onBordeEstiloChanged(v); },
               ),
-              const SizedBox(height: 6),
+              const SizedBox(height: 8),
               Text(
                 'Grosor: ${bordeGrosorActual.toStringAsFixed(1)}',
                 style: const TextStyle(
-                  fontSize: 11,
+                  fontSize: 12,
                   fontWeight: FontWeight.w600,
                 ),
               ),
@@ -386,7 +386,7 @@ class PanelPropiedadesMapa extends StatelessWidget {
                 max: 12,
                 onChanged: onBordeGrosorChanged,
               ),
-              const SizedBox(height: 6),
+              const SizedBox(height: 8),
               ColorSwatchPicker(
                 label: 'Color',
                 colorHex: bordeColorActual,

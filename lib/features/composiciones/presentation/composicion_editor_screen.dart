@@ -1,3 +1,4 @@
+import 'widgets/tema_panel_propiedades.dart';
 import '../utils/limites_hoja.dart';
 import 'dart:convert';
 
@@ -23,10 +24,12 @@ import '../services/composicion_export_service.dart';
 import '../utils/color_hex.dart';
 import 'widgets/capas_panel.dart';
 import 'widgets/elemento_box.dart';
-import 'widgets/herramienta_hoja_dialog.dart';
+import 'widgets/panel_propiedades_hoja.dart';
+import 'widgets/numero_pagina_widget.dart';
 import 'widgets/panel_propiedades_escala.dart';
 import 'widgets/panel_propiedades_forma.dart';
 import 'widgets/panel_propiedades_grafica.dart';
+import 'widgets/panel_propiedades_tabla.dart';
 import 'widgets/panel_propiedades_mapa.dart';
 import 'widgets/panel_propiedades_norte.dart';
 import 'widgets/panel_propiedades_simbologia.dart';
@@ -59,6 +62,7 @@ class _ComposicionEditorScreenState
 
   int _hojaActivaIndex = 0;
   String? _elementoSeleccionadoId;
+  bool _mostrarFiguras = false;
 
   /// Punto (px del lienzo) donde OSNAP imantó el elemento seleccionado en
   /// este instante -null si no hay snap activo-, para dibujar el
@@ -242,7 +246,7 @@ class _ComposicionEditorScreenState
     _actualizarHoja(
       (hoja) => hoja.copyWith(elementos: [...hoja.elementos, elemento]),
     );
-    setState(() => _elementoSeleccionadoId = elemento.id);
+    setState(() { _elementoSeleccionadoId = elemento.id; _mostrarFiguras = false; });
   }
 
   void _eliminarElemento(String id) {
@@ -252,7 +256,7 @@ class _ComposicionEditorScreenState
       ),
     );
     if (_elementoSeleccionadoId == id) {
-      setState(() => _elementoSeleccionadoId = null);
+      setState(() { _elementoSeleccionadoId = null; _mostrarFiguras = false; });
     }
   }
 
@@ -268,7 +272,7 @@ class _ComposicionEditorScreenState
   void _agregarHoja() {
     setState(() {
       final hojas = List<Hoja>.from(_composicion!.hojas)
-        ..add(Hoja.nueva(nombre: 'Hoja ${_composicion!.hojas.length + 1}'));
+        ..add(Hoja.nueva(nombre: 'Hoja ${_composicion!.hojas.length + 1}').copyWith(numerarPagina: _hojaActiva.numerarPagina, inicioPagina: _hojaActiva.inicioPagina, posicionPagina: _hojaActiva.posicionPagina));
       _composicion = _composicion!.copyWith(hojas: hojas);
       _hojaActivaIndex = hojas.length - 1;
       _elementoSeleccionadoId = null;
@@ -401,6 +405,7 @@ class _ComposicionEditorScreenState
     final bytes = await _exportService.capturarHojaPng(
       context,
       _hojaActiva,
+      indiceHoja: _hojaActivaIndex,
       predios: _prediosParaExportar(),
       pksFeatures: ref.read(pksPointFeaturesProvider),
       proyectoItem: _proyectoItemParaExportar(),
@@ -416,6 +421,7 @@ class _ComposicionEditorScreenState
     final bytes = await _exportService.capturarHojaJpg(
       context,
       _hojaActiva,
+      indiceHoja: _hojaActivaIndex,
       predios: _prediosParaExportar(),
       pksFeatures: ref.read(pksPointFeaturesProvider),
       proyectoItem: _proyectoItemParaExportar(),
@@ -518,7 +524,6 @@ class _ComposicionEditorScreenState
       actions: const [],
       child: Column(
         children: [
-          _buildBarraAccionesSuperior(),
           Expanded(
             child: Row(
               crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -528,6 +533,8 @@ class _ComposicionEditorScreenState
                 Expanded(
                   child: Column(
                     children: [
+                      _buildBarraAccionesSuperior(),
+                      const Divider(height: 1),
                       Expanded(
                         child: _buildLienzo(
                           todosLosPredios,
@@ -552,36 +559,17 @@ class _ComposicionEditorScreenState
   }
 
   Widget _buildBarraAccionesSuperior() {
-    return Container(
-      height: 52,
-      padding: const EdgeInsets.fromLTRB(12, 8, 12, 6),
-      child: Row(
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
+      child: Wrap(
+        alignment: WrapAlignment.center,
+        crossAxisAlignment: WrapCrossAlignment.center,
+        runSpacing: 6,
         children: [
-          Expanded(
-            child: SingleChildScrollView(
-              scrollDirection: Axis.horizontal,
-              child: Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
                   _herramientaBoton(
                     icon: Icons.description_outlined,
                     tooltip: 'Hoja',
-                    onTap: () async {
-                      final resultado = await mostrarHerramientaHojaDialog(
-                        context,
-                        hoja: _hojaActiva,
-                      );
-                      if (resultado == null) return;
-                      _actualizarHoja(
-                        (hoja) => hoja.copyWith(
-                          tamano: resultado.tamano,
-                          horizontal: resultado.horizontal,
-                          margenMm: resultado.margenMm,
-                          clearColorFondo: resultado.colorFondoHex == null,
-                          colorFondoHex: resultado.colorFondoHex,
-                        ),
-                      );
-                    },
+                    onTap: () => setState(() { _elementoSeleccionadoId = null; _mostrarFiguras = false; }),
                   ),
                   const SizedBox(width: 6),
                   _herramientaBoton(
@@ -607,12 +595,26 @@ class _ComposicionEditorScreenState
                   _herramientaFigurasBoton(),
                   const SizedBox(width: 6),
                   _herramientaBoton(
+                    icon: Icons.horizontal_rule,
+                    tooltip: 'Agregar línea',
+                    onTap: () => _agregarElemento((x, y) => ElementoComposicion.forma(
+                      figuraTipo: TipoFigura.linea, x: x, y: y, width: 100, height: 8,
+                    )),
+                  ),
+                  const SizedBox(width: 6),
+                  _herramientaBoton(
                     icon: Icons.text_fields,
                     tooltip: 'Texto',
                     onTap: () => _agregarElemento(
                       (x, y) => ElementoComposicion.texto(x: x, y: y),
                     ),
                   ),
+                  const SizedBox(width: 6),
+                  _herramientaBoton(icon: Icons.table_chart_outlined, tooltip: 'Agregar tabla', onTap: () {
+                    _agregarElemento((x, y) => ElementoComposicion.tabla(x: x, y: y, celdas: [
+                      ['Columna 1', 'Columna 2', 'Columna 3'], ['', '', ''], ['', '', ''],
+                    ]));
+                  }),
                   const SizedBox(width: 6),
                   _herramientaNorteBoton(),
                   const SizedBox(width: 6),
@@ -621,12 +623,7 @@ class _ComposicionEditorScreenState
                   _herramientaSimbologiaBoton(),
                   const SizedBox(width: 6),
                   _herramientaGraficaBoton(),
-                ],
-              ),
-            ),
-          ),
-          Row(
-            children: [
+                  const SizedBox(width: 6),
               _accionSuperior(
                 icon: Icons.image_outlined,
                 tooltip: 'Importar imagen',
@@ -669,12 +666,6 @@ class _ComposicionEditorScreenState
               ),
               const SizedBox(width: 8),
               _accionSuperior(
-                icon: Icons.edit_outlined,
-                tooltip: 'Renombrar composición',
-                onTap: _renombrar,
-              ),
-              const SizedBox(width: 8),
-              _accionSuperior(
                 icon: Icons.save_outlined,
                 tooltip: _guardando ? 'Guardando...' : 'Guardar',
                 enabled: !_guardando,
@@ -705,8 +696,6 @@ class _ComposicionEditorScreenState
                   () => _zoomNivel = (_zoomNivel + 0.1).clamp(0.5, 2.5),
                 ),
               ),
-            ],
-          ),
         ],
       ),
     );
@@ -740,28 +729,6 @@ class _ComposicionEditorScreenState
     return Tooltip(message: tooltip, child: child);
   }
 
-  Future<void> _renombrar() async {
-    final ctrl = TextEditingController(text: _composicion!.nombre);
-    final nuevoNombre = await showDialog<String>(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        title: const Text('Renombrar composición'),
-        content: TextField(controller: ctrl, autofocus: true),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(ctx),
-            child: const Text('Cancelar'),
-          ),
-          TextButton(
-            onPressed: () => Navigator.pop(ctx, ctrl.text.trim()),
-            child: const Text('Guardar'),
-          ),
-        ],
-      ),
-    );
-    if (nuevoNombre == null || nuevoNombre.isEmpty) return;
-    setState(() => _composicion = _composicion!.copyWith(nombre: nuevoNombre));
-  }
 
   Widget _buildBarraLateral(List<Predio> predios) {
     return SizedBox(
@@ -826,55 +793,25 @@ class _ComposicionEditorScreenState
   }
 
   static const _figurasDisponibles = [
-    (TipoFigura.rectangulo, 'Rectángulo'),
     (TipoFigura.cuadrado, 'Cuadrado'),
     (TipoFigura.triangulo, 'Triángulo'),
     (TipoFigura.hexagono, 'Hexágono'),
     (TipoFigura.pentagono, 'Pentágono'),
-    (TipoFigura.linea, 'Línea'),
+    (TipoFigura.circulo, 'Círculo'),
+    (TipoFigura.cruz, 'Cruz'),
+    (TipoFigura.estrella, 'Estrella'),
   ];
 
-  Widget _herramientaFigurasBoton() {
-    return Tooltip(
-      message: 'Figuras',
-      child: PopupMenuButton<TipoFigura>(
-        tooltip: '',
-        offset: const Offset(0, 32),
-        onSelected: (figura) => _agregarElemento(
-          (x, y) => ElementoComposicion.forma(figuraTipo: figura, x: x, y: y),
-        ),
-        itemBuilder: (context) => [
-          PopupMenuItem<TipoFigura>(
-            enabled: false,
-            padding: EdgeInsets.zero,
-            child: _selectorDeFiguras(),
-          ),
-        ],
-        child: Container(
-          width: 32,
-          height: 32,
-          alignment: Alignment.center,
-          decoration: BoxDecoration(
-            color: AppColors.surfaceVariant,
-            borderRadius: BorderRadius.circular(7),
-          ),
-          child:  Icon(
-            Icons.category_outlined,
-            size: 16,
-            color: AppColors.textPrimary,
-          ),
-        ),
-      ),
-    );
-  }
+  Widget _herramientaFigurasBoton() => _herramientaBoton(
+    icon: Icons.category_outlined,
+    tooltip: 'Figuras',
+    onTap: () => setState(() {
+      _elementoSeleccionadoId = null;
+      _mostrarFiguras = true;
+    }),
+  );
 
-  /// Ventana con la representación visual de cada figura (en vez de una
-  /// lista de texto), para que el usuario elija a partir de cómo se ve.
-  /// Cada celda vive dentro de un `PopupMenuItem` con `enabled: false`
-  /// (así el `InkWell` que envuelve normalmente cada item no intercepta el
-  /// toque) y cierra el menú devolviendo su propio valor con
-  /// `Navigator.pop`, el mismo mecanismo que usa `PopupMenuItem` por
-  /// dentro.
+  /// Selector integrado en el panel Propiedades.
   Widget _selectorDeFiguras() {
     return SizedBox(
       width: 216,
@@ -890,7 +827,9 @@ class _ComposicionEditorScreenState
                 child: Builder(
                   builder: (context) => InkWell(
                     borderRadius: BorderRadius.circular(8),
-                    onTap: () => Navigator.of(context).pop(tipo),
+                    onTap: () => _agregarElemento((x, y) => ElementoComposicion.forma(
+                      figuraTipo: tipo, x: x, y: y, width: 120, height: 120,
+                    )),
                     child: Container(
                       width: 58,
                       height: 58,
@@ -1169,12 +1108,12 @@ class _ComposicionEditorScreenState
                 width: wPx,
                 height: hPx,
                 child: GestureDetector(
-                  onTap: () => setState(() => _elementoSeleccionadoId = null),
+                  onTap: () => setState(() { _elementoSeleccionadoId = null; _mostrarFiguras = false; }),
                   child: Container(
                     width: wPx,
                     height: hPx,
                     decoration: BoxDecoration(
-                      color: colorFromHex(hoja.colorFondoHex) ?? Colors.white,
+                      color: (colorFromHex(hoja.colorFondoHex) ?? Colors.white).withValues(alpha: hoja.opacidadFondo.clamp(0, 1)),
                       boxShadow: const [
                         BoxShadow(
                           color: Colors.black26,
@@ -1186,12 +1125,12 @@ class _ComposicionEditorScreenState
                     child: Stack(
                       clipBehavior: Clip.none,
                       children: [
-                        if (hoja.margenMm > 0)
+                        if (hoja.margenArriba + hoja.margenAbajo + hoja.margenIzquierda + hoja.margenDerecha > 0)
                           Positioned(
-                            left: hoja.margenMm * scale,
-                            top: hoja.margenMm * scale,
-                            right: hoja.margenMm * scale,
-                            bottom: hoja.margenMm * scale,
+                            left: hoja.margenIzquierda * scale,
+                            top: hoja.margenArriba * scale,
+                            right: hoja.margenDerecha * scale,
+                            bottom: hoja.margenAbajo * scale,
                             child: IgnorePointer(child: DecoratedBox(
                               decoration: BoxDecoration(border: Border.all(color: Colors.blueGrey.withValues(alpha: 0.4))),
                             )),
@@ -1203,7 +1142,7 @@ class _ComposicionEditorScreenState
                             scale: scale,
                             hojaAnchoMm: anchoMm,
                             hojaAltoMm: altoMm,
-                            margenMm: hoja.margenMm,
+                            margenesMm: EdgeInsets.fromLTRB(hoja.margenIzquierda, hoja.margenArriba, hoja.margenDerecha, hoja.margenAbajo),
                             onSnapIndicador: (p) {
                               if (_snapIndicadorPx != p) {
                                 setState(() => _snapIndicadorPx = p);
@@ -1261,6 +1200,7 @@ class _ComposicionEditorScreenState
                                 ? proyectoItem
                                 : null,
                           ),
+                        Positioned.fill(child: NumeroPaginaWidget(hoja: hoja, indice: _hojaActivaIndex, scale: scale)),
                         if (_snapIndicadorPx != null)
                           Positioned(
                             left: _snapIndicadorPx!.dx - 8,
@@ -1282,7 +1222,7 @@ class _ComposicionEditorScreenState
   /// Contenedor lateral derecho de las propiedades del elemento seleccionado.
   Widget _buildPanelLateralDerecho() {
     final elemento = _elementoSeleccionado;
-    return SizedBox(
+    return TemaPanelPropiedades(child: SizedBox(
       width: 280,
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -1296,36 +1236,45 @@ class _ComposicionEditorScreenState
           ),
           const Divider(height: 1),
           Expanded(
-            child: elemento == null
-                ? const Center(
-                    child: Padding(
-                      padding: EdgeInsets.all(16),
-                      child: Text(
-                        'Selecciona un elemento del lienzo para editar sus propiedades.',
-                        textAlign: TextAlign.center,
-                        style: TextStyle(fontSize: 12, color: Colors.black45),
-                      ),
-                    ),
-                  )
-                : SingleChildScrollView(
-                    padding: const EdgeInsets.all(14),
-                    child: _buildPanelPropiedadesContenido(elemento),
-                  ),
+            child: SingleChildScrollView(
+              padding: const EdgeInsets.all(14),
+              child: elemento == null && _mostrarFiguras
+                  ? Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                      const Text('Figuras', style: TextStyle(fontWeight: FontWeight.bold)),
+                      const SizedBox(height: 8),
+                      const Text('Selecciona una figura para agregarla a la hoja.'),
+                      const SizedBox(height: 8),
+                      _selectorDeFiguras(),
+                    ])
+                  : elemento == null
+                  ? PanelPropiedadesHoja(
+                      key: ValueKey(_hojaActiva.id),
+                      hoja: _hojaActiva,
+                      onChanged: (hoja) => _actualizarHoja((_) => hoja),
+                      onNumeracionChanged: (hoja) => setState(() {
+                        _composicion = _composicion!.copyWith(hojas: _composicion!.hojas.map((h) => h.copyWith(
+                          numerarPagina: hoja.numerarPagina, inicioPagina: hoja.inicioPagina, posicionPagina: hoja.posicionPagina,
+                        )).toList());
+                      }),
+                    )
+                  : _buildPanelPropiedadesContenido(elemento),
+            ),
           ),
         ],
       ),
-    );
+    ));
   }
 
   Widget _buildPanelPropiedadesContenido(ElementoComposicion elemento) {
     return Column(
+      key: ValueKey(elemento.id),
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Text(
           elemento.nombreCapa,
-          style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
+          style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 12),
         ),
-        const SizedBox(height: 14),
+        const SizedBox(height: 12),
         if (elemento.tipo == TipoElemento.forma)
           PanelPropiedadesForma(
             elemento: elemento,
@@ -1530,6 +1479,12 @@ class _ComposicionEditorScreenState
               elemento.id,
               (e) => e.copyWith(simbologiaTipo: v),
             ),
+          ),
+        if (elemento.tipo == TipoElemento.tabla)
+          PanelPropiedadesTabla(
+            key: ValueKey(elemento.id),
+            inicial: elemento.tablaCeldas,
+            onChanged: (celdas) => _actualizarElemento(elemento.id, (e) => e.copyWith(tablaCeldas: celdas)),
           ),
         if (elemento.tipo == TipoElemento.grafica)
           PanelPropiedadesGrafica(

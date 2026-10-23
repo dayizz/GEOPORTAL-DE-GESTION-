@@ -76,9 +76,9 @@ class PanelPropiedadesTexto extends StatelessWidget {
       children: [
         const Text(
           'Texto',
-          style: TextStyle(fontSize: 11, fontWeight: FontWeight.w600),
+          style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600),
         ),
-        const SizedBox(height: 6),
+        const SizedBox(height: 8),
         TextFormField(
           initialValue: elemento.textoContenido ?? '',
           minLines: 1,
@@ -86,7 +86,7 @@ class PanelPropiedadesTexto extends StatelessWidget {
           decoration: const InputDecoration(
             isDense: true,
             border: OutlineInputBorder(),
-            contentPadding: EdgeInsets.symmetric(horizontal: 10, vertical: 10),
+            contentPadding: EdgeInsets.symmetric(horizontal: 8, vertical: 8),
           ),
           onChanged: onTextoContenidoChanged,
         ),
@@ -102,9 +102,9 @@ class PanelPropiedadesTexto extends StatelessWidget {
                 children: [
                   const Text(
                     'Fuente',
-                    style: TextStyle(fontSize: 11, fontWeight: FontWeight.w600),
+                    style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600),
                   ),
-                  const SizedBox(height: 6),
+                  const SizedBox(height: 8),
                   DropdownButtonFormField<String>(
                     initialValue: elemento.textoFontFamily ?? 'Inter',
                     isDense: true,
@@ -130,9 +130,9 @@ class PanelPropiedadesTexto extends StatelessWidget {
                 children: [
                   const Text(
                     'Tamaño',
-                    style: TextStyle(fontSize: 11, fontWeight: FontWeight.w600),
+                    style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600),
                   ),
-                  const SizedBox(height: 6),
+                  const SizedBox(height: 8),
                   TextFormField(
                     key: ValueKey('tamano_${elemento.id}'),
                     initialValue: tamanoActual.round().toString(),
@@ -142,8 +142,7 @@ class PanelPropiedadesTexto extends StatelessWidget {
                     decoration: const InputDecoration(
                       isDense: true,
                       border: OutlineInputBorder(),
-                      contentPadding:
-                          EdgeInsets.symmetric(horizontal: 8, vertical: 8),
+                      contentPadding: EdgeInsets.symmetric(horizontal: 8, vertical: 8),
                       suffixText: 'pt',
                     ),
                     onChanged: (value) {
@@ -184,20 +183,20 @@ class PanelPropiedadesTexto extends StatelessWidget {
               }
             },
             children: const [
-              Text('B', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
-              Text('I', style: TextStyle(fontStyle: FontStyle.italic, fontSize: 13)),
+              Text('B', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12)),
+              Text('I', style: TextStyle(fontStyle: FontStyle.italic, fontSize: 12)),
               Text(
                 'U',
                 style: TextStyle(
                   decoration: TextDecoration.underline,
-                  fontSize: 13,
+                  fontSize: 12,
                 ),
               ),
               Text(
                 'S',
                 style: TextStyle(
                   decoration: TextDecoration.lineThrough,
-                  fontSize: 13,
+                  fontSize: 12,
                 ),
               ),
             ],
@@ -206,9 +205,9 @@ class PanelPropiedadesTexto extends StatelessWidget {
         const SizedBox(height: 12),
         const Text(
           'Alineación',
-          style: TextStyle(fontSize: 11, fontWeight: FontWeight.w600),
+          style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600),
         ),
-        const SizedBox(height: 6),
+        const SizedBox(height: 8),
         Wrap(
           spacing: 4,
           runSpacing: 4,
@@ -238,16 +237,16 @@ class PanelPropiedadesTexto extends StatelessWidget {
             if (v != null) onColorTextoChanged(v);
           },
         ),
-        const SizedBox(height: 14),
+        const SizedBox(height: 12),
         ColorSwatchPicker(
           label: 'Color de fondo',
           colorHex: elemento.textoColorFondoHex,
           permitirSinColor: true,
           onChanged: onColorFondoChanged,
         ),
-        const SizedBox(height: 14),
+        const SizedBox(height: 12),
         const Divider(height: 1),
-        const SizedBox(height: 14),
+        const SizedBox(height: 12),
         const Text(
           'Buffer',
           style: TextStyle(fontSize: 12, fontWeight: FontWeight.w700),
@@ -258,19 +257,9 @@ class PanelPropiedadesTexto extends StatelessWidget {
             const Expanded(
               child: Text(
                 'Activar buffer',
-                style: TextStyle(fontSize: 11, fontWeight: FontWeight.w600),
+                style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600),
               ),
             ),
-            if (bufferActivo) ...[
-              ColorSwatchPicker(
-                colorHex: bufferColorActual,
-                compacto: true,
-                onChanged: (v) {
-                  if (v != null) onBufferColorChanged(v);
-                },
-              ),
-              const SizedBox(width: 8),
-            ],
             Switch(
               value: bufferActivo,
               onChanged: onBufferActivoChanged,
@@ -278,10 +267,12 @@ class PanelPropiedadesTexto extends StatelessWidget {
           ],
         ),
         if (bufferActivo) ...[
+          ColorSwatchPicker(label: 'Color de buffer', colorHex: bufferColorActual,
+            onChanged: (v) { if (v != null) onBufferColorChanged(v); }),
           const SizedBox(height: 8),
           const Text(
             'Ancho de buffer',
-            style: TextStyle(fontSize: 11, fontWeight: FontWeight.w600),
+            style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600),
           ),
           _SliderConNumero(
             valor: bufferAnchoActual,
@@ -302,7 +293,7 @@ class PanelPropiedadesTexto extends StatelessWidget {
                 const Expanded(
                   child: Text(
                     'Interlineado',
-                    style: TextStyle(fontSize: 11, fontWeight: FontWeight.w600),
+                    style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600),
                   ),
                 ),
                 const SizedBox(width: 8),
@@ -317,8 +308,7 @@ class PanelPropiedadesTexto extends StatelessWidget {
                     decoration: const InputDecoration(
                       isDense: true,
                       border: OutlineInputBorder(),
-                      contentPadding:
-                          EdgeInsets.symmetric(horizontal: 8, vertical: 8),
+                      contentPadding: EdgeInsets.symmetric(horizontal: 8, vertical: 8),
                     ),
                     onChanged: (value) {
                       final parsed = double.tryParse(value);
@@ -336,7 +326,7 @@ class PanelPropiedadesTexto extends StatelessWidget {
                 const Expanded(
                   child: Text(
                     'Espaciado entre letras',
-                    style: TextStyle(fontSize: 11, fontWeight: FontWeight.w600),
+                    style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600),
                   ),
                 ),
                 const SizedBox(width: 8),
@@ -351,8 +341,7 @@ class PanelPropiedadesTexto extends StatelessWidget {
                     decoration: const InputDecoration(
                       isDense: true,
                       border: OutlineInputBorder(),
-                      contentPadding:
-                          EdgeInsets.symmetric(horizontal: 8, vertical: 8),
+                      contentPadding: EdgeInsets.symmetric(horizontal: 8, vertical: 8),
                       suffixText: 'px',
                     ),
                     onChanged: (value) {
@@ -363,12 +352,12 @@ class PanelPropiedadesTexto extends StatelessWidget {
                 ),
               ],
             ),
-            const SizedBox(height: 14),
+            const SizedBox(height: 12),
             const Text(
               'Transformar texto',
-              style: TextStyle(fontSize: 11, fontWeight: FontWeight.w600),
+              style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600),
             ),
-            const SizedBox(height: 6),
+            const SizedBox(height: 8),
             Row(
               children: [
                 Expanded(
@@ -380,7 +369,7 @@ class PanelPropiedadesTexto extends StatelessWidget {
                     onPressed: () => onTextoContenidoChanged(
                       (elemento.textoContenido ?? '').toUpperCase(),
                     ),
-                    child: const Text('MAYÚS.', style: TextStyle(fontSize: 10)),
+                    child: const Text('MAYÚS.', style: TextStyle(fontSize: 12)),
                   ),
                 ),
                 const SizedBox(width: 6),
@@ -393,7 +382,7 @@ class PanelPropiedadesTexto extends StatelessWidget {
                     onPressed: () => onTextoContenidoChanged(
                       (elemento.textoContenido ?? '').toLowerCase(),
                     ),
-                    child: const Text('minúsc.', style: TextStyle(fontSize: 10)),
+                    child: const Text('minúsc.', style: TextStyle(fontSize: 12)),
                   ),
                 ),
                 const SizedBox(width: 6),
@@ -406,19 +395,19 @@ class PanelPropiedadesTexto extends StatelessWidget {
                     onPressed: () => onTextoContenidoChanged(
                       _aTitulo(elemento.textoContenido ?? ''),
                     ),
-                    child: const Text('Título', style: TextStyle(fontSize: 10)),
+                    child: const Text('Título', style: TextStyle(fontSize: 12)),
                   ),
                 ),
               ],
             ),
-            const SizedBox(height: 14),
+            const SizedBox(height: 12),
             Row(
               crossAxisAlignment: CrossAxisAlignment.center,
               children: [
                 const Expanded(
                   child: Text(
                     'Rotación de la caja',
-                    style: TextStyle(fontSize: 11, fontWeight: FontWeight.w600),
+                    style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600),
                   ),
                 ),
                 const SizedBox(width: 8),
@@ -433,8 +422,7 @@ class PanelPropiedadesTexto extends StatelessWidget {
                     decoration: const InputDecoration(
                       isDense: true,
                       border: OutlineInputBorder(),
-                      contentPadding:
-                          EdgeInsets.symmetric(horizontal: 6, vertical: 8),
+                      contentPadding: EdgeInsets.symmetric(horizontal: 8, vertical: 8),
                       suffixText: '°',
                     ),
                     onChanged: (value) {
@@ -445,7 +433,7 @@ class PanelPropiedadesTexto extends StatelessWidget {
                     },
                   ),
                 ),
-                const SizedBox(width: 10),
+                const SizedBox(width: 8),
                 _MiniDialRotacion(
                   grados: elemento.rotacion,
                   onChanged: onRotacionChanged,
@@ -537,7 +525,7 @@ class _SliderConNumeroState extends State<_SliderConNumero> {
             decoration: const InputDecoration(
               isDense: true,
               border: OutlineInputBorder(),
-              contentPadding: EdgeInsets.symmetric(horizontal: 6, vertical: 8),
+              contentPadding: EdgeInsets.symmetric(horizontal: 8, vertical: 8),
             ),
             onChanged: (value) {
               final parsed = double.tryParse(value);

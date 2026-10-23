@@ -65,9 +65,9 @@ class PanelPropiedadesForma extends StatelessWidget {
             if (v != null) onColorTrazoChanged(v);
           },
         ),
-        const SizedBox(height: 14),
+        const SizedBox(height: 12),
         Text('Grosor de trazo: ${(elemento.grosorTrazo ?? 2).toStringAsFixed(1)}',
-            style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w600)),
+            style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600)),
         Slider(
           value: (elemento.grosorTrazo ?? 2).clamp(0.5, 12),
           min: 0.5,
@@ -77,9 +77,9 @@ class PanelPropiedadesForma extends StatelessWidget {
         const SizedBox(height: 8),
         const Text(
           'Tipo de línea',
-          style: TextStyle(fontSize: 11, fontWeight: FontWeight.w600),
+          style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600),
         ),
-        const SizedBox(height: 6),
+        const SizedBox(height: 8),
         Wrap(
           spacing: 6,
           runSpacing: 6,
@@ -114,10 +114,10 @@ class PanelPropiedadesForma extends StatelessWidget {
           }).toList(),
         ),
         if (estiloLineaActual != EstiloLinea.continua) ...[
-          const SizedBox(height: 10),
+          const SizedBox(height: 8),
           Text(
             'Espaciado: ${espaciadoLineaActual.toStringAsFixed(1)}x',
-            style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w600),
+            style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600),
           ),
           Slider(
             value: espaciadoLineaActual.clamp(0.4, 3.0),
@@ -128,9 +128,9 @@ class PanelPropiedadesForma extends StatelessWidget {
           ),
         ],
         if (elemento.figuraTipo == TipoFigura.linea) ...[
-          const SizedBox(height: 14),
+          const SizedBox(height: 12),
           const Divider(height: 1),
-          const SizedBox(height: 14),
+          const SizedBox(height: 12),
           const Text(
             'Punta de línea',
             style: TextStyle(fontSize: 12, fontWeight: FontWeight.w700),
@@ -173,7 +173,7 @@ class PanelPropiedadesForma extends StatelessWidget {
             const SizedBox(height: 12),
             Text(
               'Tamaño de la punta: ${puntaTamanoActual.toStringAsFixed(0)}',
-              style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w600),
+              style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600),
             ),
             Slider(
               value: puntaTamanoActual.clamp(4, 30),
@@ -184,14 +184,14 @@ class PanelPropiedadesForma extends StatelessWidget {
             const SizedBox(height: 8),
             const Text(
               'Posición',
-              style: TextStyle(fontSize: 11, fontWeight: FontWeight.w600),
+              style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600),
             ),
-            const SizedBox(height: 6),
+            const SizedBox(height: 8),
             Row(
               children: [
                 Expanded(
                   child: FilterChip(
-                    label: const Text('Izquierda', style: TextStyle(fontSize: 11)),
+                    label: const Text('Izquierda', style: TextStyle(fontSize: 12)),
                     selected: puntaIzquierdaActual,
                     onSelected: onPuntaIzquierdaChanged,
                   ),
@@ -199,7 +199,7 @@ class PanelPropiedadesForma extends StatelessWidget {
                 const SizedBox(width: 8),
                 Expanded(
                   child: FilterChip(
-                    label: const Text('Derecha', style: TextStyle(fontSize: 11)),
+                    label: const Text('Derecha', style: TextStyle(fontSize: 12)),
                     selected: puntaDerechaActual,
                     onSelected: onPuntaDerechaChanged,
                   ),
@@ -208,7 +208,8 @@ class PanelPropiedadesForma extends StatelessWidget {
             ),
           ],
         ],
-        const SizedBox(height: 14),
+        const SizedBox(height: 12),
+        if (elemento.figuraTipo != TipoFigura.linea)
         ColorSwatchPicker(
           label: 'Color de relleno',
           colorHex: elemento.colorRellenoHex,
