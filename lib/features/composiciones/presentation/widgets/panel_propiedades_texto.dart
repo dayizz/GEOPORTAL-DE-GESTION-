@@ -74,215 +74,251 @@ class PanelPropiedadesTexto extends StatelessWidget {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        const Text(
-          'Texto',
-          style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600),
-        ),
-        const SizedBox(height: 8),
-        TextFormField(
-          initialValue: elemento.textoContenido ?? '',
-          minLines: 1,
-          maxLines: 4,
-          decoration: const InputDecoration(
-            isDense: true,
-            border: OutlineInputBorder(),
-            contentPadding: EdgeInsets.symmetric(horizontal: 8, vertical: 8),
-          ),
-          onChanged: onTextoContenidoChanged,
-        ),
-        const SizedBox(height: 12),
-        // Fila 1: tipografía (70%) + tamaño (30%) en un solo bloque.
-        Row(
-          crossAxisAlignment: CrossAxisAlignment.end,
+        PanelSeccionColapsable(
+          titulo: 'Contenido',
+          icono: Icons.text_fields,
           children: [
-            Expanded(
-              flex: 7,
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  const Text(
-                    'Fuente',
-                    style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600),
-                  ),
-                  const SizedBox(height: 8),
-                  DropdownButtonFormField<String>(
-                    initialValue: elemento.textoFontFamily ?? 'Inter',
-                    isDense: true,
-                    decoration: const InputDecoration(
-                      isDense: true,
-                      contentPadding: EdgeInsets.symmetric(horizontal: 8),
-                    ),
-                    items: composicionesFuentes
-                        .map((f) => DropdownMenuItem(value: f, child: Text(f)))
-                        .toList(),
-                    onChanged: (v) {
-                      if (v != null) onFontFamilyChanged(v);
-                    },
-                  ),
-                ],
+            TextFormField(
+              initialValue: elemento.textoContenido ?? '',
+              minLines: 1,
+              maxLines: 4,
+              decoration: const InputDecoration(
+                isDense: true,
+                border: OutlineInputBorder(),
+                contentPadding: EdgeInsets.symmetric(
+                  horizontal: 8,
+                  vertical: 8,
+                ),
               ),
+              onChanged: onTextoContenidoChanged,
             ),
-            const SizedBox(width: 8),
-            Expanded(
-              flex: 3,
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  const Text(
-                    'Tamaño',
-                    style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600),
-                  ),
-                  const SizedBox(height: 8),
-                  TextFormField(
-                    key: ValueKey('tamano_${elemento.id}'),
-                    initialValue: tamanoActual.round().toString(),
-                    textAlign: TextAlign.end,
-                    keyboardType:
-                        const TextInputType.numberWithOptions(decimal: true),
-                    decoration: const InputDecoration(
-                      isDense: true,
-                      border: OutlineInputBorder(),
-                      contentPadding: EdgeInsets.symmetric(horizontal: 8, vertical: 8),
-                      suffixText: 'pt',
-                    ),
-                    onChanged: (value) {
-                      final parsed = double.tryParse(value);
-                      if (parsed != null && parsed > 0) {
-                        onFontSizeChanged(parsed);
-                      }
-                    },
-                  ),
-                ],
-              ),
-            ),
+            const SizedBox(height: 12),
           ],
         ),
-        const SizedBox(height: 12),
-        // Segmented control compacto: Negrita / Cursiva / Subrayado / Tachado.
-        Align(
-          alignment: Alignment.centerLeft,
-          child: ToggleButtons(
-            borderRadius: BorderRadius.circular(6),
-            constraints: const BoxConstraints(minWidth: 36, minHeight: 32),
-            isSelected: [
-              elemento.textoBold ?? false,
-              elemento.textoItalic ?? false,
-              elemento.textoSubrayado ?? false,
-              elemento.textoTachado ?? false,
-            ],
-            onPressed: (index) {
-              switch (index) {
-                case 0:
-                  onBoldChanged(!(elemento.textoBold ?? false));
-                case 1:
-                  onItalicChanged(!(elemento.textoItalic ?? false));
-                case 2:
-                  onSubrayadoChanged(!(elemento.textoSubrayado ?? false));
-                case 3:
-                  onTachadoChanged(!(elemento.textoTachado ?? false));
-              }
-            },
-            children: const [
-              Text('B', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12)),
-              Text('I', style: TextStyle(fontStyle: FontStyle.italic, fontSize: 12)),
-              Text(
-                'U',
-                style: TextStyle(
-                  decoration: TextDecoration.underline,
-                  fontSize: 12,
-                ),
-              ),
-              Text(
-                'S',
-                style: TextStyle(
-                  decoration: TextDecoration.lineThrough,
-                  fontSize: 12,
-                ),
-              ),
-            ],
-          ),
-        ),
-        const SizedBox(height: 12),
-        const Text(
-          'Alineación',
-          style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600),
-        ),
-        const SizedBox(height: 8),
-        Wrap(
-          spacing: 4,
-          runSpacing: 4,
-          children: const [
-            (AlineacionTexto.izquierda, Icons.format_align_left),
-            (AlineacionTexto.centro, Icons.format_align_center),
-            (AlineacionTexto.derecha, Icons.format_align_right),
-            (AlineacionTexto.justificado, Icons.format_align_justify),
-          ].map((o) {
-            final seleccionada = o.$1 == alineacionActual;
-            return ChoiceChip(
-              label: Icon(o.$2, size: 16),
-              labelPadding: EdgeInsets.zero,
-              padding: const EdgeInsets.symmetric(horizontal: 6),
-              visualDensity: VisualDensity.compact,
-              materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
-              selected: seleccionada,
-              onSelected: (_) => onAlineacionChanged(o.$1),
-            );
-          }).toList(),
-        ),
-        const SizedBox(height: 12),
-        ColorSwatchPicker(
-          label: 'Color de texto',
-          colorHex: elemento.textoColorHex,
-          onChanged: (v) {
-            if (v != null) onColorTextoChanged(v);
-          },
-        ),
-        const SizedBox(height: 12),
-        ColorSwatchPicker(
-          label: 'Color de fondo',
-          colorHex: elemento.textoColorFondoHex,
-          permitirSinColor: true,
-          onChanged: onColorFondoChanged,
-        ),
-        const SizedBox(height: 12),
-        const Divider(height: 1),
-        const SizedBox(height: 12),
-        const Text(
-          'Buffer',
-          style: TextStyle(fontSize: 12, fontWeight: FontWeight.w700),
-        ),
-        const SizedBox(height: 8),
-        Row(
+        PanelSeccionColapsable(
+          titulo: 'Tipografía y alineación',
+          icono: Icons.format_size,
           children: [
-            const Expanded(
-              child: Text(
-                'Activar buffer',
+            // Fila 1: tipografía (70%) + tamaño (30%) en un solo bloque.
+            Row(
+              crossAxisAlignment: CrossAxisAlignment.end,
+              children: [
+                Expanded(
+                  flex: 7,
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      const Text(
+                        'Fuente',
+                        style: TextStyle(
+                          fontSize: 12,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                      const SizedBox(height: 8),
+                      DropdownButtonFormField<String>(
+                        initialValue: elemento.textoFontFamily ?? 'Inter',
+                        isDense: true,
+                        decoration: const InputDecoration(
+                          isDense: true,
+                          contentPadding: EdgeInsets.symmetric(horizontal: 8),
+                        ),
+                        items: composicionesFuentes
+                            .map(
+                              (f) => DropdownMenuItem(value: f, child: Text(f)),
+                            )
+                            .toList(),
+                        onChanged: (v) {
+                          if (v != null) onFontFamilyChanged(v);
+                        },
+                      ),
+                    ],
+                  ),
+                ),
+                const SizedBox(width: 8),
+                Expanded(
+                  flex: 3,
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      const Text(
+                        'Tamaño',
+                        style: TextStyle(
+                          fontSize: 12,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                      const SizedBox(height: 8),
+                      TextFormField(
+                        key: ValueKey('tamano_${elemento.id}'),
+                        initialValue: tamanoActual.round().toString(),
+                        textAlign: TextAlign.end,
+                        keyboardType: const TextInputType.numberWithOptions(
+                          decimal: true,
+                        ),
+                        decoration: const InputDecoration(
+                          isDense: true,
+                          border: OutlineInputBorder(),
+                          contentPadding: EdgeInsets.symmetric(
+                            horizontal: 8,
+                            vertical: 8,
+                          ),
+                          suffixText: 'pt',
+                        ),
+                        onChanged: (value) {
+                          final parsed = double.tryParse(value);
+                          if (parsed != null && parsed > 0) {
+                            onFontSizeChanged(parsed);
+                          }
+                        },
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 12),
+            // Segmented control compacto: Negrita / Cursiva / Subrayado / Tachado.
+            Align(
+              alignment: Alignment.centerLeft,
+              child: ToggleButtons(
+                borderRadius: BorderRadius.circular(6),
+                constraints: const BoxConstraints(minWidth: 36, minHeight: 32),
+                isSelected: [
+                  elemento.textoBold ?? false,
+                  elemento.textoItalic ?? false,
+                  elemento.textoSubrayado ?? false,
+                  elemento.textoTachado ?? false,
+                ],
+                onPressed: (index) {
+                  switch (index) {
+                    case 0:
+                      onBoldChanged(!(elemento.textoBold ?? false));
+                    case 1:
+                      onItalicChanged(!(elemento.textoItalic ?? false));
+                    case 2:
+                      onSubrayadoChanged(!(elemento.textoSubrayado ?? false));
+                    case 3:
+                      onTachadoChanged(!(elemento.textoTachado ?? false));
+                  }
+                },
+                children: const [
+                  Text(
+                    'B',
+                    style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12),
+                  ),
+                  Text(
+                    'I',
+                    style: TextStyle(fontStyle: FontStyle.italic, fontSize: 12),
+                  ),
+                  Text(
+                    'U',
+                    style: TextStyle(
+                      decoration: TextDecoration.underline,
+                      fontSize: 12,
+                    ),
+                  ),
+                  Text(
+                    'S',
+                    style: TextStyle(
+                      decoration: TextDecoration.lineThrough,
+                      fontSize: 12,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(height: 12),
+            const Text(
+              'Alineación',
+              style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600),
+            ),
+            const SizedBox(height: 8),
+            Wrap(
+              spacing: 4,
+              runSpacing: 4,
+              children:
+                  const [
+                    (AlineacionTexto.izquierda, Icons.format_align_left),
+                    (AlineacionTexto.centro, Icons.format_align_center),
+                    (AlineacionTexto.derecha, Icons.format_align_right),
+                    (AlineacionTexto.justificado, Icons.format_align_justify),
+                  ].map((o) {
+                    final seleccionada = o.$1 == alineacionActual;
+                    return ChoiceChip(
+                      label: Icon(o.$2, size: 16),
+                      labelPadding: EdgeInsets.zero,
+                      padding: const EdgeInsets.symmetric(horizontal: 6),
+                      visualDensity: VisualDensity.compact,
+                      materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                      selected: seleccionada,
+                      onSelected: (_) => onAlineacionChanged(o.$1),
+                    );
+                  }).toList(),
+            ),
+            const SizedBox(height: 12),
+          ],
+        ),
+        PanelSeccionColapsable(
+          titulo: 'Colores',
+          icono: Icons.palette_outlined,
+          children: [
+            ColorSwatchPicker(
+              label: 'Color de texto',
+              colorHex: elemento.textoColorHex,
+              onChanged: (v) {
+                if (v != null) onColorTextoChanged(v);
+              },
+            ),
+            const SizedBox(height: 12),
+            ColorSwatchPicker(
+              label: 'Color de fondo',
+              colorHex: elemento.textoColorFondoHex,
+              permitirSinColor: true,
+              onChanged: onColorFondoChanged,
+            ),
+            const SizedBox(height: 12),
+          ],
+        ),
+        PanelSeccionColapsable(
+          titulo: 'Buffer',
+          icono: Icons.border_color,
+          children: [
+            Row(
+              children: [
+                const Expanded(
+                  child: Text(
+                    'Activar buffer',
+                    style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600),
+                  ),
+                ),
+                Switch(value: bufferActivo, onChanged: onBufferActivoChanged),
+              ],
+            ),
+            if (bufferActivo) ...[
+              ColorSwatchPicker(
+                label: 'Color de buffer',
+                colorHex: bufferColorActual,
+                onChanged: (v) {
+                  if (v != null) onBufferColorChanged(v);
+                },
+              ),
+              const SizedBox(height: 8),
+              const Text(
+                'Ancho de buffer',
                 style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600),
               ),
-            ),
-            Switch(
-              value: bufferActivo,
-              onChanged: onBufferActivoChanged,
-            ),
+              _SliderConNumero(
+                valor: bufferAnchoActual,
+                min: 0,
+                max: 10,
+                divisiones: 20,
+                onChanged: onBufferAnchoChanged,
+              ),
+            ],
+            const SizedBox(height: 8),
           ],
         ),
-        if (bufferActivo) ...[
-          ColorSwatchPicker(label: 'Color de buffer', colorHex: bufferColorActual,
-            onChanged: (v) { if (v != null) onBufferColorChanged(v); }),
-          const SizedBox(height: 8),
-          const Text(
-            'Ancho de buffer',
-            style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600),
-          ),
-          _SliderConNumero(
-            valor: bufferAnchoActual,
-            min: 0,
-            max: 10,
-            divisiones: 20,
-            onChanged: onBufferAnchoChanged,
-          ),
-        ],
-        const SizedBox(height: 8),
         PanelSeccionColapsable(
           titulo: 'Ajustes avanzados de texto',
           icono: Icons.tune,
@@ -303,12 +339,16 @@ class PanelPropiedadesTexto extends StatelessWidget {
                     key: ValueKey('interlineado_${elemento.id}'),
                     initialValue: interlineadoActual.toStringAsFixed(1),
                     textAlign: TextAlign.end,
-                    keyboardType:
-                        const TextInputType.numberWithOptions(decimal: true),
+                    keyboardType: const TextInputType.numberWithOptions(
+                      decimal: true,
+                    ),
                     decoration: const InputDecoration(
                       isDense: true,
                       border: OutlineInputBorder(),
-                      contentPadding: EdgeInsets.symmetric(horizontal: 8, vertical: 8),
+                      contentPadding: EdgeInsets.symmetric(
+                        horizontal: 8,
+                        vertical: 8,
+                      ),
                     ),
                     onChanged: (value) {
                       final parsed = double.tryParse(value);
@@ -336,12 +376,16 @@ class PanelPropiedadesTexto extends StatelessWidget {
                     key: ValueKey('tracking_${elemento.id}'),
                     initialValue: trackingActual.toStringAsFixed(1),
                     textAlign: TextAlign.end,
-                    keyboardType:
-                        const TextInputType.numberWithOptions(decimal: true),
+                    keyboardType: const TextInputType.numberWithOptions(
+                      decimal: true,
+                    ),
                     decoration: const InputDecoration(
                       isDense: true,
                       border: OutlineInputBorder(),
-                      contentPadding: EdgeInsets.symmetric(horizontal: 8, vertical: 8),
+                      contentPadding: EdgeInsets.symmetric(
+                        horizontal: 8,
+                        vertical: 8,
+                      ),
                       suffixText: 'px',
                     ),
                     onChanged: (value) {
@@ -382,7 +426,10 @@ class PanelPropiedadesTexto extends StatelessWidget {
                     onPressed: () => onTextoContenidoChanged(
                       (elemento.textoContenido ?? '').toLowerCase(),
                     ),
-                    child: const Text('minúsc.', style: TextStyle(fontSize: 12)),
+                    child: const Text(
+                      'minúsc.',
+                      style: TextStyle(fontSize: 12),
+                    ),
                   ),
                 ),
                 const SizedBox(width: 6),
@@ -417,12 +464,16 @@ class PanelPropiedadesTexto extends StatelessWidget {
                     key: ValueKey('rotacion_texto_${elemento.id}'),
                     initialValue: elemento.rotacion.round().toString(),
                     textAlign: TextAlign.end,
-                    keyboardType:
-                        const TextInputType.numberWithOptions(decimal: true),
+                    keyboardType: const TextInputType.numberWithOptions(
+                      decimal: true,
+                    ),
                     decoration: const InputDecoration(
                       isDense: true,
                       border: OutlineInputBorder(),
-                      contentPadding: EdgeInsets.symmetric(horizontal: 8, vertical: 8),
+                      contentPadding: EdgeInsets.symmetric(
+                        horizontal: 8,
+                        vertical: 8,
+                      ),
                       suffixText: '°',
                     ),
                     onChanged: (value) {
@@ -482,8 +533,9 @@ class _SliderConNumero extends StatefulWidget {
 }
 
 class _SliderConNumeroState extends State<_SliderConNumero> {
-  late final _ctrl =
-      TextEditingController(text: widget.valor.toStringAsFixed(1));
+  late final _ctrl = TextEditingController(
+    text: widget.valor.toStringAsFixed(1),
+  );
   final _focus = FocusNode();
 
   @override
@@ -563,7 +615,8 @@ class _MiniDialRotacion extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return GestureDetector(
-      onPanUpdate: (details) => _actualizarDesde(context, details.globalPosition),
+      onPanUpdate: (details) =>
+          _actualizarDesde(context, details.globalPosition),
       onTapDown: (details) => _actualizarDesde(context, details.globalPosition),
       child: CustomPaint(
         size: const Size(_tamano, _tamano),

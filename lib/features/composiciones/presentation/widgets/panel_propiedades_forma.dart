@@ -1,3 +1,4 @@
+import 'panel_seccion_colapsable.dart';
 import 'package:flutter/material.dart';
 import '../../../../core/constants/app_colors.dart';
 import '../../models/elemento_composicion.dart';
@@ -58,164 +59,190 @@ class PanelPropiedadesForma extends StatelessWidget {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        ColorSwatchPicker(
-          label: 'Color de trazo',
-          colorHex: elemento.colorTrazoHex,
-          onChanged: (v) {
-            if (v != null) onColorTrazoChanged(v);
-          },
-        ),
-        const SizedBox(height: 12),
-        Text('Grosor de trazo: ${(elemento.grosorTrazo ?? 2).toStringAsFixed(1)}',
-            style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600)),
-        Slider(
-          value: (elemento.grosorTrazo ?? 2).clamp(0.5, 12),
-          min: 0.5,
-          max: 12,
-          onChanged: onGrosorChanged,
-        ),
-        const SizedBox(height: 8),
-        const Text(
-          'Tipo de línea',
-          style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600),
-        ),
-        const SizedBox(height: 8),
-        Wrap(
-          spacing: 6,
-          runSpacing: 6,
-          children: _opcionesEstiloLinea.map((o) {
-            final seleccionado = o.$1 == estiloLineaActual;
-            return Tooltip(
-              message: o.$2,
-              child: InkWell(
-                borderRadius: BorderRadius.circular(6),
-                onTap: () => onEstiloLineaChanged(o.$1),
-                child: Container(
-                  width: 54,
-                  height: 34,
-                  alignment: Alignment.center,
-                  decoration: BoxDecoration(
-                    border: Border.all(
-                      color: seleccionado ? AppColors.primary : Colors.black26,
-                      width: seleccionado ? 1.6 : 1,
-                    ),
-                    borderRadius: BorderRadius.circular(6),
-                    color: seleccionado
-                        ? AppColors.primary.withValues(alpha: 0.08)
-                        : null,
-                  ),
-                  child: CustomPaint(
-                    size: const Size(36, 12),
-                    painter: _EstiloLineaPreviewPainter(estilo: o.$1),
-                  ),
-                ),
-              ),
-            );
-          }).toList(),
-        ),
-        if (estiloLineaActual != EstiloLinea.continua) ...[
-          const SizedBox(height: 8),
-          Text(
-            'Espaciado: ${espaciadoLineaActual.toStringAsFixed(1)}x',
-            style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600),
-          ),
-          Slider(
-            value: espaciadoLineaActual.clamp(0.4, 3.0),
-            min: 0.4,
-            max: 3.0,
-            divisions: 26,
-            onChanged: onEspaciadoLineaChanged,
-          ),
-        ],
-        if (elemento.figuraTipo == TipoFigura.linea) ...[
-          const SizedBox(height: 12),
-          const Divider(height: 1),
-          const SizedBox(height: 12),
-          const Text(
-            'Punta de línea',
-            style: TextStyle(fontSize: 12, fontWeight: FontWeight.w700),
-          ),
-          const SizedBox(height: 8),
-          Wrap(
-            spacing: 6,
-            runSpacing: 6,
-            children: _opcionesPuntaLinea.map((o) {
-              final seleccionado = o.$1 == puntaTipoActual;
-              return Tooltip(
-                message: o.$2,
-                child: InkWell(
-                  borderRadius: BorderRadius.circular(6),
-                  onTap: () => onPuntaTipoChanged(o.$1),
-                  child: Container(
-                    width: 54,
-                    height: 34,
-                    alignment: Alignment.center,
-                    decoration: BoxDecoration(
-                      border: Border.all(
-                        color: seleccionado ? AppColors.primary : Colors.black26,
-                        width: seleccionado ? 1.6 : 1,
-                      ),
-                      borderRadius: BorderRadius.circular(6),
-                      color: seleccionado
-                          ? AppColors.primary.withValues(alpha: 0.08)
-                          : null,
-                    ),
-                    child: CustomPaint(
-                      size: const Size(32, 16),
-                      painter: _PuntaLineaPreviewPainter(tipo: o.$1),
-                    ),
-                  ),
-                ),
-              );
-            }).toList(),
-          ),
-          if (puntaTipoActual != TipoPuntaLinea.ninguna) ...[
+        PanelSeccionColapsable(
+          titulo: 'Trazo',
+          icono: Icons.border_color,
+          children: [
+            ColorSwatchPicker(
+              label: 'Color de trazo',
+              colorHex: elemento.colorTrazoHex,
+              onChanged: (v) {
+                if (v != null) onColorTrazoChanged(v);
+              },
+            ),
             const SizedBox(height: 12),
             Text(
-              'Tamaño de la punta: ${puntaTamanoActual.toStringAsFixed(0)}',
+              'Grosor de trazo: ${(elemento.grosorTrazo ?? 2).toStringAsFixed(1)}',
               style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600),
             ),
             Slider(
-              value: puntaTamanoActual.clamp(4, 30),
-              min: 4,
-              max: 30,
-              onChanged: onPuntaTamanoChanged,
+              value: (elemento.grosorTrazo ?? 2).clamp(0.5, 12),
+              min: 0.5,
+              max: 12,
+              onChanged: onGrosorChanged,
             ),
             const SizedBox(height: 8),
             const Text(
-              'Posición',
+              'Tipo de línea',
               style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600),
             ),
             const SizedBox(height: 8),
-            Row(
-              children: [
-                Expanded(
-                  child: FilterChip(
-                    label: const Text('Izquierda', style: TextStyle(fontSize: 12)),
-                    selected: puntaIzquierdaActual,
-                    onSelected: onPuntaIzquierdaChanged,
+            Wrap(
+              spacing: 6,
+              runSpacing: 6,
+              children: _opcionesEstiloLinea.map((o) {
+                final seleccionado = o.$1 == estiloLineaActual;
+                return Tooltip(
+                  message: o.$2,
+                  child: InkWell(
+                    borderRadius: BorderRadius.circular(6),
+                    onTap: () => onEstiloLineaChanged(o.$1),
+                    child: Container(
+                      width: 54,
+                      height: 34,
+                      alignment: Alignment.center,
+                      decoration: BoxDecoration(
+                        border: Border.all(
+                          color: seleccionado
+                              ? AppColors.primary
+                              : Colors.black26,
+                          width: seleccionado ? 1.6 : 1,
+                        ),
+                        borderRadius: BorderRadius.circular(6),
+                        color: seleccionado
+                            ? AppColors.primary.withValues(alpha: 0.08)
+                            : null,
+                      ),
+                      child: CustomPaint(
+                        size: const Size(36, 12),
+                        painter: _EstiloLineaPreviewPainter(estilo: o.$1),
+                      ),
+                    ),
+                  ),
+                );
+              }).toList(),
+            ),
+            if (estiloLineaActual != EstiloLinea.continua) ...[
+              const SizedBox(height: 8),
+              Text(
+                'Espaciado: ${espaciadoLineaActual.toStringAsFixed(1)}x',
+                style: const TextStyle(
+                  fontSize: 12,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+              Slider(
+                value: espaciadoLineaActual.clamp(0.4, 3.0),
+                min: 0.4,
+                max: 3.0,
+                divisions: 26,
+                onChanged: onEspaciadoLineaChanged,
+              ),
+            ],
+          ],
+        ),
+        if (elemento.figuraTipo == TipoFigura.linea)
+          PanelSeccionColapsable(
+            titulo: 'Puntas de línea',
+            icono: Icons.arrow_right_alt,
+            children: [
+              Wrap(
+                spacing: 6,
+                runSpacing: 6,
+                children: _opcionesPuntaLinea.map((o) {
+                  final seleccionado = o.$1 == puntaTipoActual;
+                  return Tooltip(
+                    message: o.$2,
+                    child: InkWell(
+                      borderRadius: BorderRadius.circular(6),
+                      onTap: () => onPuntaTipoChanged(o.$1),
+                      child: Container(
+                        width: 54,
+                        height: 34,
+                        alignment: Alignment.center,
+                        decoration: BoxDecoration(
+                          border: Border.all(
+                            color: seleccionado
+                                ? AppColors.primary
+                                : Colors.black26,
+                            width: seleccionado ? 1.6 : 1,
+                          ),
+                          borderRadius: BorderRadius.circular(6),
+                          color: seleccionado
+                              ? AppColors.primary.withValues(alpha: 0.08)
+                              : null,
+                        ),
+                        child: CustomPaint(
+                          size: const Size(32, 16),
+                          painter: _PuntaLineaPreviewPainter(tipo: o.$1),
+                        ),
+                      ),
+                    ),
+                  );
+                }).toList(),
+              ),
+              if (puntaTipoActual != TipoPuntaLinea.ninguna) ...[
+                const SizedBox(height: 12),
+                Text(
+                  'Tamaño de la punta: ${puntaTamanoActual.toStringAsFixed(0)}',
+                  style: const TextStyle(
+                    fontSize: 12,
+                    fontWeight: FontWeight.w600,
                   ),
                 ),
-                const SizedBox(width: 8),
-                Expanded(
-                  child: FilterChip(
-                    label: const Text('Derecha', style: TextStyle(fontSize: 12)),
-                    selected: puntaDerechaActual,
-                    onSelected: onPuntaDerechaChanged,
-                  ),
+                Slider(
+                  value: puntaTamanoActual.clamp(4, 30),
+                  min: 4,
+                  max: 30,
+                  onChanged: onPuntaTamanoChanged,
+                ),
+                const SizedBox(height: 8),
+                const Text(
+                  'Posición',
+                  style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600),
+                ),
+                const SizedBox(height: 8),
+                Row(
+                  children: [
+                    Expanded(
+                      child: FilterChip(
+                        label: const Text(
+                          'Izquierda',
+                          style: TextStyle(fontSize: 12),
+                        ),
+                        selected: puntaIzquierdaActual,
+                        onSelected: onPuntaIzquierdaChanged,
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: FilterChip(
+                        label: const Text(
+                          'Derecha',
+                          style: TextStyle(fontSize: 12),
+                        ),
+                        selected: puntaDerechaActual,
+                        onSelected: onPuntaDerechaChanged,
+                      ),
+                    ),
+                  ],
                 ),
               ],
-            ),
-          ],
-        ],
-        const SizedBox(height: 12),
+            ],
+          ),
         if (elemento.figuraTipo != TipoFigura.linea)
-        ColorSwatchPicker(
-          label: 'Color de relleno',
-          colorHex: elemento.colorRellenoHex,
-          permitirSinColor: true,
-          onChanged: onColorRellenoChanged,
-        ),
+          PanelSeccionColapsable(
+            titulo: 'Relleno',
+            icono: Icons.format_color_fill,
+            children: [
+              ColorSwatchPicker(
+                label: 'Color de relleno',
+                colorHex: elemento.colorRellenoHex,
+                permitirSinColor: true,
+                onChanged: onColorRellenoChanged,
+              ),
+            ],
+          ),
       ],
     );
   }
@@ -237,7 +264,9 @@ class _EstiloLineaPreviewPainter extends CustomPainter {
       ..color = AppColors.textPrimary
       ..strokeWidth = grosor
       ..style = PaintingStyle.stroke
-      ..strokeCap = estilo == EstiloLinea.continua ? StrokeCap.butt : StrokeCap.round;
+      ..strokeCap = estilo == EstiloLinea.continua
+          ? StrokeCap.butt
+          : StrokeCap.round;
     final y = size.height / 2;
     final linea = Path()
       ..moveTo(0, y)

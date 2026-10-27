@@ -1,3 +1,4 @@
+import 'panel_seccion_colapsable.dart';
 import 'package:flutter/material.dart';
 import '../../models/elemento_composicion.dart';
 
@@ -26,16 +27,25 @@ class PanelPropiedadesSimbologia extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
+    return PanelSeccionColapsable(
+      titulo: 'Clasificación',
+      icono: Icons.legend_toggle,
       children: [
-        const Text('Simbología por', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600)),
+        const Text(
+          'Simbología por',
+          style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600),
+        ),
         const SizedBox(height: 8),
         DropdownButtonFormField<TipoSimbologia>(
           initialValue: elemento.simbologiaTipo ?? TipoSimbologia.estatus,
           isDense: true,
           items: TipoSimbologia.values
-              .map((t) => DropdownMenuItem(value: t, child: Text(_etiquetaTipoSimbologia(t))))
+              .map(
+                (t) => DropdownMenuItem(
+                  value: t,
+                  child: Text(_etiquetaTipoSimbologia(t)),
+                ),
+              )
               .toList(),
           onChanged: (v) {
             if (v != null) onTipoChanged(v);

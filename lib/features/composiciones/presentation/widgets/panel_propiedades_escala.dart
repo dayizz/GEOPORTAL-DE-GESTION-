@@ -1,3 +1,4 @@
+import 'panel_seccion_colapsable.dart';
 import 'package:flutter/material.dart';
 import '../../models/elemento_composicion.dart';
 
@@ -18,23 +19,30 @@ class PanelPropiedadesEscala extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     if (mapasDisponibles.isEmpty) {
-      return const Text(
+      return const PanelSeccionColapsable(titulo: 'Mapa asociado', icono: Icons.straighten, children: [Text(
         'Agrega un elemento de mapa a esta hoja para poder asociarle una escala.',
         style: TextStyle(fontSize: 12, color: Colors.black54),
-      );
+      )]);
     }
-    final valorValido = mapasDisponibles.any((m) => m.id == elemento.escalaMapaId) ? elemento.escalaMapaId : null;
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
+    final valorValido =
+        mapasDisponibles.any((m) => m.id == elemento.escalaMapaId)
+        ? elemento.escalaMapaId
+        : null;
+    return PanelSeccionColapsable(
+      titulo: 'Mapa asociado',
+      icono: Icons.straighten,
       children: [
-        const Text('Mapa asociado', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600)),
-        const SizedBox(height: 8),
         DropdownButtonFormField<String>(
           initialValue: valorValido,
           isDense: true,
-          hint: const Text('Selecciona un mapa', style: TextStyle(fontSize: 12)),
+          hint: const Text(
+            'Selecciona un mapa',
+            style: TextStyle(fontSize: 12),
+          ),
           items: mapasDisponibles
-              .map((m) => DropdownMenuItem(value: m.id, child: Text(m.nombreCapa)))
+              .map(
+                (m) => DropdownMenuItem(value: m.id, child: Text(m.nombreCapa)),
+              )
               .toList(),
           onChanged: onMapaIdChanged,
         ),

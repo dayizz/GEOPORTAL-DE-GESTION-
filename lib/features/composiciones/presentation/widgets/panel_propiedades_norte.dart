@@ -1,3 +1,4 @@
+import 'panel_seccion_colapsable.dart';
 import 'package:flutter/material.dart';
 import '../../models/elemento_composicion.dart';
 
@@ -15,11 +16,14 @@ class PanelPropiedadesNorte extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
+    return PanelSeccionColapsable(
+      titulo: 'Orientación',
+      icono: Icons.explore_outlined,
       children: [
-        Text('Orientación: ${elemento.rotacion.round()}°',
-            style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600)),
+        Text(
+          'Orientación: ${elemento.rotacion.round()}°',
+          style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600),
+        ),
         Slider(
           value: elemento.rotacion.clamp(0, 360),
           min: 0,

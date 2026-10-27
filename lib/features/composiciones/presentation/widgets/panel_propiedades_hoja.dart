@@ -1,3 +1,4 @@
+import 'panel_seccion_colapsable.dart';
 import 'package:flutter/material.dart';
 import '../../models/hoja.dart';
 import 'color_swatch_picker.dart';
@@ -69,165 +70,189 @@ class PanelPropiedadesHoja extends StatelessWidget {
           style: TextStyle(fontWeight: FontWeight.bold),
         ),
         const SizedBox(height: 12),
-        DropdownButtonFormField<TamanoHoja>(
-          initialValue: hoja.tamano,
-          isExpanded: true,
-          decoration: const InputDecoration(labelText: 'Tamaño'),
-          items: TamanoHoja.values.map((t) {
-            final (w, h) = t.dimensionesMm;
-            return DropdownMenuItem(
-              value: t,
-              child: Text(
-                t == TamanoHoja.personalizado
-                    ? 'Personalizado'
-                    : '${t.etiqueta} (${(w / 10).toStringAsFixed(2)} × ${(h / 10).toStringAsFixed(2)} cm)',
-                style: const TextStyle(fontSize: 12),
-              ),
-            );
-          }).toList(),
-          onChanged: (v) {
-            if (v == null) return;
-            final siguiente = hoja.copyWith(tamano: v);
-            if (_valida(siguiente)) {
-              onChanged(siguiente);
-            } else {
-              ScaffoldMessenger.of(context).showSnackBar(
-                const SnackBar(
-                  content: Text(
-                    'Reduce los márgenes antes de cambiar a este tamaño.',
+        PanelSeccionColapsable(
+          titulo: 'Tamaño y orientación',
+          icono: Icons.description_outlined,
+          children: [
+            DropdownButtonFormField<TamanoHoja>(
+              initialValue: hoja.tamano,
+              isExpanded: true,
+              decoration: const InputDecoration(labelText: 'Tamaño'),
+              items: TamanoHoja.values.map((t) {
+                final (w, h) = t.dimensionesMm;
+                return DropdownMenuItem(
+                  value: t,
+                  child: Text(
+                    t == TamanoHoja.personalizado
+                        ? 'Personalizado'
+                        : '${t.etiqueta} (${(w / 10).toStringAsFixed(2)} × ${(h / 10).toStringAsFixed(2)} cm)',
+                    style: const TextStyle(fontSize: 12),
                   ),
+                );
+              }).toList(),
+              onChanged: (v) {
+                if (v == null) return;
+                final siguiente = hoja.copyWith(tamano: v);
+                if (_valida(siguiente)) {
+                  onChanged(siguiente);
+                } else {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(
+                      content: Text(
+                        'Reduce los márgenes antes de cambiar a este tamaño.',
+                      ),
+                    ),
+                  );
+                }
+              },
+            ),
+            const SizedBox(height: 12),
+            if (hoja.tamano == TamanoHoja.personalizado) ...[
+              fila(
+                numero(
+                  'Ancho (cm)',
+                  ancho / 10,
+                  (v) => hoja.copyWith(
+                    anchoPersonalizadoMm: v * 10,
+                    altoPersonalizadoMm: alto,
+                    horizontal: v * 10 > alto,
+                  ),
+                  key: ValueKey('ancho-${hoja.horizontal}'),
                 ),
-              );
-            }
-          },
-        ),
-        const SizedBox(height: 12),
-        if (hoja.tamano == TamanoHoja.personalizado) ...[
-          fila(
-            numero(
-              'Ancho (cm)',
-              ancho / 10,
-              (v) => hoja.copyWith(
-                anchoPersonalizadoMm: v * 10,
-                altoPersonalizadoMm: alto,
-                horizontal: v * 10 > alto,
+                numero(
+                  'Alto (cm)',
+                  alto / 10,
+                  (v) => hoja.copyWith(
+                    anchoPersonalizadoMm: ancho,
+                    altoPersonalizadoMm: v * 10,
+                    horizontal: ancho > v * 10,
+                  ),
+                  key: ValueKey('alto-${hoja.horizontal}'),
+                ),
               ),
-              key: ValueKey('ancho-${hoja.horizontal}'),
+            ],
+            DropdownButtonFormField<bool>(
+              key: ValueKey('orientacion-${hoja.horizontal}'),
+              initialValue: hoja.horizontal,
+              decoration: const InputDecoration(labelText: 'Orientación'),
+              items: const [
+                DropdownMenuItem(value: false, child: Text('Vertical')),
+                DropdownMenuItem(value: true, child: Text('Horizontal')),
+              ],
+              onChanged: (v) {
+                if (v != null && _valida(hoja.copyWith(horizontal: v))) {
+                  onChanged(hoja.copyWith(horizontal: v));
+                }
+              },
             ),
-            numero(
-              'Alto (cm)',
-              alto / 10,
-              (v) => hoja.copyWith(
-                anchoPersonalizadoMm: ancho,
-                altoPersonalizadoMm: v * 10,
-                horizontal: ancho > v * 10,
-              ),
-              key: ValueKey('alto-${hoja.horizontal}'),
-            ),
-          ),
-        ],
-        DropdownButtonFormField<bool>(
-          key: ValueKey('orientacion-${hoja.horizontal}'),
-          initialValue: hoja.horizontal,
-          decoration: const InputDecoration(labelText: 'Orientación'),
-          items: const [
-            DropdownMenuItem(value: false, child: Text('Vertical')),
-            DropdownMenuItem(value: true, child: Text('Horizontal')),
           ],
-          onChanged: (v) {
-            if (v != null && _valida(hoja.copyWith(horizontal: v))) {
-              onChanged(hoja.copyWith(horizontal: v));
-            }
-          },
         ),
-        const SizedBox(height: 12),
-        const Text(
-          'Márgenes (mm)',
-          style: TextStyle(fontWeight: FontWeight.w600),
-        ),
-        const SizedBox(height: 8),
-        fila(
-          numero(
-            'Arriba',
-            hoja.margenArriba,
-            (v) => hoja.copyWith(margenSuperiorMm: v),
-          ),
-          numero(
-            'Abajo',
-            hoja.margenAbajo,
-            (v) => hoja.copyWith(margenInferiorMm: v),
-          ),
-        ),
-        fila(
-          numero(
-            'Izquierda',
-            hoja.margenIzquierda,
-            (v) => hoja.copyWith(margenIzquierdoMm: v),
-          ),
-          numero(
-            'Derecha',
-            hoja.margenDerecha,
-            (v) => hoja.copyWith(margenDerechoMm: v),
-          ),
-        ),
-        SwitchListTile(
-          contentPadding: EdgeInsets.zero,
-          title: const Text('Numerar página'),
-          value: hoja.numerarPagina,
-          onChanged: (v) =>
-              onNumeracionChanged(hoja.copyWith(numerarPagina: v)),
-        ),
-        if (hoja.numerarPagina) ...[
-          DropdownButtonFormField<int>(
-            initialValue: hoja.inicioPagina,
-            decoration: const InputDecoration(labelText: 'Inicio de página'),
-            items: const [
-              DropdownMenuItem(value: 1, child: Text('Primera hoja')),
-              DropdownMenuItem(value: 2, child: Text('Segunda hoja')),
-              DropdownMenuItem(value: 3, child: Text('Tercera hoja')),
-            ],
-            onChanged: (v) {
-              if (v != null) {
-                onNumeracionChanged(hoja.copyWith(inicioPagina: v));
-              }
-            },
-          ),
-          const SizedBox(height: 12),
-          DropdownButtonFormField<PosicionPagina>(
-            initialValue: hoja.posicionPagina,
-            isExpanded: true,
-            decoration: const InputDecoration(labelText: 'Posición'),
-            items: PosicionPagina.values
-                .map((p) => DropdownMenuItem(value: p, child: Text(p.etiqueta)))
-                .toList(),
-            onChanged: (v) {
-              if (v != null) {
-                onNumeracionChanged(hoja.copyWith(posicionPagina: v));
-              }
-            },
-          ),
-        ],
-        const SizedBox(height: 12),
-        ColorSwatchPicker(
-          label: 'Color de hoja',
-          colorHex: hoja.colorFondoHex ?? '#FFFFFF',
-          onChanged: (v) => onChanged(hoja.copyWith(colorFondoHex: v)),
-          trailing: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Text(
-                'Opacidad: ${(hoja.opacidadFondo * 100).round()}%',
-                style: const TextStyle(fontSize: 12),
+        PanelSeccionColapsable(
+          titulo: 'Márgenes (mm)',
+          icono: Icons.border_outer,
+          children: [
+            fila(
+              numero(
+                'Arriba',
+                hoja.margenArriba,
+                (v) => hoja.copyWith(margenSuperiorMm: v),
               ),
-              Slider(
-                value: hoja.opacidadFondo.clamp(0, 1),
-                min: 0,
-                max: 1,
-                divisions: 100,
-                onChanged: (v) => onChanged(hoja.copyWith(opacidadFondo: v)),
+              numero(
+                'Abajo',
+                hoja.margenAbajo,
+                (v) => hoja.copyWith(margenInferiorMm: v),
+              ),
+            ),
+            fila(
+              numero(
+                'Izquierda',
+                hoja.margenIzquierda,
+                (v) => hoja.copyWith(margenIzquierdoMm: v),
+              ),
+              numero(
+                'Derecha',
+                hoja.margenDerecha,
+                (v) => hoja.copyWith(margenDerechoMm: v),
+              ),
+            ),
+          ],
+        ),
+        PanelSeccionColapsable(
+          titulo: 'Numeración',
+          icono: Icons.format_list_numbered,
+          children: [
+            SwitchListTile(
+              contentPadding: EdgeInsets.zero,
+              title: const Text('Numerar página'),
+              value: hoja.numerarPagina,
+              onChanged: (v) =>
+                  onNumeracionChanged(hoja.copyWith(numerarPagina: v)),
+            ),
+            if (hoja.numerarPagina) ...[
+              DropdownButtonFormField<int>(
+                initialValue: hoja.inicioPagina,
+                decoration: const InputDecoration(
+                  labelText: 'Inicio de página',
+                ),
+                items: const [
+                  DropdownMenuItem(value: 1, child: Text('Primera hoja')),
+                  DropdownMenuItem(value: 2, child: Text('Segunda hoja')),
+                  DropdownMenuItem(value: 3, child: Text('Tercera hoja')),
+                ],
+                onChanged: (v) {
+                  if (v != null) {
+                    onNumeracionChanged(hoja.copyWith(inicioPagina: v));
+                  }
+                },
+              ),
+              const SizedBox(height: 12),
+              DropdownButtonFormField<PosicionPagina>(
+                initialValue: hoja.posicionPagina,
+                isExpanded: true,
+                decoration: const InputDecoration(labelText: 'Posición'),
+                items: PosicionPagina.values
+                    .map(
+                      (p) =>
+                          DropdownMenuItem(value: p, child: Text(p.etiqueta)),
+                    )
+                    .toList(),
+                onChanged: (v) {
+                  if (v != null) {
+                    onNumeracionChanged(hoja.copyWith(posicionPagina: v));
+                  }
+                },
               ),
             ],
-          ),
+          ],
+        ),
+        PanelSeccionColapsable(
+          titulo: 'Fondo',
+          icono: Icons.palette_outlined,
+          children: [
+            const SizedBox(height: 12),
+            ColorSwatchPicker(
+              label: 'Color de hoja',
+              colorHex: hoja.colorFondoHex ?? '#FFFFFF',
+              onChanged: (v) => onChanged(hoja.copyWith(colorFondoHex: v)),
+              trailing: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Text(
+                    'Opacidad: ${(hoja.opacidadFondo * 100).round()}%',
+                    style: const TextStyle(fontSize: 12),
+                  ),
+                  Slider(
+                    value: hoja.opacidadFondo.clamp(0, 1),
+                    min: 0,
+                    max: 1,
+                    divisions: 100,
+                    onChanged: (v) =>
+                        onChanged(hoja.copyWith(opacidadFondo: v)),
+                  ),
+                ],
+              ),
+            ),
+          ],
         ),
       ],
     );

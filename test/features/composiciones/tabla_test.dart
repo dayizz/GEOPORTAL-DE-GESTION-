@@ -16,7 +16,7 @@ void main() {
   });
   testWidgets('inserta y edita celdas, agrega filas y renderiza para exportación', (tester) async {
     List<List<String>>? resultado;
-    await tester.pumpWidget(MaterialApp(home: Scaffold(body: SizedBox(width: 252, child: PanelPropiedadesTabla(onChanged: (v) => resultado = v)))));
+    await tester.pumpWidget(MaterialApp(home: Scaffold(body: SizedBox(width: 252, child: SingleChildScrollView(child: PanelPropiedadesTabla(onChanged: (v) => resultado = v))))));
     expect(find.byType(TextField), findsNWidgets(9));
     await tester.enterText(find.byType(TextField).first, 'Predio');
     await tester.tap(find.text('+ Fila'));
@@ -27,6 +27,13 @@ void main() {
     expect(find.byType(TextField), findsNWidgets(16));
     expect(find.byType(AlertDialog), findsNothing);
     expect(resultado!.first.first, 'Predio');
+    await tester.tap(find.text('Contenido'));
+    await tester.pump();
+    expect(find.byType(TextField), findsNothing);
+    await tester.tap(find.text('Contenido'));
+    await tester.pump();
+    expect(find.widgetWithText(TextField, 'Predio'), findsOneWidget);
+    expect(tester.takeException(), isNull);
     final tabla = ElementoComposicion.tabla(x: 0, y: 0, celdas: resultado!);
     await tester.pumpWidget(MaterialApp(home: SizedBox(width: 500, height: 200, child: buildElementoContenidoEstatico(tabla))));
     expect(find.text('Predio'), findsOneWidget);

@@ -51,7 +51,9 @@ class _GenerarReporteScreenState extends ConsumerState<GenerarReporteScreen> {
   int _previewTimestamp = 0;
   final _asuntoCtrl = TextEditingController();
   final _contenidoCtrl = TextEditingController();
-  
+  final _reporteNoCtrl = TextEditingController();
+  final _remitenteCtrl = TextEditingController(text: 'Dirección de Verificación Ferroviaria "A"');
+
   // Controladores para elaborar y revisar
   final _elaboroCtrl = TextEditingController();
   final _revisoCtrl = TextEditingController();
@@ -105,6 +107,13 @@ class _GenerarReporteScreenState extends ConsumerState<GenerarReporteScreen> {
     _numeroReporte = _consecutivoReportePorProyecto[_proyectoActual] ?? 1;
   }
 
+  /// Número usado en el nombre del archivo: el capturado en "Reporte no."
+  /// (saneado para nombre de archivo) o, si está vacío, el consecutivo.
+  String get _numeroParaArchivo {
+    final capturado = _reporteNoCtrl.text.trim().replaceAll(RegExp(r'[^A-Za-z0-9._-]+'), '-');
+    return capturado.isNotEmpty ? capturado : '$_numeroReporte';
+  }
+
   void _avanzarConsecutivoProyectoActual() {
     _consecutivoReportePorProyecto[_proyectoActual] = _numeroReporte + 1;
     _sincronizarNumeroReportePorProyecto();
@@ -141,6 +150,8 @@ class _GenerarReporteScreenState extends ConsumerState<GenerarReporteScreen> {
     _deCargoCtrl.dispose();
     _asuntoCtrl.dispose();
     _contenidoCtrl.dispose();
+    _reporteNoCtrl.dispose();
+    _remitenteCtrl.dispose();
     _elaboroCtrl.dispose();
     _revisoCtrl.dispose();
     super.dispose();
@@ -262,6 +273,8 @@ class _GenerarReporteScreenState extends ConsumerState<GenerarReporteScreen> {
       final deCargoPdf = _normalizarTextoPdf(_deCargoCtrl.text, '(Cargo)');
       final elaboroIniciales = _normalizarTextoPdf(_elaboroCtrl.text, '').replaceAll(RegExp(r'\s+'), '').toUpperCase();
       final revisoIniciales = _normalizarTextoPdf(_revisoCtrl.text, '').replaceAll(RegExp(r'\s+'), '').toUpperCase();
+      final reporteNoPdf = _reporteNoCtrl.text.trim();
+      final remitentePdf = _remitenteCtrl.text.trim();
       final firmaIniciales =
           '${elaboroIniciales.isNotEmpty ? elaboroIniciales : 'N/A'}/${revisoIniciales.isNotEmpty ? revisoIniciales : 'N/A'}';
 
@@ -296,9 +309,25 @@ class _GenerarReporteScreenState extends ConsumerState<GenerarReporteScreen> {
                               style: pw.TextStyle(fontSize: _fontSize, font: notoSansBold),
                             ),
                             pw.SizedBox(height: 2),
-                            pw.Text(
-                              'Dirección de Verificación Ferroviaria "A"',
-                              style: pw.TextStyle(fontSize: _fontSize, font: notoSansBold),
+                            if (remitentePdf.isNotEmpty) ...[
+                              pw.Text(
+                                remitentePdf,
+                                style: pw.TextStyle(fontSize: _fontSize, font: notoSansBold),
+                              ),
+                            ],
+                            pw.SizedBox(height: 4),
+                            pw.Row(
+                              mainAxisSize: pw.MainAxisSize.min,
+                              children: [
+                                pw.Text(
+                                  'Reporte no. ',
+                                  style: pw.TextStyle(fontSize: _fontSize, font: notoSansBold),
+                                ),
+                                pw.Text(
+                                  reporteNoPdf,
+                                  style: pw.TextStyle(fontSize: _fontSize, font: notoSansRegular),
+                                ),
+                              ],
                             ),
                             pw.SizedBox(height: 4),
                             pw.Text(
@@ -325,13 +354,6 @@ class _GenerarReporteScreenState extends ConsumerState<GenerarReporteScreen> {
                         ),
                       ),
                       pw.SizedBox(height: 30),
-                      pw.Center(
-                        child: pw.Text(
-                          'Reporte informativo ($_numeroReporte)',
-                          style: pw.TextStyle(fontSize: _fontSize, font: notoSansBold),
-                        ),
-                      ),
-                      pw.SizedBox(height: 20),
                       pw.Row(
                         crossAxisAlignment: pw.CrossAxisAlignment.start,
                         children: [
@@ -485,7 +507,7 @@ class _GenerarReporteScreenState extends ConsumerState<GenerarReporteScreen> {
       // Ejemplo: REPORTE_1_TSNL_180626
       final ahora = DateTime.now();
       final fechaArchivo = DateFormat('yyMMdd').format(ahora);
-      final nombreArchivo = 'REPORTE_${_numeroReporte}_${_proyectoActual}_$fechaArchivo.pdf';
+      final nombreArchivo = 'REPORTE_${_numeroParaArchivo}_${_proyectoActual}_$fechaArchivo.pdf';
 
       if (kIsWeb) {
         await downloadBytesForBrowser(
@@ -584,6 +606,111 @@ class _GenerarReporteScreenState extends ConsumerState<GenerarReporteScreen> {
     );
   }
 
+  // Estilos y espaciados compartidos del formulario, derivados del tema global
+  // (Inter, bordes redondeados y padding de inputDecorationTheme).
+  static const _espacioCampo = 16.0;
+  static const _espacioEtiqueta = 6.0;
+
+  TextStyle? get _estiloTituloSeccion =>
+      Theme.of(context).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w600);
+  TextStyle? get _estiloEtiqueta => Theme.of(context).textTheme.bodyMedium?.copyWith(
+        fontWeight: FontWeight.w600,
+        color: AppColors.textPrimary,
+      );
+  TextStyle? get _estiloValor => Theme.of(context).textTheme.bodyLarge;
+
+  /// Tarjeta con título y campos separados uniformemente.
+  Widget _seccion(String titulo, List<Widget> campos) {
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Text(titulo, style: _estiloTituloSeccion),
+            for (final campo in campos) ...[
+              const SizedBox(height: _espacioCampo),
+              campo,
+            ],
+          ],
+        ),
+      ),
+    );
+  }
+
+  /// Etiqueta arriba del control, siempre con el mismo estilo y separación.
+  Widget _campo(String etiqueta, Widget control) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        Text(etiqueta, style: _estiloEtiqueta),
+        const SizedBox(height: _espacioEtiqueta),
+        control,
+      ],
+    );
+  }
+
+  /// Dos campos lado a lado; en pantallas angostas se apilan.
+  Widget _filaCampos(Widget izquierda, Widget derecha) {
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        if (constraints.maxWidth < 520) {
+          return Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [izquierda, const SizedBox(height: _espacioCampo), derecha],
+          );
+        }
+        return Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Expanded(child: izquierda),
+            const SizedBox(width: _espacioCampo),
+            Expanded(child: derecha),
+          ],
+        );
+      },
+    );
+  }
+
+  /// Par etiqueta/valor de solo lectura para el resumen de la previsualización.
+  Widget _dato(String etiqueta, String valor, [String? detalle]) {
+    final texto = valor.trim().isNotEmpty ? valor.trim() : '(Sin capturar)';
+    return _campo(
+      etiqueta,
+      Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(texto, style: _estiloValor),
+          if (detalle != null)
+            Text(
+              detalle.trim().isNotEmpty ? detalle.trim() : '(Sin cargo)',
+              style: Theme.of(context).textTheme.bodyMedium,
+            ),
+        ],
+      ),
+    );
+  }
+
+  Widget _selectorProyecto(List<String> proyectosDisponibles) {
+    return DropdownButtonFormField<String>(
+      value: proyectosDisponibles.contains(_proyectoActual)
+          ? _proyectoActual
+          : proyectosDisponibles.first,
+      items: proyectosDisponibles
+          .map((p) => DropdownMenuItem(value: p, child: Text(p)))
+          .toList(),
+      onChanged: (v) {
+        if (v == null) return;
+        setState(() {
+          _proyectoActual = v;
+          _segmentoSeleccionado = null;
+          _sincronizarNumeroReportePorProyecto();
+        });
+        _actualizarAsuntoPorProyecto(v);
+      },
+    );
+  }
+
   /// Vista del formulario
   Widget _buildFormView(List<String> proyectosDisponibles) {
     final prediosAsync = ref.watch(prediosMapaProvider);
@@ -600,270 +727,128 @@ class _GenerarReporteScreenState extends ConsumerState<GenerarReporteScreen> {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           // Selector de proyecto
-          Card(
-            child: Padding(
-              padding: const EdgeInsets.all(16),
-              child: Column(
+          _seccion(
+            'Proyecto',
+            [_selectorProyecto(proyectosDisponibles)],
+          ),
+          const SizedBox(height: 16),
+
+          // Formulario del reporte
+          _seccion('Datos del reporte', [
+            _filaCampos(
+              _campo(
+                'Dirección o subdirección remitente',
+                TextField(controller: _remitenteCtrl),
+              ),
+              _campo(
+                'Reporte no.',
+                TextField(controller: _reporteNoCtrl),
+              ),
+            ),
+            _filaCampos(
+              _campo(
+                'Para: nombre',
+                TextField(controller: _paraNombreCtrl),
+              ),
+              _campo(
+                'Para: cargo',
+                TextField(controller: _paraCargoCtrl),
+              ),
+            ),
+            _filaCampos(
+              _campo(
+                'De: nombre',
+                TextField(controller: _deNombreCtrl),
+              ),
+              _campo(
+                'De: cargo',
+                TextField(controller: _deCargoCtrl),
+              ),
+            ),
+            _campo(
+              'Asunto',
+              TextField(
+                controller: _asuntoCtrl,
+                decoration: const InputDecoration(
+                  hintText: 'Informe del balance actual del proyecto (nombre)',
+                ),
+              ),
+            ),
+            _campo(
+              'Contenido adicional',
+              TextField(
+                controller: _contenidoCtrl,
+                maxLines: 5,
+                decoration: const InputDecoration(
+                  hintText: 'Escribe el contenido del reporte...',
+                ),
+              ),
+            ),
+            _filaCampos(
+              _campo(
+                'Elaboró: iniciales',
+                TextField(
+                  controller: _elaboroCtrl,
+                  decoration: const InputDecoration(hintText: 'Ejemplo: ABCD'),
+                ),
+              ),
+              _campo(
+                'Revisó: iniciales',
+                TextField(
+                  controller: _revisoCtrl,
+                  decoration: const InputDecoration(hintText: 'Ejemplo: EFGH'),
+                ),
+              ),
+            ),
+            _campo(
+              'Colocar datos numéricos de',
+              Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  const Text(
-                    'Proyecto',
-                    style: TextStyle(
-                      fontWeight: FontWeight.bold,
-                      fontSize: 16,
+                  for (final opcion in const [
+                    ('Ninguno', 'Ninguno'),
+                    ('Proyecto', 'Proyecto'),
+                    ('Segmento', 'T/F/S'),
+                  ])
+                    RadioListTile<String>(
+                      dense: true,
+                      contentPadding: EdgeInsets.zero,
+                      value: opcion.$1,
+                      groupValue: _datosNumericosDe,
+                      title: Text(opcion.$2, style: _estiloValor),
+                      onChanged: (v) {
+                        if (v == null) return;
+                        setState(() => _datosNumericosDe = v);
+                      },
                     ),
-                  ),
-                  const SizedBox(height: 8),
-                  DropdownButtonFormField<String>(
-                    value: proyectosDisponibles.contains(_proyectoActual)
-                        ? _proyectoActual
-                        : proyectosDisponibles.first,
-                    decoration: const InputDecoration(
-                      border: OutlineInputBorder(),
-                      contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-                    ),
-                    items: proyectosDisponibles.map((p) => DropdownMenuItem(
-                      value: p,
-                      child: Text(p),
-                    )).toList(),
-                    onChanged: (v) {
-                      if (v != null) {
-                        setState(() {
-                          _proyectoActual = v;
-                          _segmentoSeleccionado = null;
-                          _sincronizarNumeroReportePorProyecto();
-                        });
-                        _actualizarAsuntoPorProyecto(v);
-                      }
-                    },
-                  ),
                 ],
               ),
             ),
-          ),
-          const SizedBox(height: 16),
-          
-          // Formulario del reporte
-          Card(
-            child: Padding(
-              padding: const EdgeInsets.all(16),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  const Text(
-                    'Datos del Reporte',
-                    style: TextStyle(
-                      fontWeight: FontWeight.bold,
-                      fontSize: 16,
-                    ),
-                  ),
-                  const SizedBox(height: 16),
-                  
-// Número de reporte automático: proyecto-fechaHora
-                  Row(
-                    children: [
-                      const Text('Número de reporte:'),
-                      const SizedBox(width: 16),
-                      Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-                        decoration: BoxDecoration(
-                          color: Colors.blue.shade50,
-                          border: Border.all(color: Colors.blue.shade200),
-                          borderRadius: BorderRadius.circular(4),
-                        ),
-                        child: Text(
-                          '$_proyectoActual-$_numeroReporte',
-                          style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: Colors.blue),
-                        ),
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 16),
-                  
-                  // PARA
-                  const Text(
-                    'PARA:',
-                    style: TextStyle(fontWeight: FontWeight.bold),
-                  ),
-                  const SizedBox(height: 8),
-                  TextField(
-                    controller: _paraNombreCtrl,
-                    decoration: const InputDecoration(
-                      labelText: 'Nombre',
-                      border: OutlineInputBorder(),
-                    ),
-                  ),
-                  const SizedBox(height: 8),
-                  TextField(
-                    controller: _paraCargoCtrl,
-                    decoration: const InputDecoration(
-                      labelText: 'Cargo',
-                      border: OutlineInputBorder(),
-                    ),
-                  ),
-                  const SizedBox(height: 16),
-                  
-                  // DE
-                  const Text(
-                    'DE:',
-                    style: TextStyle(fontWeight: FontWeight.bold),
-                  ),
-                  const SizedBox(height: 8),
-                  TextField(
-                    controller: _deNombreCtrl,
-                    decoration: const InputDecoration(
-                      labelText: 'Nombre',
-                      border: OutlineInputBorder(),
-                    ),
-                  ),
-                  const SizedBox(height: 8),
-                  TextField(
-                    controller: _deCargoCtrl,
-                    decoration: const InputDecoration(
-                      labelText: 'Cargo',
-                      border: OutlineInputBorder(),
-                    ),
-                  ),
-                  const SizedBox(height: 16),
-                  
-                  // Asunto
-                  TextField(
-                    controller: _asuntoCtrl,
-                    decoration: const InputDecoration(
-                      labelText: 'Asunto',
-                      border: OutlineInputBorder(),
-                      hintText: 'Informe del balance actual del proyecto (nombre)',
-                    ),
-                  ),
-                  const SizedBox(height: 16),
-                  
-                  // Contenido adicional
-                  const Text(
-                    'Contenido adicional:',
-                    style: TextStyle(fontWeight: FontWeight.bold),
-                  ),
-                  const SizedBox(height: 8),
-                  TextField(
-                    controller: _contenidoCtrl,
-                    maxLines: 5,
-                    decoration: const InputDecoration(
-                      labelText: 'Contenido adicional',
-                      border: OutlineInputBorder(),
-                      hintText: 'Escribe el contenido del reporte...',
-                      alignLabelWithHint: true,
-                    ),
-                  ),
-                  const SizedBox(height: 16),
-                  
-                  // ELABORO y REVISO
-                  Row(
-                    children: [
-                      Expanded(
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            const Text(
-                              'ELABORO:',
-                              style: TextStyle(fontWeight: FontWeight.bold),
-                            ),
-                            const SizedBox(height: 8),
-                            TextField(
-                              controller: _elaboroCtrl,
-                              decoration: const InputDecoration(
-                                labelText: 'Iniciales',
-                                border: OutlineInputBorder(),
-                                hintText: 'Ejemplo: ABCD',
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-                      const SizedBox(width: 16),
-                      Expanded(
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            const Text(
-                              'REVISO:',
-                              style: TextStyle(fontWeight: FontWeight.bold),
-                            ),
-                            const SizedBox(height: 8),
-                            TextField(
-                              controller: _revisoCtrl,
-                              decoration: const InputDecoration(
-                                labelText: 'Iniciales',
-                                border: OutlineInputBorder(),
-                                hintText: 'Ejemplo: EFGH',
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 16),
-
-                  const Divider(),
-                  const SizedBox(height: 8),
-                  const Text(
-                    'Colocar Datos Numéricos de:',
-                    style: TextStyle(fontWeight: FontWeight.bold),
-                  ),
-                  const SizedBox(height: 6),
-                  RadioListTile<String>(
-                    dense: true, contentPadding: EdgeInsets.zero,
-                    value: 'Ninguno', groupValue: _datosNumericosDe,
-                    title: const Text('Ninguno'),
-                    onChanged: (v) => setState(() => _datosNumericosDe = v!),
-                  ),
-                  RadioListTile<String>(
-                    dense: true,
-                    contentPadding: EdgeInsets.zero,
-                    value: 'Proyecto',
-                    groupValue: _datosNumericosDe,
-                    title: const Text('Proyecto'),
-                    onChanged: (v) {
-                      if (v == null) return;
-                      setState(() => _datosNumericosDe = v);
-                    },
-                  ),
-                  RadioListTile<String>(
-                    dense: true,
-                    contentPadding: EdgeInsets.zero,
-                    value: 'Segmento',
-                    groupValue: _datosNumericosDe,
-                    title: const Text('T/F/S'),
-                    onChanged: (v) {
-                      if (v == null) return;
-                      setState(() => _datosNumericosDe = v);
-                    },
-                  ),
-                  if (_datosNumericosDe == 'Segmento') ...[
-                    const SizedBox(height: 8),
+            if (_datosNumericosDe == 'Segmento')
+              _campo(
+                'T/F/S',
+                Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
                     DropdownButtonFormField<String>(
                       value: selectedSegmento,
-                      decoration: const InputDecoration(
-                        labelText: 'Selecciona T/F/S',
-                        border: OutlineInputBorder(),
-                      ),
+                      hint: const Text('Selecciona T/F/S'),
                       items: segmentosDisponibles
                           .map((s) => DropdownMenuItem(value: s, child: Text(s)))
                           .toList(),
                       onChanged: (v) => setState(() => _segmentoSeleccionado = v),
                     ),
-                    if (segmentosDisponibles.isEmpty)
-                      const Padding(
-                        padding: EdgeInsets.only(top: 8),
-                        child: Text(
-                          'No hay segmentos disponibles para el proyecto seleccionado.',
-                          style: TextStyle(fontSize: 12, color: Colors.grey),
-                        ),
+                    if (segmentosDisponibles.isEmpty) ...[
+                      const SizedBox(height: _espacioEtiqueta),
+                      Text(
+                        'No hay segmentos disponibles para el proyecto seleccionado.',
+                        style: Theme.of(context).textTheme.bodySmall,
                       ),
+                    ],
                   ],
-                ],
+                ),
               ),
-            ),
-          ),
+          ]),
           const SizedBox(height: 24),
           
           // Botón Aceptar
@@ -903,114 +888,17 @@ class _GenerarReporteScreenState extends ConsumerState<GenerarReporteScreen> {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 // Selector de proyecto
-                Card(
-                  child: Padding(
-                    padding: const EdgeInsets.all(16),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        const Text(
-                          'Proyecto',
-                          style: TextStyle(
-                            fontWeight: FontWeight.bold,
-                            fontSize: 16,
-                          ),
-                        ),
-                        const SizedBox(height: 8),
-                        DropdownButtonFormField<String>(
-                          value: proyectosDisponibles.contains(_proyectoActual)
-                              ? _proyectoActual
-                              : proyectosDisponibles.first,
-                          decoration: const InputDecoration(
-                            border: OutlineInputBorder(),
-                            contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-                          ),
-                          items: proyectosDisponibles.map((p) => DropdownMenuItem(
-                            value: p,
-                            child: Text(p),
-                          )).toList(),
-                          onChanged: (v) {
-                            if (v != null) {
-                              setState(() => _proyectoActual = v);
-                              _actualizarAsuntoPorProyecto(v);
-                            }
-                          },
-                        ),
-                      ],
-                    ),
-                  ),
-                ),
+                _seccion('Proyecto', [_selectorProyecto(proyectosDisponibles)]),
                 const SizedBox(height: 16),
-                
-                // Resumen del reporte
-                Card(
-                  child: Padding(
-                    padding: const EdgeInsets.all(16),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        const Text(
-                          'Datos del Reporte',
-                          style: TextStyle(
-                            fontWeight: FontWeight.bold,
-                            fontSize: 16,
-                          ),
-                        ),
-                        const SizedBox(height: 16),
-                        
-                        // Número de reporte automático
-                        Row(
-                          children: [
-                            const Text('Número de reporte:'),
-                            const SizedBox(width: 16),
-                            Container(
-                              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
-                              decoration: BoxDecoration(
-                                color: Colors.blue.shade50,
-                                border: Border.all(color: Colors.blue.shade200),
-                                borderRadius: BorderRadius.circular(4),
-                              ),
-                              child: Text(
-                                '$_proyectoActual-$_numeroReporte',
-                                style: const TextStyle(fontSize: 14, fontWeight: FontWeight.bold, color: Colors.blue),
-                              ),
-                            ),
-                          ],
-                        ),
-                        const SizedBox(height: 12),
-                        
-                        // PARA
-                        Text(
-                          'PARA: ${_paraNombreCtrl.text.isNotEmpty ? _paraNombreCtrl.text : "(Sin nombre)"}',
-                          style: const TextStyle(fontSize: 12),
-                        ),
-                        Text(
-                          '${_paraCargoCtrl.text.isNotEmpty ? _paraCargoCtrl.text : "(Sin cargo)"}',
-                          textAlign: TextAlign.left,
-                          style: TextStyle(fontSize: 11, color: Colors.grey[600]),
-                        ),
-                        const SizedBox(height: 8),
-                        
-                        // DE
-                        Text(
-                          'DE: ${_deNombreCtrl.text.isNotEmpty ? _deNombreCtrl.text : "(Sin nombre)"}',
-                          style: const TextStyle(fontSize: 12),
-                        ),
-                        Text(
-                          '${_deCargoCtrl.text.isNotEmpty ? _deCargoCtrl.text : "(Sin cargo)"}',
-                          textAlign: TextAlign.left,
-                          style: TextStyle(fontSize: 11, color: Colors.grey[600]),
-                        ),
-                        const SizedBox(height: 8),
 
-                        Text(
-                          'Datos numéricos de: ${_origenNumericoLabel()}',
-                          style: TextStyle(fontSize: 11, color: Colors.grey[700], fontWeight: FontWeight.w600),
-                        ),
-                      ],
-                    ),
-                  ),
-                ),
+                // Resumen del reporte
+                _seccion('Datos del reporte', [
+                  _dato('Dirección o subdirección remitente', _remitenteCtrl.text),
+                  _dato('Reporte no.', _reporteNoCtrl.text),
+                  _dato('Para', _paraNombreCtrl.text, _paraCargoCtrl.text),
+                  _dato('De', _deNombreCtrl.text, _deCargoCtrl.text),
+                  _dato('Datos numéricos de', _origenNumericoLabel()),
+                ]),
                 const SizedBox(height: 16),
                 
                 // Botones
@@ -1087,7 +975,7 @@ class _GenerarReporteScreenState extends ConsumerState<GenerarReporteScreen> {
                         ),
                       ),
                       Text(
-                        'REPORTE_${_numeroReporte}_${_proyectoActual}_${DateFormat('yyMMdd').format(DateTime.now())}.pdf',
+                        'REPORTE_${_numeroParaArchivo}_${_proyectoActual}_${DateFormat('yyMMdd').format(DateTime.now())}.pdf',
                         style: TextStyle(
                           fontSize: 12,
                           color: Colors.grey[600],
