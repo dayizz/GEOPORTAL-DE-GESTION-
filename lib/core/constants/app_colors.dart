@@ -171,7 +171,15 @@ class AppColors {
       case 'CON INGRESO':
         return rangoContornoVerde;
       default:
-        return rangoEstatusColor(rango);
+        return perimetroDe(rangoEstatusColor(rango));
     }
+  }
+
+  /// Tono más fuerte del [relleno] para el perímetro de un polígono, de modo
+  /// que predios contiguos del mismo color sigan distinguiéndose aunque el
+  /// relleno esté al 100 % de opacidad.
+  static Color perimetroDe(Color relleno) {
+    final hsl = HSLColor.fromColor(relleno);
+    return hsl.withLightness((hsl.lightness * 0.55).clamp(0.0, 1.0)).toColor();
   }
 }

@@ -165,7 +165,8 @@ class _MapaViewportWidgetState extends State<MapaViewportWidget> {
           points: rings.first,
           holePointsList: rings.length > 1 ? rings.sublist(1) : const [],
           color: color.withValues(alpha: widget.opacidadPredios),
-          borderColor: color.withValues(alpha: widget.opacidadPredios),
+          borderColor: AppColors.rangoEstatusBorderColor(predio.rangoEstatus)
+              .withValues(alpha: widget.opacidadPredios),
           borderStrokeWidth: 1.5,
         ),
       );

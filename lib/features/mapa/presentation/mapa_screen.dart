@@ -1477,7 +1477,7 @@ class _MapaScreenState extends ConsumerState<MapaScreen> {
     if (mode == MapaColorMode.rangoEstatus) {
       return AppColors.rangoEstatusBorderColor(clave);
     }
-    return _colorParaClave(clave, mode);
+    return AppColors.perimetroDe(_colorParaClave(clave, mode));
   }
   _PredioVisualData? _findVisualAtPoint(LatLng point, List<_PredioVisualData> visuals) {
     for (final visual in visuals.reversed) {
@@ -1539,19 +1539,19 @@ class _MapaScreenState extends ConsumerState<MapaScreen> {
     if (mode == MapaColorMode.rangoEstatus) {
       return AppColors.rangoEstatusBorderColor(predio.rangoEstatus);
     }
-    return _predioColor(predio, mode);
+    return AppColors.perimetroDe(_predioColor(predio, mode));
   }
   Color _draftPolygonBorderColor(MapaColorMode mode) {
     if (mode == MapaColorMode.rangoEstatus) {
       return AppColors.rangoEstatusBorderColor(_estatusPredio);
     }
-    return _draftPolygonColor(mode);
+    return AppColors.perimetroDe(_draftPolygonColor(mode));
   }
   Color _savedPolygonBorderColor(_SavedPolygon polygon, MapaColorMode mode) {
     if (mode == MapaColorMode.rangoEstatus) {
       return AppColors.rangoEstatusBorderColor(polygon.estatus);
     }
-    return _savedPolygonColor(polygon, mode);
+    return AppColors.perimetroDe(_savedPolygonColor(polygon, mode));
   }
   String _predioEstatus(Predio predio) {
     if (predio.rangoEstatus == 'Investigación') return 'Investigación';
@@ -5533,7 +5533,7 @@ class _MapaScreenState extends ConsumerState<MapaScreen> {
   }
   Color _importedFeatureBorderColor(Map<String, dynamic> feature, MapaColorMode mode) {
     if (mode != MapaColorMode.rangoEstatus) {
-      return _importedFeatureColor(feature, mode);
+      return AppColors.perimetroDe(_importedFeatureColor(feature, mode));
     }
     if (_isEnvolventeFeature(feature)) {
       return colorTipoLinea(tipoLineaTrazo(feature));

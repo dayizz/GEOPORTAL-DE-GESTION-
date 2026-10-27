@@ -196,8 +196,6 @@ class PanelPropiedadesMapa extends StatelessWidget {
               'Escala',
               style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600),
             ),
-            if (elemento.mapaMostrarClaves ?? false)
-              _estiloEtiqueta('clave', elemento.mapaEstiloClave, onEstiloClaveChanged),
             const SizedBox(height: 8),
             Row(
               children: [
@@ -205,9 +203,12 @@ class PanelPropiedadesMapa extends StatelessWidget {
                 const SizedBox(width: 6),
                 Expanded(
                   child: TextFormField(
-                    key: ValueKey('escala_${elemento.id}'),
+                    // La clave incluye la escala vigente para que el campo se
+                    // refresque cuando el zoom cambia con la rueda del mouse.
+                    key: ValueKey('escala_${elemento.id}_${escalaActual.round()}'),
                     initialValue: escalaActual.round().toString(),
                     keyboardType: TextInputType.number,
+                    textInputAction: TextInputAction.done,
                     decoration: const InputDecoration(
                       isDense: true,
                       border: OutlineInputBorder(),
@@ -215,9 +216,15 @@ class PanelPropiedadesMapa extends StatelessWidget {
                         horizontal: 10,
                         vertical: 10,
                       ),
+                      helperText: 'Presiona Enter para aplicar',
                     ),
-                    onChanged: (value) {
-                      final parsed = double.tryParse(value.replaceAll(',', '.'));
+                    // Se aplica solo al confirmar con Enter: aplicar en cada
+                    // tecla hacía saltar el mapa a escalas intermedias
+                    // (1:5, 1:50, 1:500...) mientras se escribía.
+                    onFieldSubmitted: (value) {
+                      final parsed = double.tryParse(
+                        value.replaceAll(RegExp(r'[\s,]'), ''),
+                      );
                       if (parsed != null && parsed > 0) {
                         onZoomChanged(
                           _escalaAZoom(parsed, latActual).clamp(1, 18),

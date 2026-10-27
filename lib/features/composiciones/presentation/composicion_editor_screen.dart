@@ -4,6 +4,7 @@ import 'dart:convert';
 
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:image/image.dart' as img;
@@ -76,7 +77,40 @@ class _ComposicionEditorScreenState
   @override
   void initState() {
     super.initState();
+    HardwareKeyboard.instance.addHandler(_manejarTeclado);
     WidgetsBinding.instance.addPostFrameCallback((_) => _inicializar());
+  }
+
+  @override
+  void dispose() {
+    HardwareKeyboard.instance.removeHandler(_manejarTeclado);
+    super.dispose();
+  }
+
+  /// Supr / Retroceso (la tecla "delete" de Mac) eliminan el elemento
+  /// seleccionado, igual que el botón de capas. Se ignora mientras se
+  /// escribe en un campo de texto, con un diálogo abierto o si la capa
+  /// está bloqueada.
+  bool _manejarTeclado(KeyEvent event) {
+    if (event is! KeyDownEvent) return false;
+    if (event.logicalKey != LogicalKeyboardKey.delete &&
+        event.logicalKey != LogicalKeyboardKey.backspace) {
+      return false;
+    }
+    final id = _elementoSeleccionadoId;
+    if (!mounted || id == null || _composicion == null) return false;
+    if (ModalRoute.of(context)?.isCurrent == false) return false;
+    final foco = FocusManager.instance.primaryFocus?.context;
+    if (foco != null &&
+        (foco.widget is EditableText ||
+            foco.findAncestorWidgetOfExactType<EditableText>() != null)) {
+      return false;
+    }
+    final elemento =
+        _hojaActiva.elementos.where((e) => e.id == id).firstOrNull;
+    if (elemento == null || elemento.bloqueado) return false;
+    _eliminarElemento(id);
+    return true;
   }
 
   Future<void> _inicializar() async {
@@ -242,7 +276,20 @@ class _ComposicionEditorScreenState
   ) {
     _contadorInsertados++;
     final offset = (_contadorInsertados % 8) * 10.0;
-    final elemento = crear(20 + offset, 20 + offset);
+    var elemento = crear(20 + offset, 20 + offset);
+    if (elemento.tipo == TipoElemento.mapa) {
+      // Numerar los mapas de la hoja (Mapa 1, Mapa 2, ...) para poder
+      // distinguirlos en capas y en el selector de la barra de escala.
+      final nombres = _hojaActiva.elementos.map((e) => e.nombreCapa).toSet();
+      var n = _hojaActiva.elementos
+              .where((e) => e.tipo == TipoElemento.mapa)
+              .length +
+          1;
+      while (nombres.contains('Mapa $n')) {
+        n++;
+      }
+      elemento = elemento.copyWith(nombreCapa: 'Mapa $n');
+    }
     _actualizarHoja(
       (hoja) => hoja.copyWith(elementos: [...hoja.elementos, elemento]),
     );
