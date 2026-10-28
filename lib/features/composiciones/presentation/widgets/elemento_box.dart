@@ -102,7 +102,19 @@ class _ElementoBoxState extends State<ElementoBox> {
     if (!widget.seleccionado && oldWidget.seleccionado) {
       // Deseleccionar desde afuera (p.ej. click en el fondo del lienzo)
       // también cierra cualquier modo de edición en curso.
-      if (_editandoMapa) _confirmarMapa();
+      // didUpdateWidget corre durante el build del editor: notificar ahí la
+      // posición del mapa hacía setState en el padre en plena construcción
+      // ("setState() called during build"), así que se difiere al final
+      // del frame.
+      if (_editandoMapa) {
+        _editandoMapa = false;
+        final pendiente = _mapaPendiente;
+        if (pendiente != null) {
+          WidgetsBinding.instance.addPostFrameCallback((_) {
+            widget.onMapaChanged?.call(pendiente.$1, pendiente.$2, pendiente.$3);
+          });
+        }
+      }
       if (_editandoTexto) setState(() => _editandoTexto = false);
     }
   }
@@ -318,14 +330,6 @@ class _ElementoBoxState extends State<ElementoBox> {
     widget.onSnapIndicador?.call(
       puntoMm == null ? null : puntoMm * widget.scale,
     );
-  }
-
-  void _confirmarMapa() {
-    setState(() => _editandoMapa = false);
-    final pendiente = _mapaPendiente;
-    if (pendiente != null) {
-      widget.onMapaChanged?.call(pendiente.$1, pendiente.$2, pendiente.$3);
-    }
   }
 
   bool get _interaccionBoxBloqueada =>

@@ -303,14 +303,17 @@ class _MapaViewportWidgetState extends State<MapaViewportWidget> {
     final poligonos = _poligonos ??= [..._construirPoligonos(), ..._construirPoligonosImportados()];
     final etiquetas = _etiquetasClave ??= _construirEtiquetasClave();
     final etiquetasPks = _etiquetasPks ??= _construirEtiquetasPks();
+    // Sin fondo propio: con 'sinMapa' solo se ven los polígonos sobre la
+    // hoja (FlutterMap pinta gris por defecto bajo los tiles).
     return RepaintBoundary(child: ColoredBox(
-      color: widget.baseLayer == 'sinMapa' ? Colors.white : Colors.transparent,
+      color: Colors.transparent,
       child: FlutterMap(
         mapController: _mapController,
         options: MapOptions(
           initialCenter: LatLng(widget.lat, widget.lng),
           initialZoom: widget.zoom,
           initialRotation: widget.rotacion,
+          backgroundColor: Colors.transparent,
           // Sin gesto de rotación: la rotación del contenido del mapa se
           // controla únicamente desde el panel de propiedades (ver
           // `rotacion` arriba), para no chocar con la posición/zoom que sí

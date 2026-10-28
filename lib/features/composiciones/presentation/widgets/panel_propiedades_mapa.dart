@@ -9,7 +9,7 @@ const _opcionesBaseLayer = [
   ('estandar', 'Estándar'),
   ('satelital', 'Satelital'),
   ('satelitalSinEtiquetas', 'Satelital (sin etiquetas)'),
-  ('sinMapa', 'Sin mapa base'),
+  ('sinMapa', 'Sin fondo'),
 ];
 
 const _opcionesFigura = [
@@ -120,7 +120,7 @@ class PanelPropiedadesMapa extends StatelessWidget {
 
   Widget _estiloEtiqueta(String capa, EstiloEtiquetaMapa estilo,
       ValueChanged<EstiloEtiquetaMapa> onChanged) {
-    return Column(children: [
+    return Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
       _filaNumerica(key: ValueKey('tamano_${capa}_${elemento.id}'),
         label: 'Tamaño de letra', valorTexto: estilo.tamano.toString(),
         sufijo: 'px', onChanged: (v) {
@@ -136,29 +136,22 @@ class PanelPropiedadesMapa extends StatelessWidget {
         onChanged: (v) { if (v != null) onChanged(estilo.copyWith(fuente: v)); },
       ),
       const SizedBox(height: 8),
-      Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Expanded(
-            child: ColorSwatchPicker(
-              label: 'Color de letra',
-              colorHex: estilo.colorHex,
-              onChanged: (v) {
-                if (v != null) onChanged(estilo.copyWith(colorHex: v));
-              },
-            ),
-          ),
-          const SizedBox(width: 12),
-          Expanded(
-            child: ColorSwatchPicker(
-              label: 'Color de buffer',
-              colorHex: estilo.bufferColorHex,
-              onChanged: (v) {
-                if (v != null) onChanged(estilo.copyWith(bufferColorHex: v));
-              },
-            ),
-          ),
-        ],
+      // Uno debajo del otro para que la rueda de color tenga todo el ancho
+      // del panel al abrirse.
+      ColorSwatchPicker(
+        label: 'Color de letra',
+        colorHex: estilo.colorHex,
+        onChanged: (v) {
+          if (v != null) onChanged(estilo.copyWith(colorHex: v));
+        },
+      ),
+      const SizedBox(height: 8),
+      ColorSwatchPicker(
+        label: 'Color de buffer',
+        colorHex: estilo.bufferColorHex,
+        onChanged: (v) {
+          if (v != null) onChanged(estilo.copyWith(bufferColorHex: v));
+        },
       ),
       const SizedBox(height: 8),
       _filaNumerica(key: ValueKey('buffer_${capa}_${elemento.id}'),
@@ -315,7 +308,7 @@ class PanelPropiedadesMapa extends StatelessWidget {
               children: [
                 const Expanded(
                   child: Text(
-                    'Etiquetas de clave catastral',
+                    'Etiquetas de clave',
                     style: TextStyle(
                       fontSize: 12,
                       fontWeight: FontWeight.w600,

@@ -14,6 +14,7 @@ import '../../auth/providers/auth_provider.dart';
 import '../../estructura/models/proyecto_item.dart';
 import '../../estructura/providers/proyectos_provider.dart';
 import '../../mapa/providers/mapa_provider.dart';
+import '../../mapa/providers/capas_guardadas.dart';
 import '../../mapa/utils/geometry_parsing.dart';
 import '../../predios/models/predio.dart';
 import '../../predios/providers/predios_provider.dart';
@@ -78,7 +79,12 @@ class _ComposicionEditorScreenState
   void initState() {
     super.initState();
     HardwareKeyboard.instance.addHandler(_manejarTeclado);
-    WidgetsBinding.instance.addPostFrameCallback((_) => _inicializar());
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _inicializar();
+      // Los PKS guardados solo se cargaban al abrir el Mapa; sin esto,
+      // "Etiquetas de PKS" no mostraba nada al entrar directo aquí.
+      asegurarPksCargados(ref);
+    });
   }
 
   @override

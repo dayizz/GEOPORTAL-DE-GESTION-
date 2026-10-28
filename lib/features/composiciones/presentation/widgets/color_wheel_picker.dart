@@ -122,17 +122,27 @@ class _ColorWheelPanelState extends State<ColorWheelPanel> {
     setState(() { hsv = nuevo; hexCtrl.text = colorToHex(nuevo.toColor()).substring(1); });
     widget.onChanged(colorToHex(nuevo.toColor()));
   }
+  // Se ajusta al ancho disponible del panel (que puede ser media columna)
+  // para que la rueda y la barra de brillo no se salgan de la ventana.
   @override
-  Widget build(BuildContext context) => Column(mainAxisSize: MainAxisSize.min, children: [
-    _RuedaColor(size: 200, hue: hsv.hue, saturation: hsv.saturation, onChanged: (h, s) => cambiar(hsv.withHue(h).withSaturation(s))),
-    const SizedBox(height: 8),
-    _BarraBrillo(hue: hsv.hue, saturation: hsv.saturation, value: hsv.value, onChanged: (v) => cambiar(hsv.withValue(v))),
-    TextField(controller: hexCtrl, maxLength: 6, decoration: const InputDecoration(labelText: 'Hex', prefixText: '#'), onChanged: (v) {
-      if (!RegExp(r'^[0-9a-fA-F]{6}$').hasMatch(v)) return;
-      final color = colorFromHex('#$v');
-      if (color != null) { setState(() => hsv = HSVColor.fromColor(color)); widget.onChanged(colorToHex(color)); }
-    }),
-  ]);
+  Widget build(BuildContext context) => LayoutBuilder(builder: (context, constraints) {
+    final ancho = constraints.maxWidth.isFinite
+        ? constraints.maxWidth.clamp(80.0, 200.0)
+        : 200.0;
+    return SizedBox(
+      width: ancho,
+      child: Column(mainAxisSize: MainAxisSize.min, children: [
+        _RuedaColor(size: ancho, hue: hsv.hue, saturation: hsv.saturation, onChanged: (h, s) => cambiar(hsv.withHue(h).withSaturation(s))),
+        const SizedBox(height: 8),
+        _BarraBrillo(ancho: ancho, hue: hsv.hue, saturation: hsv.saturation, value: hsv.value, onChanged: (v) => cambiar(hsv.withValue(v))),
+        TextField(controller: hexCtrl, maxLength: 6, decoration: const InputDecoration(labelText: 'Hex', prefixText: '#', isDense: true, counterText: ''), onChanged: (v) {
+          if (!RegExp(r'^[0-9a-fA-F]{6}$').hasMatch(v)) return;
+          final color = colorFromHex('#$v');
+          if (color != null) { setState(() => hsv = HSVColor.fromColor(color)); widget.onChanged(colorToHex(color)); }
+        }),
+      ]),
+    );
+  });
 }
 
 class _RuedaColor extends StatelessWidget {
@@ -229,14 +239,16 @@ class _BarraBrillo extends StatelessWidget {
     required this.saturation,
     required this.value,
     required this.onChanged,
+    this.ancho = 220.0,
   });
 
   final double hue;
   final double saturation;
   final double value;
   final ValueChanged<double> onChanged;
+  final double ancho;
 
-  static const _ancho = 220.0;
+  double get _ancho => ancho;
   static const _alto = 20.0;
 
   void _actualizarDesdePosicion(double dx) {
