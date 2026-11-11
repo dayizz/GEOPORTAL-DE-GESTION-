@@ -1,4 +1,6 @@
+import 'dart:math' as math;
 import 'package:flutter/material.dart';
+import 'package:flutter/rendering.dart';
 import 'package:intl/intl.dart';
 
 import '../../../../core/constants/app_colors.dart';
@@ -6,6 +8,7 @@ import '../../../estructura/models/proyecto_item.dart';
 import '../../../predios/models/predio.dart';
 import '../../../reportes/presentation/widgets/balance_chart_widgets.dart';
 import '../../../reportes/utils/balance_calculos.dart';
+import '../../../reportes/utils/resumen_tramos.dart';
 import '../../models/elemento_composicion.dart';
 
 /// Render de una gráfica de "Balance" dentro de una composición,
@@ -18,25 +21,88 @@ import '../../models/elemento_composicion.dart';
 /// aquí mismo vía Riverpod). [proyectoItem] solo se usa para
 /// [TipoGrafica.cadenamiento] (necesita el cadenamiento capturado en
 /// Estructura > Proyectos).
+///
+/// El contenido se dibuja a un ancho fijo de diseño ([anchoDiseno]) y se
+/// escala para llenar el ancho del elemento, así se ve igual en el editor
+/// y al exportar, a cualquier tamaño. [onAspecto] informa alto/ancho del
+/// contenido para que el editor ajuste el alto del elemento y no queden
+/// espacios vacíos.
 class GraficaWidget extends StatelessWidget {
   const GraficaWidget({
     super.key,
     required this.tipo,
     required this.predios,
     this.proyectoItem,
+    this.segmento,
+    this.fondo = Colors.white,
+    this.onAspecto,
   });
 
   final TipoGrafica tipo;
   final List<Predio> predios;
   final ProyectoItem? proyectoItem;
+  // Segmento del filtro, para limitar las filas del cadenamiento.
+  final String? segmento;
+  final Color? fondo;
+  final ValueChanged<double>? onAspecto;
+
+  bool get _conFondo => fondo != null;
+
+  // Barras de `buildStackedPctBars`: 56 px de ancho + 10 de separación.
+  static double _anchoBarras(int n) => n * 56.0 + (n - 1) * 10;
+
+  /// Ancho de diseño: lo suficiente para que las filas de barras y el
+  /// cadenamiento -que en Balance se desplazan horizontalmente- quepan
+  /// completas, ya que en una hoja no hay desplazamiento y se cortarían.
+  double _anchoDiseno() {
+    const relleno = 12.0;
+    final double contenido = switch (tipo) {
+      TipoGrafica.kpiPanel => 328,
+      TipoGrafica.avanceMensual => _anchoBarras(sparkMonths),
+      TipoGrafica.avanceSemanal => _anchoBarras(sparkWeeks),
+      TipoGrafica.segmentoTramoFrente => _anchoBarras(groupCountBy(predios, (p) => p.tramo).length),
+      // Celdas de 28 px + 2 de separación, más relleno y borde de la tarjeta.
+      TipoGrafica.cadenamiento => _filasCadenamiento().fold<double>(
+          0, (m, f) => math.max(m, f.columnas.length * 30.0 + 22)),
+      _ => 0,
+    };
+    return math.max(tipo == TipoGrafica.cadenamiento ? 440 : 380, contenido + relleno);
+  }
+
+  List<CadenamientoFila> _filasCadenamiento() => buildFilasCadenamiento(proyectoItem, predios)
+      .where((fila) => segmento == null ||
+          claveTramoBalance(fila.codigo, proyectoItem) == claveTramoBalance(segmento!, proyectoItem))
+      .toList();
 
   @override
   Widget build(BuildContext context) {
+    final ancho = _anchoDiseno();
+    return Container(
+      color: fondo,
+      child: FittedBox(
+        fit: BoxFit.contain,
+        alignment: Alignment.topCenter,
+        child: SizedBox(
+          width: ancho,
+          child: _ReportarTamano(
+            onTamano: (s) => onAspecto?.call(s.height / ancho),
+            child: Padding(
+              padding: const EdgeInsets.all(6),
+              child: _contenido(context),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _contenido(BuildContext context) {
     final fmtInt = NumberFormat('#,##0', 'es_MX');
     final total = predios.length;
 
     if (total == 0 && tipo != TipoGrafica.cadenamiento) {
-      return  Center(
+      return  Padding(
+        padding: const EdgeInsets.symmetric(vertical: 12),
         child: Text(
           'Sin predios para este proyecto',
           style: TextStyle(fontSize: 11, color: AppColors.textSecondary),
@@ -57,6 +123,7 @@ class GraficaWidget extends StatelessWidget {
           total: total,
           liberado: liberados,
           noLiberado: noLiberados,
+          conFondo: _conFondo,
         );
         break;
       case TipoGrafica.rangoEstatus:
@@ -89,14 +156,34 @@ class GraficaWidget extends StatelessWidget {
         content = Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            buildTipoPropiedadCard(titulo: 'Propiedad Privada', predios: prediosPrivada, fmtInt: fmtInt),
+            buildTipoPropiedadCard(titulo: 'Propiedad Privada', predios: prediosPrivada, fmtInt: fmtInt, conFondo: _conFondo),
             const SizedBox(height: 12),
             buildTipoPropiedadCard(
               titulo: 'Propiedad social/Dominio pleno',
               predios: prediosSocialDominio,
               fmtInt: fmtInt,
+              conFondo: _conFondo,
             ),
           ],
+        );
+        break;
+      case TipoGrafica.tipoPropiedadPrivada:
+        content = buildTipoPropiedadCard(
+          titulo: 'Propiedad Privada',
+          predios: predios.where((p) => p.tipoPropiedad.toUpperCase() == 'PRIVADA').toList(),
+          fmtInt: fmtInt,
+          conFondo: _conFondo,
+        );
+        break;
+      case TipoGrafica.tipoPropiedadSocial:
+        content = buildTipoPropiedadCard(
+          titulo: 'Propiedad social/Dominio pleno',
+          predios: predios
+              .where((p) =>
+                  p.tipoPropiedad.toUpperCase() == 'SOCIAL' || p.tipoPropiedad.toUpperCase() == 'DOMINIO PLENO')
+              .toList(),
+          fmtInt: fmtInt,
+          conFondo: _conFondo,
         );
         break;
       case TipoGrafica.segmentoTramoFrente:
@@ -116,7 +203,7 @@ class GraficaWidget extends StatelessWidget {
               );
         break;
       case TipoGrafica.cadenamiento:
-        final filas = buildFilasCadenamiento(proyectoItem, predios);
+        final filas = _filasCadenamiento();
         content = filas.isEmpty
             ?  Text(
                 'Sin cadenamiento registrado para este proyecto.',
@@ -126,7 +213,7 @@ class GraficaWidget extends StatelessWidget {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   for (final fila in filas) ...[
-                    buildCadenamientoFilaCard(fila),
+                    buildCadenamientoFilaCard(fila, conFondo: _conFondo),
                     const SizedBox(height: 10),
                   ],
                 ],
@@ -172,11 +259,7 @@ class GraficaWidget extends StatelessWidget {
         break;
     }
 
-    return Container(
-      padding: const EdgeInsets.all(6),
-      color: Colors.white,
-      child: SingleChildScrollView(child: content),
-    );
+    return content;
   }
 
   Widget _buildKpiGrid(NumberFormat fmtInt, int total) {
@@ -185,13 +268,13 @@ class GraficaWidget extends StatelessWidget {
     final kmEfectivos = predios.where((p) => p.cop).fold<double>(0, (sum, p) => sum + (p.kmEfectivos ?? 0));
 
     final cards = [
-      buildKpiPanel(label: 'Total Predios', value: fmtInt.format(total), color: AppColors.primary, icon: Icons.terrain_outlined),
+      buildKpiPanel(label: 'Total Predios', value: fmtInt.format(total), color: AppColors.primary, icon: Icons.terrain_outlined, conFondo: _conFondo),
       buildKpiPanel(
-          label: 'Km Efectivos Liberados', value: fmtInt.format(kmEfectivos), color: AppColors.secondary, icon: Icons.straighten),
+          label: 'Km Efectivos Liberados', value: fmtInt.format(kmEfectivos), color: AppColors.secondary, icon: Icons.straighten, conFondo: _conFondo),
       buildKpiPanel(
-          label: 'Predios Liberados', value: fmtInt.format(liberados), color: AppColors.secondary, icon: Icons.check_circle_outline),
+          label: 'Predios Liberados', value: fmtInt.format(liberados), color: AppColors.secondary, icon: Icons.check_circle_outline, conFondo: _conFondo),
       buildKpiPanel(
-          label: 'Pendiente Liberar', value: fmtInt.format(noLiberados), color: AppColors.warning, icon: Icons.pending_outlined),
+          label: 'Pendiente Liberar', value: fmtInt.format(noLiberados), color: AppColors.warning, icon: Icons.pending_outlined, conFondo: _conFondo),
     ];
 
     return Column(
@@ -214,5 +297,35 @@ class GraficaWidget extends StatelessWidget {
         ),
       ],
     );
+  }
+}
+
+/// Informa el tamaño de su hijo tras cada layout en que cambie (después
+/// del frame, para no provocar setState durante el build del editor).
+class _ReportarTamano extends SingleChildRenderObjectWidget {
+  const _ReportarTamano({required this.onTamano, super.child});
+  final ValueChanged<Size> onTamano;
+
+  @override
+  RenderObject createRenderObject(BuildContext context) => _RenderReportarTamano(onTamano);
+
+  @override
+  void updateRenderObject(BuildContext context, _RenderReportarTamano renderObject) {
+    renderObject.onTamano = onTamano;
+  }
+}
+
+class _RenderReportarTamano extends RenderProxyBox {
+  _RenderReportarTamano(this.onTamano);
+  ValueChanged<Size> onTamano;
+  Size? _ultimo;
+
+  @override
+  void performLayout() {
+    super.performLayout();
+    if (size == _ultimo) return;
+    _ultimo = size;
+    final tamano = size;
+    WidgetsBinding.instance.addPostFrameCallback((_) => onTamano(tamano));
   }
 }

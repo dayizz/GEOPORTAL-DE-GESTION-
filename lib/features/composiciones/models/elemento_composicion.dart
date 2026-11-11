@@ -3,7 +3,7 @@ import 'package:uuid/uuid.dart';
 /// Tipos de elemento soportados dentro de una [Hoja]. Fase 1 solo crea
 /// [forma] y [texto] desde la UI; el resto ya están contemplados en el
 /// esquema para no tener que migrar documentos existentes más adelante.
-enum TipoElemento { forma, texto, mapa, norte, escala, simbologia, grafica, imagen, tabla }
+enum TipoElemento { forma, texto, mapa, norte, escala, simbologia, grafica, imagen, tabla, icono }
 
 TipoElemento tipoElementoFromString(String value) {
   return TipoElemento.values.firstWhere(
@@ -25,6 +25,22 @@ TipoFigura tipoFiguraFromString(String value) {
     orElse: () => TipoFigura.rectangulo,
   );
 }
+
+/// Estilo de la escala gráfica ([TipoElemento.escala]).
+enum TipoEscala { linea, barra }
+
+TipoEscala tipoEscalaFromString(String value) => TipoEscala.values.firstWhere(
+  (t) => t.name == value,
+  orElse: () => TipoEscala.linea,
+);
+
+/// Diseño de la flecha de norte ([TipoElemento.norte]).
+enum TipoNorte { flecha, mediaFlecha, rosa, circulo }
+
+TipoNorte tipoNorteFromString(String value) => TipoNorte.values.firstWhere(
+  (t) => t.name == value,
+  orElse: () => TipoNorte.flecha,
+);
 
 /// Estilo de trazo del contorno de una figura ([TipoElemento.forma]).
 enum EstiloLinea { continua, segmentada, punteada, lineaPunto }
@@ -91,6 +107,10 @@ enum TipoGrafica {
   cadenamiento,
   avanceMensual,
   avanceSemanal,
+  // `tipoPropiedad` (ambas tarjetas) se conserva para documentos ya
+  // guardados; las gráficas nuevas eligen una de estas dos.
+  tipoPropiedadPrivada,
+  tipoPropiedadSocial,
 }
 
 TipoGrafica tipoGraficaFromString(String value) {
@@ -115,23 +135,31 @@ class EstiloEtiquetaMapa {
     this.fuente = 'Roboto',
     this.bufferColorHex = '#FFFFFF',
     this.bufferGrosor = 2,
+    this.bufferActivo = true,
+    this.rotacion = 0,
   });
   final double tamano;
   final String colorHex;
   final String fuente;
   final String bufferColorHex;
   final double bufferGrosor;
+  final bool bufferActivo;
+  final double rotacion; // grados, sentido horario
 
   EstiloEtiquetaMapa copyWith({double? tamano, String? colorHex,
-    String? fuente, String? bufferColorHex, double? bufferGrosor}) =>
+    String? fuente, String? bufferColorHex, double? bufferGrosor,
+    bool? bufferActivo, double? rotacion}) =>
       EstiloEtiquetaMapa(tamano: tamano ?? this.tamano,
         colorHex: colorHex ?? this.colorHex, fuente: fuente ?? this.fuente,
         bufferColorHex: bufferColorHex ?? this.bufferColorHex,
-        bufferGrosor: bufferGrosor ?? this.bufferGrosor);
+        bufferGrosor: bufferGrosor ?? this.bufferGrosor,
+        bufferActivo: bufferActivo ?? this.bufferActivo,
+        rotacion: rotacion ?? this.rotacion);
 
   Map<String, dynamic> toMap() => {
     'tamano': tamano, 'color': colorHex, 'fuente': fuente,
     'buffer_color': bufferColorHex, 'buffer_grosor': bufferGrosor,
+    'buffer_activo': bufferActivo, 'rotacion': rotacion,
   };
 
   factory EstiloEtiquetaMapa.fromMap(Map map) => EstiloEtiquetaMapa(
@@ -140,6 +168,89 @@ class EstiloEtiquetaMapa {
     fuente: map['fuente'] as String? ?? 'Roboto',
     bufferColorHex: map['buffer_color'] as String? ?? '#FFFFFF',
     bufferGrosor: (map['buffer_grosor'] as num?)?.toDouble() ?? 2,
+    bufferActivo: map['buffer_activo'] as bool? ?? true,
+    rotacion: (map['rotacion'] as num?)?.toDouble() ?? 0,
+  );
+}
+
+/// Estilo de una celda de tabla. Cada campo `null` usa el valor por
+/// defecto de la celda (ver [EstiloCeldaTabla.efectivo]), así que solo se
+/// guarda lo que el usuario cambió.
+class EstiloCeldaTabla {
+  const EstiloCeldaTabla({
+    this.rellenoHex,
+    this.fuente,
+    this.tamano,
+    this.colorHex,
+    this.negrita,
+    this.cursiva,
+    this.subrayado,
+    this.alineacion,
+  });
+  final String? rellenoHex; // `#AARRGGBB`: incluye la opacidad
+  final String? fuente;
+  final double? tamano;
+  final String? colorHex;
+  final bool? negrita;
+  final bool? cursiva;
+  final bool? subrayado;
+  final AlineacionTexto? alineacion;
+
+  /// Valores por defecto: el encabezado (fila 0) va en negrita y con fondo
+  /// gris azulado, igual que antes de que existieran estilos por celda.
+  static EstiloCeldaTabla porDefecto(int fila) => EstiloCeldaTabla(
+    rellenoHex: fila == 0 ? '#E5EBF0' : '#FFFFFF',
+    fuente: 'Arial',
+    tamano: 12,
+    colorHex: '#000000',
+    negrita: fila == 0,
+    cursiva: false,
+    subrayado: false,
+    alineacion: AlineacionTexto.izquierda,
+  );
+
+  /// Este estilo con los campos `null` completados desde [base].
+  EstiloCeldaTabla sobre(EstiloCeldaTabla base) => EstiloCeldaTabla(
+    rellenoHex: rellenoHex ?? base.rellenoHex,
+    fuente: fuente ?? base.fuente,
+    tamano: tamano ?? base.tamano,
+    colorHex: colorHex ?? base.colorHex,
+    negrita: negrita ?? base.negrita,
+    cursiva: cursiva ?? base.cursiva,
+    subrayado: subrayado ?? base.subrayado,
+    alineacion: alineacion ?? base.alineacion,
+  );
+
+  /// Estilo completo de la celda ([fila], [columna]) de [estilos].
+  static EstiloCeldaTabla efectivo(
+    Map<String, EstiloCeldaTabla> estilos, int fila, int columna,
+  ) => (estilos[claveCelda(fila, columna)] ?? const EstiloCeldaTabla())
+      .sobre(porDefecto(fila));
+
+  static String claveCelda(int fila, int columna) => '${fila}_$columna';
+
+  Map<String, dynamic> toMap() => {
+    if (rellenoHex != null) 'relleno': rellenoHex,
+    if (fuente != null) 'fuente': fuente,
+    if (tamano != null) 'tamano': tamano,
+    if (colorHex != null) 'color': colorHex,
+    if (negrita != null) 'negrita': negrita,
+    if (cursiva != null) 'cursiva': cursiva,
+    if (subrayado != null) 'subrayado': subrayado,
+    if (alineacion != null) 'alineacion': alineacion!.name,
+  };
+
+  factory EstiloCeldaTabla.fromMap(Map map) => EstiloCeldaTabla(
+    rellenoHex: map['relleno'] as String?,
+    fuente: map['fuente'] as String?,
+    tamano: (map['tamano'] as num?)?.toDouble(),
+    colorHex: map['color'] as String?,
+    negrita: map['negrita'] as bool?,
+    cursiva: map['cursiva'] as bool?,
+    subrayado: map['subrayado'] as bool?,
+    alineacion: map['alineacion'] != null
+        ? alineacionTextoFromString(map['alineacion'] as String)
+        : null,
   );
 }
 
@@ -154,6 +265,8 @@ class ElementoComposicion {
   final double rotacion; // grados
   final bool visible;
   final bool bloqueado;
+  // Carpeta del panel de capas (`CarpetaCapas.id` de la hoja); null = suelto.
+  final String? carpetaId;
 
   // --- Forma ---
   final TipoFigura? figuraTipo;
@@ -240,8 +353,40 @@ class ElementoComposicion {
 
   // --- Gráfica (Balance) ---
   final List<List<String>> tablaCeldas;
+  // --- Estilo de tabla ---
+  final EstiloLinea? tablaBordeEstilo;
+  final String? tablaBordeColorHex; // `#AARRGGBB`; null = gris por defecto
+  final double? tablaBordeGrosor;
+  // Clave `'fila_columna'` (ver `EstiloCeldaTabla.claveCelda`).
+  final Map<String, EstiloCeldaTabla> tablaEstilosCelda;
+  // Pesos relativos de cada columna/fila: el ancho/alto de la tabla se
+  // reparte en esa proporción. Vacío o incompleto = partes iguales.
+  final List<double> tablaAnchosColumna;
+  final List<double> tablaAltosFila;
   final TipoGrafica? graficaTipo;
   final String? graficaProyecto; // codigo de proyecto a graficar
+  // Filtro "Ver como" de Balance: null = proyecto completo,
+  // 'grupo:estaciones', 'grupo:cruces' o 'segmento:<clave>'.
+  final String? graficaFiltro;
+  final bool? graficaFondoActivo; // null = sí (fondo blanco, como antes)
+  final String? graficaFondoHex; // `#AARRGGBB`: incluye la opacidad
+
+  // --- Estilo de escala ---
+  final TipoEscala? escalaTipo;
+  final String? escalaColorHex; // `#AARRGGBB`: incluye la opacidad
+  final double? escalaGrosor; // px, estilo línea
+  final double? escalaAncho; // px, alto de la barra
+  final int? escalaDivisiones; // tramos entre 0 y el total
+
+  // --- Norte ---
+  final TipoNorte? norteTipo;
+  final String? norteColorHex; // `#AARRGGBB`: incluye la opacidad
+  // Mapa cuya orientación sigue el norte; null = orientación manual.
+  final String? norteMapaId;
+
+  // --- Icono ---
+  final String? iconoNombre; // clave en `iconosComposicion`
+  final String? iconoColorHex; // `#AARRGGBB`: incluye la opacidad
 
   const ElementoComposicion({
     required this.id,
@@ -254,6 +399,7 @@ class ElementoComposicion {
     this.rotacion = 0,
     this.visible = true,
     this.bloqueado = false,
+    this.carpetaId,
     this.figuraTipo,
     this.colorTrazoHex,
     this.grosorTrazo,
@@ -301,8 +447,27 @@ class ElementoComposicion {
     this.escalaMapaId,
     this.simbologiaTipo,
     this.tablaCeldas = const [],
+    this.tablaBordeEstilo,
+    this.tablaBordeColorHex,
+    this.tablaBordeGrosor,
+    this.tablaEstilosCelda = const {},
+    this.tablaAnchosColumna = const [],
+    this.tablaAltosFila = const [],
     this.graficaTipo,
     this.graficaProyecto,
+    this.graficaFiltro,
+    this.graficaFondoActivo,
+    this.graficaFondoHex,
+    this.iconoNombre,
+    this.iconoColorHex,
+    this.norteTipo,
+    this.norteColorHex,
+    this.norteMapaId,
+    this.escalaTipo,
+    this.escalaColorHex,
+    this.escalaGrosor,
+    this.escalaAncho,
+    this.escalaDivisiones,
   });
 
   factory ElementoComposicion.forma({
@@ -446,6 +611,17 @@ class ElementoComposicion {
     );
   }
 
+  factory ElementoComposicion.icono({
+    required String nombre,
+    required String etiqueta,
+    required double x,
+    required double y,
+  }) => ElementoComposicion(
+    id: const Uuid().v4(), tipo: TipoElemento.icono, nombreCapa: etiqueta,
+    x: x, y: y, width: 64, height: 64,
+    iconoNombre: nombre, iconoColorHex: '#1B6CA8',
+  );
+
   factory ElementoComposicion.tabla({required double x, required double y, required List<List<String>> celdas}) => ElementoComposicion(
     id: const Uuid().v4(), tipo: TipoElemento.tabla, nombreCapa: 'Tabla',
     x: x, y: y, width: 180, height: 80, tablaCeldas: celdas,
@@ -456,42 +632,49 @@ class ElementoComposicion {
     required String proyecto,
     required double x,
     required double y,
+    String? filtro,
   }) {
+    // El alto se ajusta solo al contenido al dibujarse (ver
+    // `GraficaWidget.onAspecto`); este es solo un valor inicial.
     final (width, height) = _tamanoGrafica(tipo);
     return ElementoComposicion(
       id: const Uuid().v4(),
       tipo: TipoElemento.grafica,
-      nombreCapa: _nombreGrafica(tipo),
+      nombreCapa: nombreGrafica(tipo),
       x: x,
       y: y,
       width: width,
       height: height,
       graficaTipo: tipo,
       graficaProyecto: proyecto,
+      graficaFiltro: filtro,
     );
   }
 
   static (double, double) _tamanoGrafica(TipoGrafica tipo) {
     switch (tipo) {
       case TipoGrafica.kpiPanel:
-        return (220, 110);
+        return (80, 40);
       case TipoGrafica.avanceDdv:
-        return (240, 140);
+        return (90, 40);
       case TipoGrafica.rangoEstatus:
       case TipoGrafica.tipoLiberacion:
-        return (260, 200);
+        return (90, 70);
       case TipoGrafica.tipoPropiedad:
-        return (260, 260);
+        return (90, 90);
+      case TipoGrafica.tipoPropiedadPrivada:
+      case TipoGrafica.tipoPropiedadSocial:
+        return (90, 60);
       case TipoGrafica.segmentoTramoFrente:
       case TipoGrafica.avanceMensual:
       case TipoGrafica.avanceSemanal:
-        return (280, 220);
+        return (90, 70);
       case TipoGrafica.cadenamiento:
-        return (320, 240);
+        return (110, 80);
     }
   }
 
-  static String _nombreGrafica(TipoGrafica tipo) {
+  static String nombreGrafica(TipoGrafica tipo) {
     switch (tipo) {
       case TipoGrafica.kpiPanel:
         return 'Gráfica: KPIs';
@@ -503,6 +686,10 @@ class ElementoComposicion {
         return 'Gráfica: Tipo de liberación';
       case TipoGrafica.tipoPropiedad:
         return 'Gráfica: Avance por tipo de propiedad';
+      case TipoGrafica.tipoPropiedadPrivada:
+        return 'Gráfica: Propiedad privada';
+      case TipoGrafica.tipoPropiedadSocial:
+        return 'Gráfica: Propiedad social/Dominio pleno';
       case TipoGrafica.segmentoTramoFrente:
         return 'Gráfica: Avance por segmento/tramo/frente';
       case TipoGrafica.cadenamiento:
@@ -546,6 +733,8 @@ class ElementoComposicion {
     double? rotacion,
     bool? visible,
     bool? bloqueado,
+    String? carpetaId,
+    bool clearCarpetaId = false,
     String? colorTrazoHex,
     double? grosorTrazo,
     bool clearColorRelleno = false,
@@ -593,8 +782,29 @@ class ElementoComposicion {
     String? escalaMapaId,
     TipoSimbologia? simbologiaTipo,
     List<List<String>>? tablaCeldas,
+    EstiloLinea? tablaBordeEstilo,
+    String? tablaBordeColorHex,
+    double? tablaBordeGrosor,
+    Map<String, EstiloCeldaTabla>? tablaEstilosCelda,
+    List<double>? tablaAnchosColumna,
+    List<double>? tablaAltosFila,
     TipoGrafica? graficaTipo,
     String? graficaProyecto,
+    bool clearGraficaFiltro = false,
+    String? graficaFiltro,
+    bool? graficaFondoActivo,
+    String? graficaFondoHex,
+    String? iconoNombre,
+    String? iconoColorHex,
+    TipoNorte? norteTipo,
+    String? norteColorHex,
+    bool clearNorteMapaId = false,
+    String? norteMapaId,
+    TipoEscala? escalaTipo,
+    String? escalaColorHex,
+    double? escalaGrosor,
+    double? escalaAncho,
+    int? escalaDivisiones,
   }) {
     return ElementoComposicion(
       id: id,
@@ -607,6 +817,7 @@ class ElementoComposicion {
       rotacion: rotacion ?? this.rotacion,
       visible: visible ?? this.visible,
       bloqueado: bloqueado ?? this.bloqueado,
+      carpetaId: clearCarpetaId ? null : (carpetaId ?? this.carpetaId),
       figuraTipo: figuraTipo,
       colorTrazoHex: colorTrazoHex ?? this.colorTrazoHex,
       grosorTrazo: grosorTrazo ?? this.grosorTrazo,
@@ -654,8 +865,27 @@ class ElementoComposicion {
       escalaMapaId: clearEscalaMapaId ? null : (escalaMapaId ?? this.escalaMapaId),
       simbologiaTipo: simbologiaTipo ?? this.simbologiaTipo,
       tablaCeldas: tablaCeldas ?? this.tablaCeldas,
+      tablaBordeEstilo: tablaBordeEstilo ?? this.tablaBordeEstilo,
+      tablaBordeColorHex: tablaBordeColorHex ?? this.tablaBordeColorHex,
+      tablaBordeGrosor: tablaBordeGrosor ?? this.tablaBordeGrosor,
+      tablaEstilosCelda: tablaEstilosCelda ?? this.tablaEstilosCelda,
+      tablaAnchosColumna: tablaAnchosColumna ?? this.tablaAnchosColumna,
+      tablaAltosFila: tablaAltosFila ?? this.tablaAltosFila,
       graficaTipo: graficaTipo ?? this.graficaTipo,
       graficaProyecto: graficaProyecto ?? this.graficaProyecto,
+      graficaFiltro: clearGraficaFiltro ? null : (graficaFiltro ?? this.graficaFiltro),
+      graficaFondoActivo: graficaFondoActivo ?? this.graficaFondoActivo,
+      graficaFondoHex: graficaFondoHex ?? this.graficaFondoHex,
+      iconoNombre: iconoNombre ?? this.iconoNombre,
+      iconoColorHex: iconoColorHex ?? this.iconoColorHex,
+      norteTipo: norteTipo ?? this.norteTipo,
+      norteColorHex: norteColorHex ?? this.norteColorHex,
+      norteMapaId: clearNorteMapaId ? null : (norteMapaId ?? this.norteMapaId),
+      escalaTipo: escalaTipo ?? this.escalaTipo,
+      escalaColorHex: escalaColorHex ?? this.escalaColorHex,
+      escalaGrosor: escalaGrosor ?? this.escalaGrosor,
+      escalaAncho: escalaAncho ?? this.escalaAncho,
+      escalaDivisiones: escalaDivisiones ?? this.escalaDivisiones,
     );
   }
 
@@ -670,6 +900,7 @@ class ElementoComposicion {
         'rotacion': rotacion,
         'visible': visible,
         'bloqueado': bloqueado,
+        'carpeta_id': carpetaId,
         'figura_tipo': figuraTipo?.name,
         'color_trazo': colorTrazoHex,
         'grosor_trazo': grosorTrazo,
@@ -717,9 +948,39 @@ class ElementoComposicion {
         'escala_mapa_id': escalaMapaId,
         'simbologia_tipo': simbologiaTipo?.name,
         'tabla_celdas': tablaCeldas.map((fila) => {'celdas': fila}).toList(),
+        'tabla_borde_estilo': tablaBordeEstilo?.name,
+        'tabla_borde_color': tablaBordeColorHex,
+        'tabla_borde_grosor': tablaBordeGrosor,
+        'tabla_estilos_celda': tablaEstilosCelda.map((k, v) => MapEntry(k, v.toMap())),
+        'tabla_anchos_columna': tablaAnchosColumna,
+        'tabla_altos_fila': tablaAltosFila,
         'grafica_tipo': graficaTipo?.name,
         'grafica_proyecto': graficaProyecto,
+        'grafica_filtro': graficaFiltro,
+        'grafica_fondo_activo': graficaFondoActivo,
+        'grafica_fondo': graficaFondoHex,
+        'icono_nombre': iconoNombre,
+        'icono_color': iconoColorHex,
+        'norte_tipo': norteTipo?.name,
+        'norte_color': norteColorHex,
+        'norte_mapa_id': norteMapaId,
+        'escala_tipo': escalaTipo?.name,
+        'escala_color': escalaColorHex,
+        'escala_grosor': escalaGrosor,
+        'escala_ancho': escalaAncho,
+        'escala_divisiones': escalaDivisiones,
       };
+
+  /// Copia con todas sus propiedades y un id nuevo, llamada [nombreCapa],
+  /// desplazada [desplazamiento] mm para que no quede encima del original.
+  ElementoComposicion duplicado({required String nombreCapa, double desplazamiento = 5}) =>
+      ElementoComposicion.fromMap({
+        ...toMap(),
+        'id': const Uuid().v4(),
+        'nombre_capa': nombreCapa,
+        'x': x + desplazamiento,
+        'y': y + desplazamiento,
+      }).copyWith(bloqueado: false);
 
   factory ElementoComposicion.fromMap(Map<String, dynamic> map) {
     return ElementoComposicion(
@@ -733,6 +994,7 @@ class ElementoComposicion {
       rotacion: (map['rotacion'] as num?)?.toDouble() ?? 0,
       visible: (map['visible'] as bool?) ?? true,
       bloqueado: (map['bloqueado'] as bool?) ?? false,
+      carpetaId: map['carpeta_id'] as String?,
       figuraTipo: map['figura_tipo'] != null ? tipoFiguraFromString(map['figura_tipo'] as String) : null,
       colorTrazoHex: map['color_trazo'] as String?,
       grosorTrazo: (map['grosor_trazo'] as num?)?.toDouble(),
@@ -788,8 +1050,31 @@ class ElementoComposicion {
       simbologiaTipo:
           map['simbologia_tipo'] != null ? tipoSimbologiaFromString(map['simbologia_tipo'] as String) : null,
       tablaCeldas: (map['tabla_celdas'] as List? ?? const []).map((fila) => ((fila as Map)['celdas'] as List).map((v) => v?.toString() ?? '').toList()).toList(),
+      tablaBordeEstilo: map['tabla_borde_estilo'] != null
+          ? estiloLineaFromString(map['tabla_borde_estilo'] as String)
+          : null,
+      tablaBordeColorHex: map['tabla_borde_color'] as String?,
+      tablaBordeGrosor: (map['tabla_borde_grosor'] as num?)?.toDouble(),
+      tablaEstilosCelda: (map['tabla_estilos_celda'] as Map? ?? const {}).map(
+        (k, v) => MapEntry(k as String, EstiloCeldaTabla.fromMap(v as Map)),
+      ),
+      tablaAnchosColumna: [for (final v in map['tabla_anchos_columna'] as List? ?? const []) (v as num).toDouble()],
+      tablaAltosFila: [for (final v in map['tabla_altos_fila'] as List? ?? const []) (v as num).toDouble()],
       graficaTipo: map['grafica_tipo'] != null ? tipoGraficaFromString(map['grafica_tipo'] as String) : null,
       graficaProyecto: map['grafica_proyecto'] as String?,
+      graficaFiltro: map['grafica_filtro'] as String?,
+      graficaFondoActivo: map['grafica_fondo_activo'] as bool?,
+      graficaFondoHex: map['grafica_fondo'] as String?,
+      iconoNombre: map['icono_nombre'] as String?,
+      iconoColorHex: map['icono_color'] as String?,
+      norteTipo: map['norte_tipo'] != null ? tipoNorteFromString(map['norte_tipo'] as String) : null,
+      norteColorHex: map['norte_color'] as String?,
+      norteMapaId: map['norte_mapa_id'] as String?,
+      escalaTipo: map['escala_tipo'] != null ? tipoEscalaFromString(map['escala_tipo'] as String) : null,
+      escalaColorHex: map['escala_color'] as String?,
+      escalaGrosor: (map['escala_grosor'] as num?)?.toDouble(),
+      escalaAncho: (map['escala_ancho'] as num?)?.toDouble(),
+      escalaDivisiones: (map['escala_divisiones'] as num?)?.toInt(),
     );
   }
 }

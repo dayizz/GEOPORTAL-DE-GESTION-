@@ -1,3 +1,4 @@
+import 'package:flutter/gestures.dart' show kDoubleTapTimeout;
 import 'package:flutter/material.dart';
 import '../../../../core/constants/app_colors.dart';
 import '../../../estructura/models/proyecto_item.dart';
@@ -7,6 +8,8 @@ import '../../utils/color_hex.dart';
 import 'elemento_contenido.dart';
 import 'mapa_viewport_widget.dart';
 import 'marco_clipper.dart';
+import 'tabla_widget.dart';
+import '../../utils/datos_grafica.dart';
 
 /// Geometría de un elemento en mm (mismas unidades que el modelo).
 typedef _GeometriaMm = ({double x, double y, double width, double height});
@@ -34,6 +37,16 @@ class ElementoBox extends StatefulWidget {
     this.onSnapIndicador,
     this.margenMm = 0,
     this.margenesMm,
+    this.datosGrafica,
+    this.onAspectoGrafica,
+    this.tablaSeleccion = const {},
+    this.tablaEditando,
+    this.onCeldaTap,
+    this.onCeldaChanged,
+    this.onTablaEdicionTerminada,
+    this.onTablaRedimensionar,
+    this.onCeldaMenu,
+    this.onMenu,
   });
   final List<Map<String, dynamic>> importedFeatures;
 
@@ -63,6 +76,24 @@ class ElementoBox extends StatefulWidget {
   final void Function(double xMm, double yMm, double wMm, double hMm)
   onGeometriaChanged;
   final ValueChanged<String>? onTextoChanged;
+
+  /// Solo para [TipoElemento.grafica] (ver `buildElementoContenidoEstatico`).
+  final ResolverDatosGrafica? datosGrafica;
+  final ValueChanged<double>? onAspectoGrafica;
+
+  /// Solo para [TipoElemento.tabla]: celdas seleccionadas y en edición
+  /// (el estado vive en el editor porque el panel de propiedades lo usa).
+  /// [onCeldaTap] recibe `doble: true` en un doble clic sobre la celda.
+  final Set<CeldaTabla> tablaSeleccion;
+  final CeldaTabla? tablaEditando;
+  final void Function(CeldaTabla celda, {required bool doble})? onCeldaTap;
+  final void Function(CeldaTabla celda, String texto)? onCeldaChanged;
+  final VoidCallback? onTablaEdicionTerminada;
+  /// Arrastre de los divisores entre columnas/filas de la tabla.
+  final ValueChanged<ElementoComposicion Function(ElementoComposicion)>? onTablaRedimensionar;
+  final void Function(CeldaTabla celda, Offset posicion)? onCeldaMenu;
+  /// Clic derecho sobre el elemento, con la posición global del puntero.
+  final ValueChanged<Offset>? onMenu;
   final void Function(double lat, double lng, double zoom)? onMapaChanged;
   final List<Predio> predios;
 
@@ -81,8 +112,27 @@ class _ElementoBoxState extends State<ElementoBox> {
   bool _editandoTexto = false;
   bool _editandoMapa = false;
   bool _redimensionando = false;
+  // Geometría (sin imán) acumulada durante un redimensionado: varios
+  // movimientos del puntero pueden llegar antes de que el editor
+  // reconstruya con el tamaño nuevo, y partir de `widget.elemento` los
+  // perdería.
+  _GeometriaMm? _geoRedimension;
   late TextEditingController _textoCtrl;
   (double, double, double)? _mapaPendiente;
+  // Doble clic en una celda de tabla, detectado a mano: un `onDoubleTap`
+  // retrasaría cada clic simple (selección) mientras espera el segundo.
+  CeldaTabla? _ultimaCeldaTocada;
+  DateTime? _ultimoToqueCelda;
+
+  void _tocarCelda(CeldaTabla celda) {
+    final ahora = DateTime.now();
+    final doble = _ultimaCeldaTocada == celda &&
+        _ultimoToqueCelda != null &&
+        ahora.difference(_ultimoToqueCelda!) < kDoubleTapTimeout;
+    _ultimaCeldaTocada = doble ? null : celda;
+    _ultimoToqueCelda = doble ? null : ahora;
+    widget.onCeldaTap?.call(celda, doble: doble);
+  }
 
   @override
   void initState() {
@@ -215,8 +265,20 @@ class _ElementoBoxState extends State<ElementoBox> {
     );
   }
 
+  /// La escala ocupa solo lo que mide su barra: tras dibujarse, el
+  /// recuadro se ajusta a ella (no durante un redimensionado, para no
+  /// pelear con la manija; al soltarla se vuelve a ajustar).
+  void _ajustarAEscala(Size tamanoPx) {
+    final e = widget.elemento;
+    if (!mounted || _redimensionando || e.bloqueado) return;
+    final w = tamanoPx.width / widget.scale;
+    final h = tamanoPx.height / widget.scale;
+    if ((w - e.width).abs() < 0.3 && (h - e.height).abs() < 0.3) return;
+    widget.onGeometriaChanged(e.x, e.y, w, h);
+  }
+
   void _redimensionarDesdeEsquina(String esquina, Offset deltaPx) {
-    final g = _geometria();
+    final g = _geoRedimension ?? _geometria();
     final dxMm = deltaPx.dx / widget.scale;
     final dyMm = deltaPx.dy / widget.scale;
     var x = g.x, y = g.y, w = g.width, h = g.height;
@@ -242,12 +304,15 @@ class _ElementoBoxState extends State<ElementoBox> {
         h += dyMm;
         break;
     }
+    // La escala se ajusta sola a su barra, que mide menos de 8 mm de alto.
+    final minSize = widget.elemento.tipo == TipoElemento.escala ? 1.0 : 8.0;
+    if (w < minSize || h < minSize) return;
+    _geoRedimension = (x: x, y: y, width: w, height: h);
     final r = _snapRedimensionar(esquina, x, y, w, h);
     x = r.x;
     y = r.y;
     w = r.w;
     h = r.h;
-    const minSize = 8.0;
     if (w < minSize || h < minSize) return;
     widget.onGeometriaChanged(x, y, w, h);
     _reportarSnap(r.snapMm);
@@ -334,7 +399,10 @@ class _ElementoBoxState extends State<ElementoBox> {
 
   bool get _interaccionBoxBloqueada =>
       widget.elemento.bloqueado ||
-      (_editandoMapa && widget.elemento.tipo == TipoElemento.mapa);
+      (_editandoMapa && widget.elemento.tipo == TipoElemento.mapa) ||
+      // Mientras se escribe en una celda, arrastrar selecciona texto en vez
+      // de mover la tabla.
+      widget.tablaEditando != null;
 
   @override
   Widget build(BuildContext context) {
@@ -390,6 +458,9 @@ class _ElementoBoxState extends State<ElementoBox> {
                     child: GestureDetector(
                       behavior: HitTestBehavior.opaque,
                       onTap: widget.onSelect,
+                      onSecondaryTapDown: widget.onMenu == null
+                          ? null
+                          : (d) => widget.onMenu!(d.globalPosition),
                       onDoubleTap: widget.elemento.tipo == TipoElemento.mapa
                           ? () {
                               widget.onSelect();
@@ -402,9 +473,14 @@ class _ElementoBoxState extends State<ElementoBox> {
                       onPanStart: _interaccionBoxBloqueada || e.tipo == TipoElemento.mapa
                           ? null
                           : (_) => widget.onSelect(),
+                      // Arrastrar una manija también llega aquí como pan: sin
+                      // este chequeo, mover el elemento (con el tamaño
+                      // anterior) pisaba en el mismo evento el redimensionado.
                       onPanUpdate: _interaccionBoxBloqueada || e.tipo == TipoElemento.mapa
                           ? null
-                          : (details) => _moverPor(details.delta),
+                          : (details) {
+                              if (!_redimensionando) _moverPor(details.delta);
+                            },
                       onPanEnd: (_) => _reportarSnap(null),
                       onPanCancel: () => _reportarSnap(null),
                       child: Stack(
@@ -416,9 +492,15 @@ class _ElementoBoxState extends State<ElementoBox> {
                           // llenar el recuadro, y el redimensionado manual
                           // deja de verse (el borde de selección "no se
                           // estira" aunque el modelo sí cambió de tamaño).
+                          //
+                          // El borde de selección va en `foregroundDecoration`
+                          // (encima, sin restar espacio): como `decoration`
+                          // encogía 3 px el contenido, la escala -que ajusta
+                          // el recuadro a lo que mide- dejaba de caber,
+                          // elegía una distancia menor y se encogía sin fin.
                           Positioned.fill(
                             child: Container(
-                              decoration: BoxDecoration(
+                              foregroundDecoration: BoxDecoration(
                                 border: widget.seleccionado
                                     ? Border.all(
                                         color: Colors.blueAccent,
@@ -469,6 +551,18 @@ class _ElementoBoxState extends State<ElementoBox> {
         ),
       );
     }
+    if (e.tipo == TipoElemento.tabla && widget.onCeldaTap != null) {
+      return TablaWidget(
+        elemento: e,
+        seleccion: widget.tablaSeleccion,
+        editando: widget.tablaEditando,
+        onCeldaTap: _tocarCelda,
+        onCeldaChanged: widget.onCeldaChanged,
+        onEdicionTerminada: widget.onTablaEdicionTerminada,
+        onRedimensionar: e.bloqueado ? null : widget.onTablaRedimensionar,
+        onCeldaMenu: widget.onCeldaMenu,
+      );
+    }
     if (e.tipo == TipoElemento.mapa) {
       final figuraMapa = e.mapaFigura ?? FormaMarco.cuadrada;
       return Stack(
@@ -502,8 +596,9 @@ class _ElementoBoxState extends State<ElementoBox> {
                 painter: MarcoBorderPainter(
                   estilo: e.mapaBordeEstilo,
                   figura: figuraMapa,
-                  color: (colorFromHex(e.mapaBordeColorHex) ?? Colors.black)
-                      .withValues(alpha: e.mapaBordeOpacidad ?? 1),
+                  color: aplicarOpacidad(
+                      colorFromHex(e.mapaBordeColorHex) ?? Colors.black,
+                      e.mapaBordeOpacidad ?? 1),
                   grosor: e.mapaBordeGrosor ?? 2,
                 ),
               ),
@@ -517,6 +612,9 @@ class _ElementoBoxState extends State<ElementoBox> {
       hojaElementos: widget.hojaElementos,
       scale: widget.scale,
       proyectoItem: widget.proyectoItem,
+      datosGrafica: widget.datosGrafica,
+      onAspectoGrafica: widget.onAspectoGrafica,
+      onTamanoEscala: e.tipo == TipoElemento.escala ? _ajustarAEscala : null,
     );
   }
 
@@ -557,34 +655,60 @@ class _ElementoBoxState extends State<ElementoBox> {
     // 'tl'/'br' se estiran en diagonal \ (resizeUpLeftDownRight); 'tr'/'bl'
     // en diagonal / (resizeUpRightDownLeft), indicando con el cursor la
     // dirección real en la que cada esquina redimensiona.
+    // Solo la parte de la manija dentro del recuadro recibe el puntero
+    // (fuera de él no hay hit-testing), así que la zona sensible es un
+    // cuadro de [zona] px hacia adentro de la esquina y el círculo se
+    // dibuja centrado en la esquina, desbordando hacia afuera.
+    const zona = 16.0;
     Widget manija(String esquina, double left, double top, MouseCursor cursor) {
+      final derecha = left > 0;
+      final abajo = top > 0;
       return Positioned(
-        left: left - tam / 2,
-        top: top - tam / 2,
+        left: derecha ? left - zona : 0,
+        top: abajo ? top - zona : 0,
         child: MouseRegion(
           cursor: cursor,
           child: Listener(
             behavior: HitTestBehavior.opaque,
             onPointerDown: (_) {
               _redimensionando = true;
+              _geoRedimension = null;
               widget.onSelect();
             },
             onPointerMove: (event) => _redimensionarDesdeEsquina(esquina, event.delta),
             onPointerUp: (_) {
-              _redimensionando = false;
+              // El `setState` vuelve a dibujar el contenido, para que una
+              // escala se ajuste al tamaño soltado.
+              setState(() => _redimensionando = false);
+              _geoRedimension = null;
               _reportarSnap(null);
             },
             onPointerCancel: (_) {
               _redimensionando = false;
+              _geoRedimension = null;
               _reportarSnap(null);
             },
-            child: Container(
-              width: tam,
-              height: tam,
-              decoration: BoxDecoration(
-                color: Colors.white,
-                border: Border.all(color: Colors.blueAccent, width: 1.5),
-                shape: BoxShape.circle,
+            child: SizedBox(
+              width: zona,
+              height: zona,
+              child: OverflowBox(
+                minWidth: 0,
+                minHeight: 0,
+                maxWidth: tam,
+                maxHeight: tam,
+                alignment: Alignment(derecha ? 1 : -1, abajo ? 1 : -1),
+                child: Transform.translate(
+                  offset: Offset(derecha ? tam / 2 : -tam / 2, abajo ? tam / 2 : -tam / 2),
+                  child: Container(
+                    width: tam,
+                    height: tam,
+                    decoration: BoxDecoration(
+                      color: Colors.white,
+                      border: Border.all(color: Colors.blueAccent, width: 1.5),
+                      shape: BoxShape.circle,
+                    ),
+                  ),
+                ),
               ),
             ),
           ),

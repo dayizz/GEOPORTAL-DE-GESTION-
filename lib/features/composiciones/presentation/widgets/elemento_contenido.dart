@@ -6,6 +6,8 @@ import '../../../estructura/models/proyecto_item.dart';
 import '../../../predios/models/predio.dart';
 import '../../models/elemento_composicion.dart';
 import '../../utils/color_hex.dart';
+import '../../utils/datos_grafica.dart';
+import '../../utils/iconos_composicion.dart';
 import 'escala_grafica_widget.dart';
 import 'grafica_widget.dart';
 import 'tabla_widget.dart';
@@ -24,10 +26,11 @@ import 'simbologia_widget.dart';
 /// [predios] se usa para [TipoElemento.mapa] y [TipoElemento.grafica] (ya
 /// filtrados por proyecto por quien llama; ver [MapaViewportWidget] para
 /// la razón por la que no se resuelven aquí mismo vía Riverpod).
-/// [hojaElementos] y [scale] solo se usan para [TipoElemento.escala] (para
-/// ubicar el mapa asociado y convertir metros/px de ese mapa a metros/mm
-/// de la hoja). [proyectoItem] solo se usa para [TipoElemento.grafica] con
-/// [TipoGrafica.cadenamiento] (necesita el cadenamiento de Estructura).
+/// [hojaElementos] se usa para [TipoElemento.escala] y [TipoElemento.norte]
+/// (para ubicar el mapa asociado). Para [TipoElemento.grafica],
+/// [datosGrafica] resuelve los datos del proyecto elegido en la gráfica; sin
+/// él se usan [predios]/[proyectoItem] tal cual. [onAspectoGrafica] (solo
+/// en el editor) recibe alto/ancho del contenido de la gráfica.
 Widget buildElementoContenidoEstatico(
   ElementoComposicion e, {
   List<Predio> predios = const [],
@@ -35,10 +38,13 @@ Widget buildElementoContenidoEstatico(
   List<ElementoComposicion> hojaElementos = const [],
   double scale = 1,
   ProyectoItem? proyectoItem,
+  ResolverDatosGrafica? datosGrafica,
+  ValueChanged<double>? onAspectoGrafica,
+  ValueChanged<Size>? onTamanoEscala,
 }) {
   switch (e.tipo) {
     case TipoElemento.tabla:
-      return TablaWidget(celdas: e.tablaCeldas);
+      return TablaWidget(elemento: e);
     case TipoElemento.forma:
       return CustomPaint(
         size: Size.infinite,
@@ -53,6 +59,14 @@ Widget buildElementoContenidoEstatico(
           puntaTamano: e.lineaPuntaTamano ?? 10,
           puntaIzquierda: e.lineaPuntaIzquierda ?? false,
           puntaDerecha: e.lineaPuntaDerecha ?? false,
+        ),
+      );
+    case TipoElemento.icono:
+      return LayoutBuilder(
+        builder: (context, c) => IconoComposicion(
+          e.iconoNombre,
+          size: c.biggest.shortestSide,
+          color: colorFromHex(e.iconoColorHex) ?? Colors.black,
         ),
       );
     case TipoElemento.texto:
@@ -100,8 +114,9 @@ Widget buildElementoContenidoEstatico(
                 painter: MarcoBorderPainter(
                   estilo: e.mapaBordeEstilo,
                   figura: figuraMapa,
-                  color: (colorFromHex(e.mapaBordeColorHex) ?? Colors.black)
-                      .withValues(alpha: e.mapaBordeOpacidad ?? 1),
+                  color: aplicarOpacidad(
+                      colorFromHex(e.mapaBordeColorHex) ?? Colors.black,
+                      e.mapaBordeOpacidad ?? 1),
                   grosor: e.mapaBordeGrosor ?? 2,
                 ),
               ),
@@ -109,30 +124,61 @@ Widget buildElementoContenidoEstatico(
         ],
       );
     case TipoElemento.norte:
-      return const NorteWidget();
+      return NorteWidget(
+        tipo: e.norteTipo ?? TipoNorte.flecha,
+        color: colorFromHex(e.norteColorHex) ?? Colors.black87,
+        rotacion: rotacionNorteDeMapa(e, hojaElementos) ?? 0,
+      );
     case TipoElemento.escala:
       return EscalaGraficaWidget(
-        metrosPorMm: _metrosPorMmDe(e, hojaElementos, scale),
-        anchoDisponibleMm: e.width,
+        metrosPorPx: _metrosPorPxDe(e, hojaElementos),
+        tipo: e.escalaTipo ?? TipoEscala.linea,
+        color: colorFromHex(e.escalaColorHex) ?? Colors.black87,
+        grosor: e.escalaGrosor ?? 1.4,
+        ancho: e.escalaAncho ?? 6,
+        divisiones: e.escalaDivisiones ?? 2,
+        onTamano: onTamanoEscala,
       );
     case TipoElemento.simbologia:
       return SimbologiaWidget(tipo: e.simbologiaTipo ?? TipoSimbologia.estatus);
     case TipoElemento.grafica:
+      final datos = datosGrafica?.call(e.graficaProyecto) ??
+          (predios: predios, proyecto: proyectoItem);
       return GraficaWidget(
         tipo: e.graficaTipo ?? TipoGrafica.kpiPanel,
-        predios: predios,
-        proyectoItem: proyectoItem,
+        predios: prediosGrafica(datos.predios, datos.proyecto, e.graficaFiltro),
+        proyectoItem: datos.proyecto,
+        segmento: segmentoDeFiltroGrafica(e.graficaFiltro),
+        fondo: (e.graficaFondoActivo ?? true)
+            ? colorFromHex(e.graficaFondoHex) ?? Colors.white
+            : null,
+        onAspecto: onAspectoGrafica,
       );
   }
 }
 
-/// Metros reales por milímetro de hoja, derivados del zoom/latitud del
-/// mapa asociado a un elemento de escala (`e.escalaMapaId`). Fórmula
-/// estándar de Web Mercator para metros por píxel de tile (a
-/// `pixelRatio` 1, igual que se captura en `ComposicionExportService`),
-/// multiplicada por [scale] (px de render por mm de hoja) para pasar de
-/// "metros por píxel" a "metros por milímetro".
-double? _metrosPorMmDe(ElementoComposicion e, List<ElementoComposicion> hojaElementos, double scale) {
+/// Giro (grados, horario) con el que el norte [e] sigue la orientación de
+/// su mapa asociado: `flutter_map` gira el contenido en sentido horario
+/// por `mapaRotacion`, y a eso se suma la rotación de la caja del mapa.
+/// `null` si el norte no sigue a ningún mapa (o el mapa ya no existe).
+double? rotacionNorteDeMapa(ElementoComposicion e, List<ElementoComposicion> hojaElementos) {
+  final mapaId = e.norteMapaId;
+  if (mapaId == null) return null;
+  for (final el in hojaElementos) {
+    if (el.id == mapaId && el.tipo == TipoElemento.mapa) {
+      return el.rotacion + (el.mapaRotacion ?? 0);
+    }
+  }
+  return null;
+}
+
+/// Metros reales por px de render, derivados del zoom/latitud del mapa
+/// asociado a un elemento de escala (`e.escalaMapaId`). Fórmula estándar
+/// de Web Mercator para metros por píxel de tile: el mapa se dibuja a 1 px
+/// de tile por px de render (y se captura a `pixelRatio` 1 en
+/// `ComposicionExportService`), así que vale igual en el editor y al
+/// exportar, sin importar el zoom del lienzo.
+double? _metrosPorPxDe(ElementoComposicion e, List<ElementoComposicion> hojaElementos) {
   final mapaId = e.escalaMapaId;
   if (mapaId == null) return null;
   ElementoComposicion? mapa;
@@ -144,7 +190,7 @@ double? _metrosPorMmDe(ElementoComposicion e, List<ElementoComposicion> hojaElem
   }
   if (mapa == null || mapa.mapaLat == null || mapa.mapaZoom == null) return null;
   final metrosPorPixel = 156543.03392 * math.cos(mapa.mapaLat! * math.pi / 180) / math.pow(2, mapa.mapaZoom!);
-  return metrosPorPixel * scale;
+  return metrosPorPixel;
 }
 
 /// Estilo de texto de un elemento [TipoElemento.texto], compartido entre

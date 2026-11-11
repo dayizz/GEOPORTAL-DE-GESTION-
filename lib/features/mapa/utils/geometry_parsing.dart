@@ -53,15 +53,15 @@ List<List<LatLng>> extractRingsFromGeometry(Map<String, dynamic>? geometry) {
 /// este archivo.
 List<LatLng> extractPointsFromGeometry(Map<String, dynamic>? geometry) {
   if (geometry == null) return const [];
-  final type = geometry['type']?.toString();
+  final type = geometry['type']?.toString().trim().toUpperCase();
   final coords = geometry['coordinates'];
   if (type == null || coords is! List || coords.isEmpty) return const [];
 
-  if (type == 'Point') {
+  if (type == 'POINT') {
     final point = _coordToLatLng(coords);
     return point == null ? const [] : [point];
   }
-  if (type == 'MultiPoint') {
+  if (type == 'MULTIPOINT') {
     return coords.whereType<List>().map(_coordToLatLng).whereType<LatLng>().toList(growable: false);
   }
   return const [];
@@ -74,6 +74,13 @@ LatLng? _coordToLatLng(List<dynamic> coord) {
   if (x == null || y == null) return null;
   if (_isValidLatLng(lat: y, lng: x)) return LatLng(y, x);
   if (_isValidLatLng(lat: x, lng: y)) return LatLng(x, y);
+  // Algunos exportadores etiquetan el archivo como GeoJSON aunque las
+  // coordenadas sigan en UTM (igual que en `mapa_screen.dart`).
+  final zone = _detectMexicoUtmZone([x], [y]);
+  if (zone != null) {
+    final ll = _utmToWgs84(x, y, zone);
+    if (_isValidLatLng(lat: ll[1], lng: ll[0])) return LatLng(ll[1], ll[0]);
+  }
   return null;
 }
 

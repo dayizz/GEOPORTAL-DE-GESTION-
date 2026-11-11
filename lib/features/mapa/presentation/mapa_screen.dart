@@ -3523,6 +3523,7 @@ class _MapaScreenState extends ConsumerState<MapaScreen> {
         .where((p) => Predio.estatusSimplificado(p.rangoEstatus) == 'Liberado')
         .length;
     final afectacionesNoLiberadas = totalAfectaciones - afectacionesLiberadas;
+    final esTig = _esPredioTig(predio);
 
     Widget infoRow(String label, String value) {
       return Padding(
@@ -3667,6 +3668,16 @@ class _MapaScreenState extends ConsumerState<MapaScreen> {
             infoRow('KM inicio', kmInicioText),
             infoRow('KM fin', kmFinText),
             infoRow('KM efectivo', kmEfectivoText),
+            // Campos exclusivos del proyecto TIG.
+            if (esTig) ...[
+              infoRow('Socialización', predio.socializacion ? 'SI' : 'NO'),
+              infoRow(
+                'Caminam.',
+                (predio.caminamiento?.trim().isNotEmpty ?? false)
+                    ? predio.caminamiento!.trim()
+                    : '-',
+              ),
+            ],
             if (totalAfectaciones > 1) ...[
               const SizedBox(height: 4),
               Container(
@@ -3774,6 +3785,12 @@ class _MapaScreenState extends ConsumerState<MapaScreen> {
                         '${p.rangoEstatus} · KM $kmIniP - $kmFinP',
                         style:  TextStyle(fontSize: 10, color: AppColors.textSecondary),
                       ),
+                      if (esTig)
+                        Text(
+                          'Socialización: ${p.socializacion ? 'SI' : 'NO'} · '
+                          'Caminamiento: ${(p.caminamiento?.trim().isNotEmpty ?? false) ? p.caminamiento!.trim() : '-'}',
+                          style: TextStyle(fontSize: 10, color: AppColors.textSecondary),
+                        ),
                     ],
                   ),
                 );
@@ -5375,6 +5392,15 @@ class _MapaScreenState extends ConsumerState<MapaScreen> {
     }
     return '${areaM2.toStringAsFixed(2)} m2';
   }
+  /// Indica si el predio pertenece al proyecto TIG (campo directo, etiqueta
+  /// [PROY:TIG] en el oficio o prefijo de la clave catastral).
+  bool _esPredioTig(Predio predio) {
+    if (predio.proyecto?.trim().toUpperCase() == 'TIG') return true;
+    if ((predio.oficio ?? '').toUpperCase().contains('[PROY:TIG]')) return true;
+    final clave = predio.claveCatastral.toUpperCase().replaceAll(RegExp(r'[^A-Z0-9]'), '');
+    return clave.startsWith('TIG');
+  }
+
   Widget _statusChip(String label, bool active) {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),

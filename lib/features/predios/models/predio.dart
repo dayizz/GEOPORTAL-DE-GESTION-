@@ -41,6 +41,10 @@ class Predio {
   final bool identificacion;
   final bool levantamiento;
   final bool negociacion;
+  final bool anuencia;
+  // Exclusivos del proyecto TIG.
+  final bool socializacion;
+  final String? caminamiento;
   final String? situacionSocial;
   final String? tipoLiberacion;
   final String? responsableJuridico;
@@ -78,6 +82,13 @@ class Predio {
     'No liberado',
     'L nueva',
     'Investigación',
+  ];
+
+  /// Valores válidos para "Caminamiento" (exclusivo del proyecto TIG).
+  static const List<String> caminamientoOpciones = [
+    'Realizado',
+    'Proceso',
+    'Por definir',
   ];
 
   static const Set<String> _rangosLiberado = {
@@ -124,6 +135,9 @@ class Predio {
     this.identificacion = false,
     this.levantamiento = false,
     this.negociacion = false,
+    this.anuencia = false,
+    this.socializacion = false,
+    this.caminamiento,
     this.situacionSocial,
     this.tipoLiberacion,
     this.responsableJuridico,
@@ -263,6 +277,9 @@ class Predio {
       identificacion: map['identificacion'] as bool? ?? false,
       levantamiento: map['levantamiento'] as bool? ?? false,
       negociacion: map['negociacion'] as bool? ?? false,
+      anuencia: map['anuencia'] as bool? ?? false,
+      socializacion: map['socializacion'] as bool? ?? false,
+      caminamiento: map['caminamiento'] as String?,
       situacionSocial: map['situacion_social'] as String?,
       tipoLiberacion: map['tipo_liberacion'] as String?,
       responsableJuridico: pickText([
@@ -322,6 +339,9 @@ class Predio {
       'identificacion': identificacion,
       'levantamiento': levantamiento,
       'negociacion': negociacion,
+      'anuencia': anuencia,
+      'socializacion': socializacion,
+      'caminamiento': caminamiento,
       'situacion_social': situacionSocial,
       'tipo_liberacion': tipoLiberacion,
       'responsable_juridico': responsableJuridico,
@@ -380,6 +400,9 @@ class Predio {
     bool? identificacion,
     bool? levantamiento,
     bool? negociacion,
+    bool? anuencia,
+    bool? socializacion,
+    String? caminamiento,
     String? situacionSocial,
     String? tipoLiberacion,
     String? responsableJuridico,
@@ -436,6 +459,9 @@ class Predio {
       identificacion: identificacion ?? this.identificacion,
       levantamiento: levantamiento ?? this.levantamiento,
       negociacion: negociacion ?? this.negociacion,
+      anuencia: anuencia ?? this.anuencia,
+      socializacion: socializacion ?? this.socializacion,
+      caminamiento: caminamiento ?? this.caminamiento,
       situacionSocial: situacionSocial ?? this.situacionSocial,
       tipoLiberacion: tipoLiberacion ?? this.tipoLiberacion,
       responsableJuridico: responsableJuridico ?? this.responsableJuridico,

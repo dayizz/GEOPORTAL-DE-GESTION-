@@ -69,6 +69,9 @@ class _PredioFormScreenState extends ConsumerState<PredioFormScreen> {
   bool _identificacion = false;
   bool _levantamiento = false;
   bool _negociacion = false;
+  bool _anuencia = false;
+  bool _socializacion = false;
+  String? _caminamiento;
   String _rangoEstatus = 'Investigación';
   String? _rangoEstatusOriginal;
   DateTime? _rangoEstatusFechaOriginal;
@@ -176,6 +179,11 @@ class _PredioFormScreenState extends ConsumerState<PredioFormScreen> {
         _identificacion = predio.identificacion;
         _levantamiento = predio.levantamiento;
         _negociacion = predio.negociacion;
+        _anuencia = predio.anuencia;
+        _socializacion = predio.socializacion;
+        _caminamiento = Predio.caminamientoOpciones.contains(predio.caminamiento)
+            ? predio.caminamiento
+            : null;
         _rangoEstatus = predio.rangoEstatus;
         _rangoEstatusOriginal = predio.rangoEstatus;
         _rangoEstatusFechaOriginal = predio.rangoEstatusFecha;
@@ -520,6 +528,9 @@ class _PredioFormScreenState extends ConsumerState<PredioFormScreen> {
           identificacion: _identificacion,
           levantamiento: _levantamiento,
           negociacion: estatusNoLiberado,
+          anuencia: _anuencia,
+          socializacion: _socializacion,
+          caminamiento: _caminamiento,
           propietarioNombre: _propietarioNombreCtrl.text.isEmpty ? null : _propietarioNombreCtrl.text.trim(),
           rangoEstatus: _rangoEstatus,
           rangoEstatusFecha: rangoEstatusFecha,
@@ -571,6 +582,9 @@ class _PredioFormScreenState extends ConsumerState<PredioFormScreen> {
           identificacion: _identificacion,
           levantamiento: _levantamiento,
           negociacion: estatusNoLiberado,
+          anuencia: _anuencia,
+          socializacion: _socializacion,
+          caminamiento: _caminamiento,
           propietarioNombre: _propietarioNombreCtrl.text.isEmpty ? null : _propietarioNombreCtrl.text.trim(),
           propietarioId: _propietarioId,
           rangoEstatus: _rangoEstatus,
@@ -614,6 +628,9 @@ class _PredioFormScreenState extends ConsumerState<PredioFormScreen> {
           'identificacion': _identificacion,
           'levantamiento': _levantamiento,
           'negociacion': estatusNoLiberado,
+          'anuencia': _anuencia,
+          'socializacion': _socializacion,
+          'caminamiento': _caminamiento,
           'propietario_nombre': _propietarioNombreCtrl.text.isEmpty ? null : _propietarioNombreCtrl.text.trim(),
           'propietario_id': _propietarioId,
           'rango_estatus': _rangoEstatus,
@@ -875,7 +892,41 @@ class _PredioFormScreenState extends ConsumerState<PredioFormScreen> {
                   contentPadding: EdgeInsets.zero,
                   controlAffinity: ListTileControlAffinity.leading,
                 ),
+                CheckboxListTile(
+                  title: const Text('Anuencia'),
+                  value: _anuencia,
+                  onChanged: (value) => setState(() => _anuencia = value ?? false),
+                  dense: true,
+                  contentPadding: EdgeInsets.zero,
+                  controlAffinity: ListTileControlAffinity.leading,
+                ),
               ], minFieldWidth: 170),
+              // Campos exclusivos del proyecto TIG.
+              if (_proyecto?.trim().toUpperCase() == 'TIG') ...[
+                const SizedBox(height: 8),
+                _buildFormRow([
+                  CheckboxListTile(
+                    title: const Text('Socialización'),
+                    value: _socializacion,
+                    onChanged: (value) => setState(() => _socializacion = value ?? false),
+                    dense: true,
+                    contentPadding: EdgeInsets.zero,
+                    controlAffinity: ListTileControlAffinity.leading,
+                  ),
+                  DropdownButtonFormField<String>(
+                    value: _caminamiento,
+                    decoration: const InputDecoration(
+                      labelText: 'Caminamiento',
+                      prefixIcon: Icon(Icons.directions_walk),
+                    ),
+                    hint: const Text('Selecciona'),
+                    items: Predio.caminamientoOpciones
+                        .map((op) => DropdownMenuItem(value: op, child: Text(op)))
+                        .toList(),
+                    onChanged: (value) => setState(() => _caminamiento = value),
+                  ),
+                ], minFieldWidth: 210),
+              ],
               const SizedBox(height: 8),
               _buildFormRow([
                 DropdownButtonFormField<String>(

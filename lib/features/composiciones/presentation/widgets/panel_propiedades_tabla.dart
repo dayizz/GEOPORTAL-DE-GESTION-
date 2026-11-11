@@ -1,162 +1,386 @@
+import 'dart:math' as math;
 import 'panel_seccion_colapsable.dart';
 import 'package:flutter/material.dart';
+import '../../models/elemento_composicion.dart';
+import 'color_swatch_picker.dart';
+import 'panel_propiedades_texto.dart' show composicionesFuentes;
+import 'tabla_widget.dart';
+import '../../utils/tabla_ops.dart';
 
-class PanelPropiedadesTabla extends StatefulWidget {
+const _opcionesEstiloLinea = [
+  (EstiloLinea.continua, 'Continua'),
+  (EstiloLinea.segmentada, 'Segmentada'),
+  (EstiloLinea.punteada, 'Punteada'),
+  (EstiloLinea.lineaPunto, 'Línea-punto'),
+];
+
+const _opcionesAlineacion = [
+  (AlineacionTexto.izquierda, Icons.format_align_left, 'Izquierda'),
+  (AlineacionTexto.centro, Icons.format_align_center, 'Centro'),
+  (AlineacionTexto.derecha, Icons.format_align_right, 'Derecha'),
+];
+
+const _titulo = TextStyle(fontSize: 12, fontWeight: FontWeight.w600);
+
+/// Panel de propiedades para [TipoElemento.tabla]. El contenido se escribe
+/// directo en las celdas del lienzo; aquí se ajustan filas/columnas, los
+/// bordes de la tabla y el estilo (relleno y texto) de las celdas
+/// [seleccion]adas o en edición.
+class PanelPropiedadesTabla extends StatelessWidget {
   const PanelPropiedadesTabla({
     super.key,
-    this.inicial,
+    required this.elemento,
+    required this.seleccion,
     required this.onChanged,
+    required this.onSeleccionChanged,
   });
-  final ValueChanged<List<List<String>>> onChanged;
-  final List<List<String>>? inicial;
-  @override
-  State<PanelPropiedadesTabla> createState() => _PanelPropiedadesTablaState();
-}
+  final ElementoComposicion elemento;
+  final Set<CeldaTabla> seleccion;
+  final ValueChanged<ElementoComposicion Function(ElementoComposicion)> onChanged;
+  // Al insertar/eliminar filas o columnas la selección se reubica.
+  final ValueChanged<Set<CeldaTabla>> onSeleccionChanged;
 
-class _PanelPropiedadesTablaState extends State<PanelPropiedadesTabla> {
-  late List<List<TextEditingController>> celdas;
-  @override
-  void initState() {
-    super.initState();
-    final datos = widget.inicial?.isNotEmpty == true
-        ? widget.inicial!
-        : [
-            ['Columna 1', 'Columna 2', 'Columna 3'],
-            ['', '', ''],
-            ['', '', ''],
-          ];
-    final columnas = datos.fold<int>(
-      1,
-      (n, fila) => fila.length > n ? fila.length : n,
-    );
-    celdas = datos
-        .map(
-          (fila) => List.generate(
-            columnas,
-            (j) => TextEditingController(text: j < fila.length ? fila[j] : ''),
-          ),
-        )
-        .toList();
+  Set<int> get _filasSel => {for (final c in seleccion) c.$1};
+  Set<int> get _columnasSel => {for (final c in seleccion) c.$2};
+
+  void _insertarFila({required bool abajo}) {
+    final i = abajo ? _filasSel.reduce(math.max) + 1 : _filasSel.reduce(math.min);
+    onChanged((e) => insertarFilaTabla(e, i));
+    onSeleccionChanged({for (final (f, c) in seleccion) (f >= i ? f + 1 : f, c)});
   }
 
-  @override
-  void dispose() {
-    for (final fila in celdas) {
-      for (final celda in fila) {
-        celda.dispose();
-      }
+  void _insertarColumna({required bool derecha}) {
+    final j = derecha ? _columnasSel.reduce(math.max) + 1 : _columnasSel.reduce(math.min);
+    onChanged((e) => insertarColumnaTabla(e, j));
+    onSeleccionChanged({for (final (f, c) in seleccion) (f, c >= j ? c + 1 : c)});
+  }
+
+  void _eliminarFilas() {
+    final filas = _filasSel;
+    onChanged((e) => eliminarFilasTabla(e, filas));
+    onSeleccionChanged({});
+  }
+
+  void _eliminarColumnas() {
+    final columnas = _columnasSel;
+    onChanged((e) => eliminarColumnasTabla(e, columnas));
+    onSeleccionChanged({});
+  }
+
+  /// Aplica [cambio] (solo los campos no nulos) a cada celda seleccionada.
+  void _aplicarEstilo(EstiloCeldaTabla cambio) => onChanged((e) {
+    final estilos = {...e.tablaEstilosCelda};
+    for (final (f, c) in seleccion) {
+      final clave = EstiloCeldaTabla.claveCelda(f, c);
+      estilos[clave] = cambio.sobre(estilos[clave] ?? const EstiloCeldaTabla());
     }
-    super.dispose();
+    return e.copyWith(tablaEstilosCelda: estilos);
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        _seccionFilasColumnas(),
+        if (seleccion.isNotEmpty) _seccionTamanoCelda(),
+        _seccionBordes(),
+        ..._seccionesCeldas(),
+      ],
+    );
   }
 
-  void _emitir() => widget.onChanged(
-    celdas.map((fila) => fila.map((c) => c.text).toList()).toList(),
-  );
-  @override
-  Widget build(BuildContext context) => Column(
-    children: [
-      PanelSeccionColapsable(
-        titulo: 'Filas y columnas',
-        icono: Icons.table_chart_outlined,
-        children: [
-          const Text('La primera fila se muestra como encabezado.'),
-          Wrap(
-            spacing: 8,
-            children: [
-              TextButton(
-                onPressed: () {
-                  setState(
-                    () => celdas.add(
-                      List.generate(
-                        celdas.first.length,
-                        (_) => TextEditingController(),
-                      ),
-                    ),
-                  );
-                  _emitir();
-                },
-                child: const Text('+ Fila'),
-              ),
-              TextButton(
-                onPressed: () {
-                  setState(() {
-                    for (final fila in celdas) {
-                      fila.add(TextEditingController());
+  Widget _seccionFilasColumnas() {
+    final filas = elemento.tablaCeldas.length;
+    final columnas = columnasTabla(elemento.tablaCeldas);
+    final haySel = seleccion.isNotEmpty;
+    return PanelSeccionColapsable(
+      titulo: 'Filas y columnas',
+      icono: Icons.table_chart_outlined,
+      children: [
+        const Text(
+          'Doble clic en una celda para escribir. Clic para seleccionarla, '
+          'Shift+clic para un rango. '
+          'Arrastra las líneas entre columnas o filas para cambiar su tamaño.',
+          style: TextStyle(fontSize: 12, color: Colors.black54),
+        ),
+        if (!haySel) ...[
+          const SizedBox(height: 6),
+          const Text(
+            'Selecciona una celda para insertar o eliminar filas y columnas junto a ella.',
+            style: TextStyle(fontSize: 12, color: Colors.black87),
+          ),
+        ],
+        const SizedBox(height: 6),
+        const Text('Insertar fila', style: _titulo),
+        Row(children: [
+          Expanded(child: _botonAccion(Icons.vertical_align_top, 'Arriba',
+              haySel ? () => _insertarFila(abajo: false) : null)),
+          Expanded(child: _botonAccion(Icons.vertical_align_bottom, 'Abajo',
+              haySel ? () => _insertarFila(abajo: true) : null)),
+        ]),
+        const SizedBox(height: 4),
+        const Text('Insertar columna', style: _titulo),
+        Row(children: [
+          Expanded(child: _botonAccion(Icons.keyboard_tab_rounded, 'Izquierda',
+              haySel ? () => _insertarColumna(derecha: false) : null, espejo: true)),
+          Expanded(child: _botonAccion(Icons.keyboard_tab_rounded, 'Derecha',
+              haySel ? () => _insertarColumna(derecha: true) : null)),
+        ]),
+        const SizedBox(height: 4),
+        const Text('Eliminar', style: _titulo),
+        Row(children: [
+          Expanded(child: _botonAccion(Icons.delete_sweep_outlined,
+              _filasSel.length > 1 ? 'Filas' : 'Fila',
+              haySel && _filasSel.length < filas ? _eliminarFilas : null)),
+          Expanded(child: _botonAccion(Icons.delete_sweep_outlined,
+              _columnasSel.length > 1 ? 'Columnas' : 'Columna',
+              haySel && _columnasSel.length < columnas ? _eliminarColumnas : null)),
+        ]),
+        const SizedBox(height: 8),
+      ],
+    );
+  }
+
+  Widget _botonAccion(IconData icono, String texto, VoidCallback? onPressed, {bool espejo = false}) {
+    Widget icon = Icon(icono, size: 18);
+    if (espejo) icon = Transform.flip(flipX: true, child: icon);
+    return Align(
+      alignment: Alignment.centerLeft,
+      child: TextButton.icon(
+        onPressed: onPressed,
+        icon: icon,
+        label: Text(texto, style: const TextStyle(fontSize: 12), overflow: TextOverflow.ellipsis),
+        style: TextButton.styleFrom(visualDensity: VisualDensity.compact),
+      ),
+    );
+  }
+
+  /// Ancho de las columnas y alto de las filas de las celdas
+  /// seleccionadas, en mm. Cambiarlos hace crecer o encoger la tabla.
+  Widget _seccionTamanoCelda() {
+    final anchos = anchosColumnaMm(elemento);
+    final altos = altosFilaMm(elemento);
+    final columnas = _columnasSel.where((c) => c < anchos.length).toList()..sort();
+    final filas = _filasSel.where((f) => f < altos.length).toList()..sort();
+    if (columnas.isEmpty || filas.isEmpty) return const SizedBox.shrink();
+    final ancho = anchos[columnas.first];
+    final alto = altos[filas.first];
+    final claveSel = seleccion.map((c) => '${c.$1}_${c.$2}').join(',');
+    return PanelSeccionColapsable(
+      titulo: 'Tamaño de celda',
+      icono: Icons.photo_size_select_small,
+      children: [
+        Row(
+          children: [
+            Expanded(
+              child: TextFormField(
+                key: ValueKey('tabla_ancho_${elemento.id}_${claveSel}_${ancho.toStringAsFixed(1)}'),
+                initialValue: ancho.toStringAsFixed(1),
+                keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                decoration: const InputDecoration(labelText: 'Ancho de columna', suffixText: 'mm', isDense: true),
+                onFieldSubmitted: (v) {
+                  final mm = double.tryParse(v.replaceAll(',', '.'));
+                  if (mm == null || mm <= 0) return;
+                  onChanged((e) {
+                    for (final c in columnas) {
+                      e = fijarAnchoColumna(e, c, mm);
                     }
+                    return e;
                   });
-                  _emitir();
                 },
-                child: const Text('+ Columna'),
               ),
-              TextButton(
-                onPressed: celdas.length <= 1
-                    ? null
-                    : () {
-                        setState(() {
-                          for (final c in celdas.removeLast()) {
-                            c.dispose();
-                          }
-                        });
-                        _emitir();
-                      },
-                child: const Text('Quitar última fila'),
+            ),
+            const SizedBox(width: 8),
+            Expanded(
+              child: TextFormField(
+                key: ValueKey('tabla_alto_${elemento.id}_${claveSel}_${alto.toStringAsFixed(1)}'),
+                initialValue: alto.toStringAsFixed(1),
+                keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                decoration: const InputDecoration(labelText: 'Alto de fila', suffixText: 'mm', isDense: true),
+                onFieldSubmitted: (v) {
+                  final mm = double.tryParse(v.replaceAll(',', '.'));
+                  if (mm == null || mm <= 0) return;
+                  onChanged((e) {
+                    for (final f in filas) {
+                      e = fijarAltoFila(e, f, mm);
+                    }
+                    return e;
+                  });
+                },
               ),
-              TextButton(
-                onPressed: celdas.first.length <= 1
-                    ? null
-                    : () {
-                        setState(() {
-                          for (final fila in celdas) {
-                            fila.removeLast().dispose();
-                          }
-                        });
-                        _emitir();
-                      },
-                child: const Text('Quitar última columna'),
-              ),
-            ],
+            ),
+          ],
+        ),
+        const SizedBox(height: 4),
+        const Text('Escribe la medida y presiona Enter.',
+            style: TextStyle(fontSize: 11, color: Colors.black54)),
+        const SizedBox(height: 4),
+        _botonAccion(Icons.view_column_outlined, 'Igualar ancho de todas las columnas',
+            () => onChanged((e) => e.copyWith(tablaAnchosColumna: const []))),
+        _botonAccion(Icons.table_rows_outlined, 'Igualar alto de todas las filas',
+            () => onChanged((e) => e.copyWith(tablaAltosFila: const []))),
+        const SizedBox(height: 8),
+      ],
+    );
+  }
+
+  Widget _seccionBordes() {
+    final grosor = elemento.tablaBordeGrosor ?? 1;
+    return PanelSeccionColapsable(
+      titulo: 'Bordes',
+      icono: Icons.border_all,
+      children: [
+        DropdownButtonFormField<EstiloLinea>(
+          key: ValueKey('tabla_borde_${elemento.id}_${elemento.tablaBordeEstilo?.name}'),
+          initialValue: elemento.tablaBordeEstilo ?? EstiloLinea.continua,
+          decoration: const InputDecoration(labelText: 'Tipo de línea', isDense: true),
+          items: [
+            for (final (estilo, nombre) in _opcionesEstiloLinea)
+              DropdownMenuItem(value: estilo, child: Text(nombre, style: const TextStyle(fontSize: 12))),
+          ],
+          onChanged: (v) {
+            if (v != null) onChanged((e) => e.copyWith(tablaBordeEstilo: v));
+          },
+        ),
+        const SizedBox(height: 8),
+        Text('Grosor: ${grosor.toStringAsFixed(1)}', style: _titulo),
+        Slider(
+          value: grosor.clamp(0.5, 6),
+          min: 0.5,
+          max: 6,
+          divisions: 11,
+          onChanged: (v) => onChanged((e) => e.copyWith(tablaBordeGrosor: v)),
+        ),
+        ColorSwatchPicker(
+          label: 'Color de línea',
+          colorHex: elemento.tablaBordeColorHex ?? '#757575',
+          onChanged: (v) {
+            if (v != null) onChanged((e) => e.copyWith(tablaBordeColorHex: v));
+          },
+        ),
+        const SizedBox(height: 8),
+      ],
+    );
+  }
+
+  List<Widget> _seccionesCeldas() {
+    if (seleccion.isEmpty) {
+      return const [
+        PanelSeccionColapsable(
+          titulo: 'Celdas',
+          icono: Icons.grid_on,
+          children: [
+            Text(
+              'Selecciona una o varias celdas en la tabla para cambiar su '
+              'relleno y estilo de texto.',
+              style: TextStyle(fontSize: 12, color: Colors.black54),
+            ),
+            SizedBox(height: 8),
+          ],
+        ),
+      ];
+    }
+    // Los controles muestran el estilo de la primera celda seleccionada.
+    final (f0, c0) = (seleccion.toList()..sort((a, b) => a.$1 != b.$1 ? a.$1 - b.$1 : a.$2 - b.$2)).first;
+    final actual = EstiloCeldaTabla.efectivo(elemento.tablaEstilosCelda, f0, c0);
+    final claveSel = seleccion.map((c) => '${c.$1}_${c.$2}').join(',');
+    final n = seleccion.length;
+    return [
+      PanelSeccionColapsable(
+        titulo: 'Relleno de celda',
+        icono: Icons.format_color_fill,
+        children: [
+          Text(n == 1 ? '1 celda seleccionada' : '$n celdas seleccionadas',
+              style: const TextStyle(fontSize: 12, color: Colors.black54)),
+          const SizedBox(height: 8),
+          ColorSwatchPicker(
+            label: 'Color de relleno',
+            colorHex: actual.rellenoHex,
+            onChanged: (v) {
+              if (v != null) _aplicarEstilo(EstiloCeldaTabla(rellenoHex: v));
+            },
           ),
           const SizedBox(height: 8),
         ],
       ),
       PanelSeccionColapsable(
-        titulo: 'Contenido',
-        icono: Icons.edit_note,
+        titulo: 'Estilo de texto',
+        icono: Icons.text_fields,
         children: [
-          SizedBox(
-            height: 300,
-            child: SingleChildScrollView(
-              child: SingleChildScrollView(
-                scrollDirection: Axis.horizontal,
-                child: Column(
-                  children: [
-                    for (final fila in celdas)
-                      Row(
-                        children: [
-                          for (final celda in fila)
-                            SizedBox(
-                              width: 180,
-                              child: Padding(
-                                padding: const EdgeInsets.all(3),
-                                child: TextField(
-                                  controller: celda,
-                                  onChanged: (_) => _emitir(),
-                                  decoration: const InputDecoration(
-                                    border: OutlineInputBorder(),
-                                    isDense: true,
-                                  ),
-                                ),
-                              ),
-                            ),
-                        ],
-                      ),
-                  ],
-                ),
-              ),
-            ),
+          DropdownButtonFormField<String>(
+            key: ValueKey('tabla_fuente_${elemento.id}_${claveSel}_${actual.fuente}'),
+            initialValue: actual.fuente,
+            isExpanded: true,
+            decoration: const InputDecoration(labelText: 'Tipo de letra', isDense: true),
+            items: {...composicionesFuentes, actual.fuente!}
+                .map((f) => DropdownMenuItem(value: f, child: Text(f, style: const TextStyle(fontSize: 12))))
+                .toList(),
+            onChanged: (v) {
+              if (v != null) _aplicarEstilo(EstiloCeldaTabla(fuente: v));
+            },
           ),
+          const SizedBox(height: 8),
+          TextFormField(
+            key: ValueKey('tabla_tamano_${elemento.id}_$claveSel'),
+            initialValue: _formatoNumero(actual.tamano!),
+            keyboardType: const TextInputType.numberWithOptions(decimal: true),
+            decoration: const InputDecoration(labelText: 'Tamaño', suffixText: 'px', isDense: true),
+            onChanged: (v) {
+              final t = double.tryParse(v.replaceAll(',', '.'));
+              if (t != null && t > 0) _aplicarEstilo(EstiloCeldaTabla(tamano: t.clamp(1, 96)));
+            },
+          ),
+          const SizedBox(height: 12),
+          const Text('Estilo', style: _titulo),
+          const SizedBox(height: 6),
+          Wrap(
+            spacing: 6,
+            runSpacing: 6,
+            children: [
+              _botonEstilo(Icons.format_bold, 'Negrita', actual.negrita!,
+                  () => _aplicarEstilo(EstiloCeldaTabla(negrita: !actual.negrita!))),
+              _botonEstilo(Icons.format_italic, 'Cursiva', actual.cursiva!,
+                  () => _aplicarEstilo(EstiloCeldaTabla(cursiva: !actual.cursiva!))),
+              _botonEstilo(Icons.format_underlined, 'Subrayado', actual.subrayado!,
+                  () => _aplicarEstilo(EstiloCeldaTabla(subrayado: !actual.subrayado!))),
+              const SizedBox(width: 8),
+              for (final (alineacion, icono, nombre) in _opcionesAlineacion)
+                _botonEstilo(icono, nombre, actual.alineacion == alineacion,
+                    () => _aplicarEstilo(EstiloCeldaTabla(alineacion: alineacion))),
+            ],
+          ),
+          const SizedBox(height: 12),
+          ColorSwatchPicker(
+            label: 'Color de texto',
+            colorHex: actual.colorHex,
+            onChanged: (v) {
+              if (v != null) _aplicarEstilo(EstiloCeldaTabla(colorHex: v));
+            },
+          ),
+          const SizedBox(height: 8),
         ],
       ),
-    ],
+    ];
+  }
+
+  Widget _botonEstilo(IconData icono, String nombre, bool activo, VoidCallback onTap) => Tooltip(
+    message: nombre,
+    child: InkWell(
+      borderRadius: BorderRadius.circular(6),
+      onTap: onTap,
+      child: Container(
+        width: 32,
+        height: 32,
+        decoration: BoxDecoration(
+          color: activo ? Colors.blueAccent.withValues(alpha: 0.15) : null,
+          border: Border.all(color: activo ? Colors.blueAccent : Colors.black26),
+          borderRadius: BorderRadius.circular(6),
+        ),
+        child: Icon(icono, size: 18, color: activo ? Colors.blueAccent : Colors.black87),
+      ),
+    ),
   );
 }
+
+String _formatoNumero(double v) => v == v.roundToDouble() ? v.toInt().toString() : v.toString();

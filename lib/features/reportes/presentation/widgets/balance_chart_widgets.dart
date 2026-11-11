@@ -17,15 +17,20 @@ Widget buildKpiPanel({
   required String value,
   required IconData icon,
   required Color color,
+  // `false` quita el relleno de la tarjeta (conserva borde, texto e
+  // icono); lo usan las gráficas "sin fondo" de Composiciones.
+  bool conFondo = true,
 }) {
   return Container(
     padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
     decoration: BoxDecoration(
-      gradient: LinearGradient(
-        colors: [color.withValues(alpha: 0.16), color.withValues(alpha: 0.05)],
-        begin: Alignment.topLeft,
-        end: Alignment.bottomRight,
-      ),
+      gradient: conFondo
+          ? LinearGradient(
+              colors: [color.withValues(alpha: 0.16), color.withValues(alpha: 0.05)],
+              begin: Alignment.topLeft,
+              end: Alignment.bottomRight,
+            )
+          : null,
       borderRadius: BorderRadius.circular(14),
       border: Border.all(color: color.withValues(alpha: 0.26)),
     ),
@@ -82,6 +87,7 @@ Widget buildAvanceDdvStatusBar({
   required int liberado,
   required int noLiberado,
   int negociacion = 0,
+  bool conFondo = true,
 }) {
   final totalSafe = total <= 0 ? 1 : total;
   final pctLiber = (liberado / totalSafe).clamp(0.0, 1.0);
@@ -92,7 +98,7 @@ Widget buildAvanceDdvStatusBar({
   return Container(
     padding: const EdgeInsets.all(14),
     decoration: BoxDecoration(
-      color: AppColors.surface,
+      color: conFondo ? AppColors.surface : null,
       borderRadius: BorderRadius.circular(14),
       border: Border.all(color: AppColors.border),
     ),
@@ -414,6 +420,7 @@ Widget buildTipoPropiedadCard({
   required String titulo,
   required List<Predio> predios,
   required NumberFormat fmtInt,
+  bool conFondo = true,
 }) {
   final total = predios.length;
   final identificados = predios.where((p) => p.identificacion).length;
@@ -424,7 +431,7 @@ Widget buildTipoPropiedadCard({
   return Container(
     padding: const EdgeInsets.all(16),
     decoration: BoxDecoration(
-      color: AppColors.surface,
+      color: conFondo ? AppColors.surface : null,
       borderRadius: BorderRadius.circular(14),
       border: Border.all(color: AppColors.border),
     ),
@@ -436,7 +443,7 @@ Widget buildTipoPropiedadCard({
         Container(
           padding: const EdgeInsets.all(12),
           decoration: BoxDecoration(
-            color: AppColors.surfaceVariant,
+            color: conFondo ? AppColors.surfaceVariant : null,
             borderRadius: BorderRadius.circular(10),
           ),
           child: Row(
@@ -555,11 +562,11 @@ Widget buildCadenamientoCelda(CadenamientoColumna columna, double ancho) {
   );
 }
 
-Widget buildCadenamientoFilaCard(CadenamientoFila fila) {
+Widget buildCadenamientoFilaCard(CadenamientoFila fila, {bool conFondo = true}) {
   const anchoCelda = 28.0;
   return Container(
     decoration: BoxDecoration(
-      color: Colors.white,
+      color: conFondo ? Colors.white : null,
       borderRadius: BorderRadius.circular(12),
       border: Border.all(color: AppColors.border),
     ),

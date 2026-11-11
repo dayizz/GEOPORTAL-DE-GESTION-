@@ -1,3 +1,5 @@
+import 'dart:convert';
+import 'dart:math' as math;
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
@@ -221,25 +223,39 @@ class _MapaViewportWidgetState extends State<MapaViewportWidget> {
       textScaler: MediaQuery.textScalerOf(context),
       maxLines: 1,
     )..layout();
-    final ancho = medida.width + estilo.bufferGrosor * 2 + 4;
-    final alto = medida.height + estilo.bufferGrosor * 2 + 4;
+    final buffer = estilo.bufferActivo ? estilo.bufferGrosor : 0.0;
+    final w = medida.width + buffer * 2 + 4;
+    final h = medida.height + buffer * 2 + 4;
     medida.dispose();
+    // El marcador debe contener la caja rotada para que no se recorte.
+    final rad = estilo.rotacion * math.pi / 180;
+    final cos = math.cos(rad).abs(), sin = math.sin(rad).abs();
+    final ancho = w * cos + h * sin;
+    final alto = w * sin + h * cos;
     return Marker(
       point: punto, width: ancho, height: alto, alignment: alignment,
       child: IgnorePointer(
-        child: Center(child: Stack(alignment: Alignment.center, children: [
-          if (estilo.bufferGrosor > 0)
+        // El texto se acomoda sin límite antes de rotarlo: sin el
+        // `OverflowBox` heredaba la caja rotada del marcador (a 90° es
+        // angosta) y se cortaba; tampoco se corta si la fuente termina de
+        // cargar y queda más ancha que la medida.
+        child: OverflowBox(
+            minWidth: 0, minHeight: 0,
+            maxWidth: double.infinity, maxHeight: double.infinity,
+            child: Transform.rotate(angle: rad,
+            child: Stack(alignment: Alignment.center, children: [
+          if (buffer > 0)
             Text(texto, maxLines: 1, style: fuente.copyWith(
               foreground: Paint()
                 ..style = PaintingStyle.stroke
                 ..strokeJoin = StrokeJoin.round
-                ..strokeWidth = estilo.bufferGrosor * 2
+                ..strokeWidth = buffer * 2
                 ..color = colorFromHex(estilo.bufferColorHex) ?? Colors.white,
             )),
           Text(texto, maxLines: 1, style: fuente.copyWith(
             color: colorFromHex(estilo.colorHex) ?? Colors.black,
           )),
-        ])),
+        ]))),
       ),
     );
   }
@@ -276,7 +292,16 @@ class _MapaViewportWidgetState extends State<MapaViewportWidget> {
     if (!widget.mostrarPks) return const [];
     final marcadores = <Marker>[];
     for (final feature in widget.pksFeatures) {
-      final geometry = feature['geometry'];
+      // La geometría puede venir como mapa o como texto JSON (igual que
+      // `_geometryAsMap` en `mapa_screen.dart`).
+      var geometry = feature['geometry'];
+      if (geometry is String) {
+        try {
+          geometry = jsonDecode(geometry);
+        } catch (_) {
+          continue;
+        }
+      }
       if (geometry is! Map) continue;
       final puntos = extractPointsFromGeometry(
         Map<String, dynamic>.from(geometry),

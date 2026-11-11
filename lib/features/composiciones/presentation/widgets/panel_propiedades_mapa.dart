@@ -127,6 +127,12 @@ class PanelPropiedadesMapa extends StatelessWidget {
           if (v.isFinite && v > 0) onChanged(estilo.copyWith(tamano: v.clamp(1, 96)));
         }),
       const SizedBox(height: 8),
+      _filaNumerica(key: ValueKey('rotacion_${capa}_${elemento.id}'),
+        label: 'Rotación', valorTexto: estilo.rotacion.toString(),
+        sufijo: '°', onChanged: (v) {
+          if (v.isFinite) onChanged(estilo.copyWith(rotacion: v % 360));
+        }),
+      const SizedBox(height: 8),
       DropdownButtonFormField<String>(
         key: ValueKey('fuente_${capa}_${elemento.id}_${estilo.fuente}'),
         initialValue: estilo.fuente, isExpanded: true,
@@ -146,19 +152,29 @@ class PanelPropiedadesMapa extends StatelessWidget {
         },
       ),
       const SizedBox(height: 8),
-      ColorSwatchPicker(
-        label: 'Color de buffer',
-        colorHex: estilo.bufferColorHex,
-        onChanged: (v) {
-          if (v != null) onChanged(estilo.copyWith(bufferColorHex: v));
-        },
-      ),
-      const SizedBox(height: 8),
-      _filaNumerica(key: ValueKey('buffer_${capa}_${elemento.id}'),
-        label: 'Grosor de buffer', valorTexto: estilo.bufferGrosor.toString(),
-        sufijo: 'px', onChanged: (v) {
-          if (v.isFinite && v >= 0) onChanged(estilo.copyWith(bufferGrosor: v.clamp(0, 20)));
-        }),
+      Row(children: [
+        const Expanded(child: Text('Usar buffer', style: TextStyle(fontSize: 12))),
+        Switch(
+          value: estilo.bufferActivo,
+          onChanged: (v) => onChanged(estilo.copyWith(bufferActivo: v)),
+        ),
+      ]),
+      if (estilo.bufferActivo) ...[
+        const SizedBox(height: 8),
+        ColorSwatchPicker(
+          label: 'Color de buffer',
+          colorHex: estilo.bufferColorHex,
+          onChanged: (v) {
+            if (v != null) onChanged(estilo.copyWith(bufferColorHex: v));
+          },
+        ),
+        const SizedBox(height: 8),
+        _filaNumerica(key: ValueKey('buffer_${capa}_${elemento.id}'),
+          label: 'Grosor de buffer', valorTexto: estilo.bufferGrosor.toString(),
+          sufijo: 'px', onChanged: (v) {
+            if (v.isFinite && v >= 0) onChanged(estilo.copyWith(bufferGrosor: v.clamp(0, 20)));
+          }),
+      ],
     ]);
   }
 
@@ -393,15 +409,8 @@ class PanelPropiedadesMapa extends StatelessWidget {
                 onChanged: (v) {
                   if (v != null) onBordeColorChanged(v);
                 },
-              ),
-              const SizedBox(height: 12),
-              _filaNumerica(
-                key: ValueKey('opacidad_borde_${elemento.id}'),
-                label: 'Opacidad del borde',
-                valorTexto: (bordeOpacidadActual * 100).round().toString(),
-                sufijo: '%',
-                onChanged: (v) =>
-                    onBordeOpacidadChanged((v / 100).clamp(0, 1)),
+                opacidad: bordeOpacidadActual,
+                onOpacidadChanged: onBordeOpacidadChanged,
               ),
             ],
           ],

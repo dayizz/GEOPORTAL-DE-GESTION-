@@ -3,6 +3,7 @@ import '../../../estructura/models/proyecto_item.dart';
 import '../../../predios/models/predio.dart';
 import '../../models/hoja.dart';
 import '../../utils/color_hex.dart';
+import '../../utils/datos_grafica.dart';
 import 'elemento_contenido.dart';
 import 'numero_pagina_widget.dart';
 
@@ -25,6 +26,7 @@ class HojaExportWidget extends StatelessWidget {
     this.predios = const [],
     this.pksFeatures = const [],
     this.proyectoItem,
+    this.datosGrafica,
   });
 
   final Hoja hoja;
@@ -35,6 +37,7 @@ class HojaExportWidget extends StatelessWidget {
   final List<Predio> predios;
   final List<Map<String, dynamic>> pksFeatures;
   final ProyectoItem? proyectoItem;
+  final ResolverDatosGrafica? datosGrafica;
 
   @override
   Widget build(BuildContext context) {
@@ -46,7 +49,7 @@ class HojaExportWidget extends StatelessWidget {
       width: anchoPx,
       height: altoPx,
       child: Container(
-        color: (colorFromHex(hoja.colorFondoHex) ?? Colors.white).withValues(alpha: hoja.opacidadFondo.clamp(0, 1)),
+        color: aplicarOpacidad(colorFromHex(hoja.colorFondoHex) ?? Colors.white, hoja.opacidadFondo),
         child: Stack(
           clipBehavior: Clip.none,
           children: [
@@ -66,6 +69,7 @@ class HojaExportWidget extends StatelessWidget {
                       hojaElementos: hoja.elementos,
                       scale: scale,
                       proyectoItem: proyectoItem,
+                      datosGrafica: datosGrafica,
                     ),
                   ),
                 ),

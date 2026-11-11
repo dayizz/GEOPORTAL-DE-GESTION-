@@ -564,7 +564,9 @@ class _TablaScreenState extends ConsumerState<TablaScreen> {
         'EJIDO', 'PROPIETARIO', 'KM INICIO', 'KM FIN', 'KM EFECTIVOS',
         'SUPERFICIE M2', 'COP', 'FECHA DE LIBERACION', 'EXPEDIENTE', 'DWG', 'PLANO PDF', 'BDT',
         'ESTATUS', 'LIBERACIÓN',
-        'IDENTIFICACION', 'LEVANTAMIENTO', 'NEGOCIACION', 'SUPERFICIE FIRMADA', 'OBSERVACIONES', 'FECHA LIMITE DE PAGO',
+        'IDENTIFICACION', 'LEVANTAMIENTO', 'NEGOCIACION', 'ANUENCIA',
+        if (_proyectoActual == 'TIG') ...['SOCIALIZACION', 'CAMINAMIENTO'],
+        'SUPERFICIE FIRMADA', 'OBSERVACIONES', 'FECHA LIMITE DE PAGO',
         'RESPONSABLE JURIDICO',
       ];
       
@@ -601,6 +603,11 @@ class _TablaScreenState extends ConsumerState<TablaScreen> {
           p.identificacion ? 'SI' : 'NO',
           p.levantamiento ? 'SI' : 'NO',
           p.negociacion ? 'SI' : 'NO',
+          p.anuencia ? 'SI' : 'NO',
+          if (_proyectoActual == 'TIG') ...[
+            p.socializacion ? 'SI' : 'NO',
+            p.caminamiento ?? '',
+          ],
           p.superficieFirmada?.toString() ?? '',
           p.situacionSocial ?? '',
           p.fechaLimitePago != null
@@ -953,7 +960,8 @@ class _TablaScreenState extends ConsumerState<TablaScreen> {
       );
     }
 
-    const rawWidths = <double>[
+    final esTig = _proyectoActual == 'TIG';
+    final rawWidths = <double>[
        48, // ID (numeracion por proyecto)
        48, // ACCIONES (ver en mapa / editar / eliminar)
       180, // CLAVE
@@ -971,6 +979,11 @@ class _TablaScreenState extends ConsumerState<TablaScreen> {
        54, // IDENTIFICACION
        54, // LEVANTAMIENTO
        54, // NEGOCIACION
+       54, // ANUENCIA
+      if (esTig) ...[
+         90, // SOCIALIZACION (solo TIG)
+        110, // CAMINAMIENTO (solo TIG)
+      ],
        95, // SUPERFICIE FIRMADA
       110, // ESTATUS
        90, // LIBERACION
@@ -985,10 +998,11 @@ class _TablaScreenState extends ConsumerState<TablaScreen> {
       150, // OBSERVACIONES
     ];
 
-    const headers = <String>[
+    final headers = <String>[
       'ID', 'ACCIONES', 'CLAVE', 'PROPIETARIO', 'T/F/S', 'TIPO DE\nPROPIEDAD',
       'TIPO DE\nINFRAESTRUCTURA', 'ESTADO', 'MUNICIPIO', 'EJIDO', 'KM INICIO', 'KM FIN',
-      'KM EFECTIVOS', 'M²', 'IDENTIFICACION', 'LEVANTAMIENTO', 'NEGOCIACION',
+      'KM EFECTIVOS', 'M²', 'IDENTIFICACION', 'LEVANTAMIENTO', 'NEGOCIACION', 'ANUENCIA',
+      if (esTig) ...['SOCIALIZACION', 'CAMINAMIENTO'],
       'SUPERFICIE\nFIRMADA', 'ESTATUS', 'LIBERACIÓN', 'TIPO DE\nLIBERACION',
       'FECHA DE\nLIBERACION', 'RESPONSABLE\nJURIDICO', 'FECHA DE PAGO',
       'EXPEDIENTE', 'DWG', 'PLANO', 'BDT', 'OBSERVACIONES',
@@ -1724,6 +1738,9 @@ class _TablaScreenState extends ConsumerState<TablaScreen> {
   Widget _buildDataRow(Predio p, List<double> widths, int idx, int? idProyecto, bool empalmeKm) {
     final isEven = idx % 2 == 0;
     final tipoColor = AppColors.tipoPropiedadColor(p.tipoPropiedad);
+    // TIG agrega SOCIALIZACION y CAMINAMIENTO despues de ANUENCIA.
+    final esTig = _proyectoActual == 'TIG';
+    final o = esTig ? 2 : 0;
     return Container(
       height: 38,
       decoration: BoxDecoration(
@@ -1800,27 +1817,53 @@ class _TablaScreenState extends ConsumerState<TablaScreen> {
               ),
             ),
           ),
+          // ANUENCIA (tappable)
+          _tappableBoolCell(
+            p.anuencia, widths[17],
+            onTap: () => _savePredio(
+              p,
+              p.copyWith(
+                anuencia: !p.anuencia,
+                updatedAt: DateTime.now(),
+              ),
+            ),
+          ),
+          if (esTig) ...[
+            // SOCIALIZACION (tappable, solo TIG)
+            _tappableBoolCell(
+              p.socializacion, widths[18],
+              onTap: () => _savePredio(
+                p,
+                p.copyWith(
+                  socializacion: !p.socializacion,
+                  updatedAt: DateTime.now(),
+                ),
+              ),
+            ),
+            // CAMINAMIENTO (solo TIG; se edita desde el formulario)
+            _dataCell(p.caminamiento ?? '-', widths[19]),
+          ],
           // SUPERFICIE FIRMADA
-          _numCell(p.superficieFirmada, widths[17], decimals: 2),
+          _numCell(p.superficieFirmada, widths[18 + o], decimals: 2),
           // ESTATUS (rango detallado)
-          _rangoEstatusCell(p, widths[18]),
+          _rangoEstatusCell(p, widths[19 + o]),
           // LIBERACIÓN (estatus simplificado)
-          _estatusCell(p, widths[19]),
+          _estatusCell(p, widths[20 + o]),
           // TIPO DE LIBERACION
-          _dataCell(p.tipoLiberacion ?? '-', widths[20]),
+          _dataCell(p.tipoLiberacion ?? '-', widths[21 + o]),
           // FECHA DE LIBERACION
-          _fechaLiberacionCell(p, widths[21]),
+          _fechaLiberacionCell(p, widths[22 + o]),
           // RESPONSABLE JURIDICO
-          _dataCell(p.responsableJuridico ?? '-', widths[22]),
+          _dataCell(p.responsableJuridico ?? '-', widths[23 + o]),
           // FECHA DE PAGO
-          _fechaLimitePagoCell(p, widths[23]),
+          _fechaLimitePagoCell(p, widths[24 + o]),
           // DOCUMENTOS
-          _archivoLinkCell(p, widths[24], campo: 'copdot'),
-          _archivoLinkCell(p, widths[25], campo: 'dwg'),
-          _archivoLinkCell(p, widths[26], campo: 'planoPdf'),
-          _archivoLinkCell(p, widths[27], campo: 'bdt'),
+          _archivoLinkCell(p, widths[25 + o], campo: 'copdot'),
+          _archivoLinkCell(p, widths[26 + o], campo: 'dwg'),
+          _archivoLinkCell(p, widths[27 + o], campo: 'planoPdf'),
+          _archivoLinkCell(p, widths[28 + o], campo: 'bdt'),
           // OBSERVACIONES
-          _dataCell(p.situacionSocial ?? '-', widths[28]),
+          _dataCell(p.situacionSocial ?? '-', widths[29 + o]),
         ],
       ),
     );

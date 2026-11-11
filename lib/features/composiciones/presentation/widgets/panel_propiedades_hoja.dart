@@ -234,23 +234,9 @@ class PanelPropiedadesHoja extends StatelessWidget {
               label: 'Color de hoja',
               colorHex: hoja.colorFondoHex ?? '#FFFFFF',
               onChanged: (v) => onChanged(hoja.copyWith(colorFondoHex: v)),
-              trailing: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Text(
-                    'Opacidad: ${(hoja.opacidadFondo * 100).round()}%',
-                    style: const TextStyle(fontSize: 12),
-                  ),
-                  Slider(
-                    value: hoja.opacidadFondo.clamp(0, 1),
-                    min: 0,
-                    max: 1,
-                    divisions: 100,
-                    onChanged: (v) =>
-                        onChanged(hoja.copyWith(opacidadFondo: v)),
-                  ),
-                ],
-              ),
+              opacidad: hoja.opacidadFondo,
+              onOpacidadChanged: (v) =>
+                  onChanged(hoja.copyWith(opacidadFondo: v)),
             ),
           ],
         ),

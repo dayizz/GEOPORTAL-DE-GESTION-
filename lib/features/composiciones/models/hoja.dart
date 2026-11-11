@@ -54,6 +54,26 @@ extension TamanoHojaDimensiones on TamanoHoja {
   }
 }
 
+/// Carpeta del panel de capas: agrupa elementos (`carpetaId`) solo para
+/// organizarlos; no cambia cómo se dibujan.
+class CarpetaCapas {
+  const CarpetaCapas({required this.id, required this.nombre, this.expandida = true});
+  final String id;
+  final String nombre;
+  final bool expandida;
+
+  CarpetaCapas copyWith({String? nombre, bool? expandida}) =>
+      CarpetaCapas(id: id, nombre: nombre ?? this.nombre, expandida: expandida ?? this.expandida);
+
+  Map<String, dynamic> toMap() => {'id': id, 'nombre': nombre, 'expandida': expandida};
+
+  factory CarpetaCapas.fromMap(Map map) => CarpetaCapas(
+    id: (map['id'] as String?) ?? const Uuid().v4(),
+    nombre: (map['nombre'] as String?) ?? 'Carpeta',
+    expandida: (map['expandida'] as bool?) ?? true,
+  );
+}
+
 /// Una hoja/lámina dentro de una [Composicion]. `elementos` está ordenada
 /// por z-index (índice 0 = fondo, último = frente).
 enum PosicionPagina {
@@ -108,6 +128,7 @@ class Hoja {
   final double margenMm;
   final String? colorFondoHex; // null = sin fondo
   final List<ElementoComposicion> elementos;
+  final List<CarpetaCapas> carpetas;
 
   const Hoja({
     required this.id,
@@ -127,6 +148,7 @@ class Hoja {
     this.margenMm = 10,
     this.colorFondoHex,
     this.elementos = const [],
+    this.carpetas = const [],
   });
 
   factory Hoja.nueva({
@@ -182,6 +204,7 @@ class Hoja {
     bool clearColorFondo = false,
     String? colorFondoHex,
     List<ElementoComposicion>? elementos,
+    List<CarpetaCapas>? carpetas,
   }) {
     return Hoja(
       id: id,
@@ -203,6 +226,7 @@ class Hoja {
           ? null
           : (colorFondoHex ?? this.colorFondoHex),
       elementos: elementos ?? this.elementos,
+      carpetas: carpetas ?? this.carpetas,
     );
   }
 
@@ -224,6 +248,7 @@ class Hoja {
     'margen_mm': margenMm,
     'color_fondo': colorFondoHex,
     'elementos': elementos.map((e) => e.toMap()).toList(),
+    'carpetas': carpetas.map((c) => c.toMap()).toList(),
   };
 
   factory Hoja.fromMap(Map<String, dynamic> map) {
@@ -255,6 +280,10 @@ class Hoja {
             ),
           )
           .toList(),
+      carpetas: [
+        for (final c in map['carpetas'] as List<dynamic>? ?? const [])
+          CarpetaCapas.fromMap(c as Map),
+      ],
     );
   }
 }
