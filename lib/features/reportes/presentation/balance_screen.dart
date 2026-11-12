@@ -108,6 +108,7 @@ class _BalanceScreenState extends ConsumerState<BalanceScreen> {
     }
 
     final kpi = SizedBox(
+      width: 190,
       height: 96,
       child: buildKpiPanel(
         label: 'Total de registros en investigación',
@@ -140,7 +141,7 @@ class _BalanceScreenState extends ConsumerState<BalanceScreen> {
           return Row(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Expanded(child: kpi),
+              kpi,
               const SizedBox(width: 24),
               Expanded(child: caminamientoBlock),
               const SizedBox(width: 24),
@@ -151,7 +152,7 @@ class _BalanceScreenState extends ConsumerState<BalanceScreen> {
         return Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            kpi,
+            Align(alignment: Alignment.centerLeft, child: kpi),
             const SizedBox(height: 20),
             caminamientoBlock,
             const SizedBox(height: 20),
