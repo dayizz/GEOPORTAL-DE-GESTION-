@@ -213,7 +213,7 @@ class _GeoportalAppState extends ConsumerState<GeoportalApp>
     AppColors.darkModeEnabled = isDarkMode;
 
     return MaterialApp.router(
-      title: 'Geoportal Predios',
+      title: 'GEOPORTAL DE GESTIÓN',
       debugShowCheckedModeBanner: false,
       theme: AppTheme.light,
       darkTheme: AppTheme.dark,

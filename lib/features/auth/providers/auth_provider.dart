@@ -429,6 +429,7 @@ class AuthRepository {
     String email,
     String password, {
     required String approvalCode,
+    String? nombre,
   }) async {
     if (localOnlyAuthMode) {
       throw Exception('Registro deshabilitado en modo local.');
@@ -494,11 +495,20 @@ class AuthRepository {
       rethrow;
     }
 
-    // PASO 3: Crear perfil (usuario + código ya registrados)
+    // PASO 3: Crear perfil (usuario + código ya registrados). El nombre
+    // también se guarda como displayName de la cuenta para que, si el
+    // perfil se autocompleta después al iniciar sesión, no se pierda.
+    final nombreLimpio = nombre?.trim() ?? '';
+    if (nombreLimpio.isNotEmpty) {
+      try {
+        await user.updateDisplayName(nombreLimpio);
+      } catch (_) {}
+    }
     try {
       await ensureUserProfileExists(
         user,
-        preferredName: email.split('@').first,
+        preferredName:
+            nombreLimpio.isNotEmpty ? nombreLimpio : email.split('@').first,
       );
     } catch (e) {
       // Si perfil falla, usuario puede intentar login después (se autocompletará

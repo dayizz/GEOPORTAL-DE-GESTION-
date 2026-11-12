@@ -4,6 +4,7 @@ import 'package:flutter/services.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:uuid/uuid.dart';
+import 'package:intl/intl.dart';
 import '../../../shared/widgets/app_scaffold.dart';
 import '../../../core/constants/app_colors.dart';
 import '../../auth/providers/auth_provider.dart';
@@ -25,6 +26,9 @@ class Usuario {
   final String perfil; // Administrador, Gestor de proyecto, Operativo auxiliar
   final List<String> proyectos;
   final DateTime createdAt;
+  /// Última modificación del perfil (`updated_at`, o `created_at` si nunca
+  /// se ha modificado). `null` si el documento no trae ninguna de las dos.
+  final DateTime? updatedAt;
 
   const Usuario({
     required this.id,
@@ -33,6 +37,7 @@ class Usuario {
     required this.perfil,
     required this.proyectos,
     required this.createdAt,
+    this.updatedAt,
   });
 
   Usuario copyWith({
@@ -50,6 +55,7 @@ class Usuario {
       perfil: perfil ?? this.perfil,
       proyectos: proyectos ?? this.proyectos,
       createdAt: createdAt ?? this.createdAt,
+      updatedAt: updatedAt,
     );
   }
 
@@ -73,6 +79,11 @@ class Usuario {
           .whereType<String>()
           .toList(),
       createdAt: createdAt,
+      updatedAt: data['updated_at'] is Timestamp
+          ? (data['updated_at'] as Timestamp).toDate()
+          : createdAtRaw is Timestamp
+              ? createdAtRaw.toDate()
+              : null,
     );
   }
 }
@@ -465,103 +476,112 @@ class _CuentasUsuarioTabState extends ConsumerState<_CuentasUsuarioTab> {
     List<Usuario> usuarios, {
     required bool isAdmin,
   }) {
-    return ListView.builder(
-      padding: const EdgeInsets.all(16),
-      itemCount: usuarios.length,
-      itemBuilder: (context, index) {
-        final usuario = usuarios[index];
-        return Card(
-          margin: const EdgeInsets.only(bottom: 12),
-          child: ListTile(
-            contentPadding: const EdgeInsets.all(16),
-            leading: CircleAvatar(
-              backgroundColor: AppColors.primary.withValues(alpha: 0.1),
-              child: Text(
-                usuario.nombre.isNotEmpty ? usuario.nombre[0].toUpperCase() : '?',
-                style: const TextStyle(
-                  color: AppColors.primary,
-                  fontWeight: FontWeight.bold,
-                ),
+    final fmtFecha = DateFormat('dd/MM/yyyy HH:mm');
+    final ordenados = [...usuarios]
+      ..sort((a, b) => (b.updatedAt ?? DateTime(0))
+          .compareTo(a.updatedAt ?? DateTime(0)));
+    final encabezado = TextStyle(
+      fontWeight: FontWeight.w700,
+      color: AppColors.textPrimary,
+    );
+    final celda = TextStyle(fontSize: 13, color: AppColors.textPrimary);
+
+    return LayoutBuilder(
+      builder: (context, constraints) => SingleChildScrollView(
+        padding: const EdgeInsets.all(16),
+        child: Card(
+          clipBehavior: Clip.antiAlias,
+          child: SingleChildScrollView(
+            scrollDirection: Axis.horizontal,
+            child: ConstrainedBox(
+              constraints: BoxConstraints(minWidth: constraints.maxWidth - 32),
+              child: DataTable(
+                headingRowColor: WidgetStatePropertyAll(AppColors.surfaceVariant),
+                columnSpacing: 24,
+                dataRowMinHeight: 48,
+                dataRowMaxHeight: double.infinity,
+                columns: [
+                  DataColumn(label: Text('Nombre', style: encabezado)),
+                  DataColumn(label: Text('Correo', style: encabezado)),
+                  DataColumn(label: Text('Tipo de perfil', style: encabezado)),
+                  DataColumn(label: Text('Proyecto(s)', style: encabezado)),
+                  DataColumn(label: Text('Última modificación', style: encabezado)),
+                  if (isAdmin) DataColumn(label: Text('Acciones', style: encabezado)),
+                ],
+                rows: [
+                  for (final usuario in ordenados)
+                    DataRow(cells: [
+                      DataCell(Text(
+                        usuario.nombre,
+                        style: celda.copyWith(fontWeight: FontWeight.w600),
+                      )),
+                      DataCell(Text(usuario.correo, style: celda)),
+                      DataCell(_buildPerfilChip(usuario.perfil)),
+                      DataCell(
+                        usuario.proyectos.isEmpty
+                            ? Text('-', style: celda)
+                            : Padding(
+                                padding: const EdgeInsets.symmetric(vertical: 6),
+                                child: ConstrainedBox(
+                                  constraints: const BoxConstraints(maxWidth: 260),
+                                  child: Wrap(
+                                    spacing: 4,
+                                    runSpacing: 4,
+                                    children: [
+                                      for (final proyecto in usuario.proyectos)
+                                        Chip(
+                                          label: Text(
+                                            proyecto,
+                                            style: TextStyle(
+                                              fontSize: 10,
+                                              color: AppColors.textPrimary,
+                                            ),
+                                          ),
+                                          padding: EdgeInsets.zero,
+                                          materialTapTargetSize:
+                                              MaterialTapTargetSize.shrinkWrap,
+                                          visualDensity: VisualDensity.compact,
+                                          backgroundColor: AppColors.secondary
+                                              .withValues(alpha: 0.1),
+                                        ),
+                                    ],
+                                  ),
+                                ),
+                              ),
+                      ),
+                      DataCell(Text(
+                        usuario.updatedAt == null
+                            ? '-'
+                            : fmtFecha.format(usuario.updatedAt!),
+                        style: celda,
+                      )),
+                      if (isAdmin)
+                        DataCell(Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            IconButton(
+                              tooltip: 'Editar',
+                              icon: const Icon(Icons.edit, size: 18),
+                              color: AppColors.primary,
+                              onPressed: () =>
+                                  _showEditarUsuarioDialog(context, ref, usuario),
+                            ),
+                            IconButton(
+                              tooltip: 'Eliminar',
+                              icon: const Icon(Icons.delete, size: 18),
+                              color: AppColors.danger,
+                              onPressed: () =>
+                                  _showEliminarUsuarioDialog(context, ref, usuario),
+                            ),
+                          ],
+                        )),
+                    ]),
+                ],
               ),
             ),
-            title: Text(
-              usuario.nombre,
-              style: const TextStyle(fontWeight: FontWeight.bold),
-            ),
-            subtitle: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                const SizedBox(height: 4),
-                Row(
-                  children: [
-                    const Icon(Icons.email, size: 14, color: Colors.grey),
-                    const SizedBox(width: 4),
-                    Expanded(
-                      child: Text(
-                        usuario.correo,
-                        style: const TextStyle(fontSize: 12),
-                        overflow: TextOverflow.ellipsis,
-                      ),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 4),
-                _buildPerfilChip(usuario.perfil),
-                const SizedBox(height: 4),
-                Wrap(
-                  spacing: 4,
-                  runSpacing: 4,
-                  children: usuario.proyectos
-                      .map((proyecto) => Chip(
-                            label: Text(
-                              proyecto,
-                              style: const TextStyle(fontSize: 10),
-                            ),
-                            padding: EdgeInsets.zero,
-                            materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                            visualDensity: VisualDensity.compact,
-                            backgroundColor: AppColors.secondary.withValues(alpha: 0.1),
-                          ))
-                      .toList(),
-                ),
-              ],
-            ),
-            trailing: isAdmin
-                ? PopupMenuButton<String>(
-                    onSelected: (value) {
-                      if (value == 'editar') {
-                        _showEditarUsuarioDialog(context, ref, usuario);
-                      } else if (value == 'eliminar') {
-                        _showEliminarUsuarioDialog(context, ref, usuario);
-                      }
-                    },
-                    itemBuilder: (context) => [
-                      const PopupMenuItem(
-                        value: 'editar',
-                        child: Row(
-                          children: [
-                            Icon(Icons.edit, size: 18),
-                            SizedBox(width: 8),
-                            Text('Editar'),
-                          ],
-                        ),
-                      ),
-                      const PopupMenuItem(
-                        value: 'eliminar',
-                        child: Row(
-                          children: [
-                            Icon(Icons.delete, size: 18, color: AppColors.danger),
-                            SizedBox(width: 8),
-                            Text('Eliminar', style: TextStyle(color: AppColors.danger)),
-                          ],
-                        ),
-                      ),
-                    ],
-                  )
-                : null,
           ),
-        );
-      },
+        ),
+      ),
     );
   }
 

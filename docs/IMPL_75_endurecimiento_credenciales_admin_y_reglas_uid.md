@@ -72,7 +72,7 @@ La app mantenia valores de admin embebidos en codigo fuente (correo y contrasena
 
 ## 6. Resultado / evidencia
 
-- `auth_provider.dart` ya no contiene `admin@sao.mx` ni `admin123` como defaults.
+- `auth_provider.dart` ya no contiene credenciales de administrador local como defaults.
 - `login_screen.dart` valida configuracion minima antes de permitir bypass local.
 - `firestore.rules` aplica admin por claim o UID bootstrap.
 

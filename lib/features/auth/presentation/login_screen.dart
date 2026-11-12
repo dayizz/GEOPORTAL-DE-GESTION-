@@ -15,6 +15,7 @@ class LoginScreen extends ConsumerStatefulWidget {
 
 class _LoginScreenState extends ConsumerState<LoginScreen> {
   final _formKey = GlobalKey<FormState>();
+  final _nombreCtrl = TextEditingController();
   final _emailCtrl = TextEditingController();
   final _passCtrl = TextEditingController();
   final _approvalCodeCtrl = TextEditingController();
@@ -35,6 +36,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
 
   @override
   void dispose() {
+    _nombreCtrl.dispose();
     _emailCtrl.dispose();
     _passCtrl.dispose();
     _approvalCodeCtrl.dispose();
@@ -89,6 +91,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
           _emailCtrl.text.trim(),
           _passCtrl.text,
           approvalCode: _approvalCodeCtrl.text,
+          nombre: _nombreCtrl.text,
         );
         // La cuenta se crea sin dejar sesión abierta (signUpWithEmail cierra
         // la sesión transitoria que Firebase abre al crearla). El usuario
@@ -116,6 +119,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
               _isRegister = false;
               _passCtrl.clear();
               _approvalCodeCtrl.clear();
+              _nombreCtrl.clear();
             });
           }
         }
@@ -164,15 +168,9 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                     const SizedBox(height: 24),
                     Text(
                       AppStrings.appName,
+                      textAlign: TextAlign.center,
                       style: Theme.of(context).textTheme.displayLarge?.copyWith(
                             color: Colors.white,
-                          ),
-                    ),
-                    const SizedBox(height: 8),
-                    Text(
-                      AppStrings.appSubtitle,
-                      style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                            color: Colors.white70,
                           ),
                     ),
                     const SizedBox(height: 40),
@@ -214,6 +212,27 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                         key: _formKey,
                         child: Column(
                           children: [
+                            if (_isRegister) ...[
+                              TextFormField(
+                                controller: _nombreCtrl,
+                                textCapitalization: TextCapitalization.words,
+                                keyboardType: TextInputType.name,
+                                decoration: const InputDecoration(
+                                  labelText: 'Nombre completo',
+                                  prefixIcon: Icon(Icons.person_outline),
+                                ),
+                                validator: (v) {
+                                  if (!_isRegister) return null;
+                                  final nombre = v?.trim() ?? '';
+                                  if (nombre.isEmpty) return 'Ingresa tu nombre';
+                                  if (nombre.length > 120) {
+                                    return 'Máximo 120 caracteres';
+                                  }
+                                  return null;
+                                },
+                              ),
+                              const SizedBox(height: 16),
+                            ],
                             TextFormField(
                               controller: _emailCtrl,
                               keyboardType: TextInputType.emailAddress,

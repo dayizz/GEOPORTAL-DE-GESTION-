@@ -77,8 +77,9 @@ En la mayoría de módulos se usa una separación simple:
 3. GoRouter aplica un redirect por estado de sesión.
 4. Si no hay sesión, envía a /login.
 
-Nota: actualmente está activado localOnlyAuthMode = true.
-- Credenciales locales habilitadas: admin@sao.mx / admin123.
+Nota: el modo local (`LOCAL_ONLY_AUTH_MODE`) está desactivado por defecto.
+- No hay credenciales locales en el código; solo se habilitan pasando
+  `LOCAL_ADMIN_EMAIL` y `LOCAL_ADMIN_PASSWORD` con `--dart-define`.
 - En este modo no se permite registro ni reset de contraseña.
 
 ### Navegación funcional
