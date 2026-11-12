@@ -1211,6 +1211,11 @@ class _MapaScreenState extends ConsumerState<MapaScreen> {
     MapaColorMode mode,
     double opacity,
   ) {
+    // Socialización/Caminamiento solo aplican al proyecto TIG: el resto de
+    // predios no se dibuja en esos modos.
+    if (_esModoTig(mode)) {
+      predios = predios.where(_esPredioTig).toList();
+    }
     // Agrupa predios que comparten un mismo polígono: el "ancla" (con
     // geometry propia) más cualquier afectación vinculada a él vía
     // `polygonRefId`, para renderizar UN solo polígono por grupo aunque
@@ -1342,8 +1347,15 @@ class _MapaScreenState extends ConsumerState<MapaScreen> {
         return predio.rangoEstatus;
       case MapaColorMode.estatusPredio:
         return _predioEstatus(predio);
+      case MapaColorMode.socializacion:
+        return predio.socializacion ? 'SI' : 'NO';
+      case MapaColorMode.caminamiento:
+        return AppColors.caminamientoClave(predio.caminamiento);
     }
   }
+
+  bool _esModoTig(MapaColorMode mode) =>
+      mode == MapaColorMode.socializacion || mode == MapaColorMode.caminamiento;
 
   String _grupoClaveGanadora(List<Predio> afectaciones, MapaColorMode mode) {
     final conteo = <String, int>{};
@@ -1376,6 +1388,10 @@ class _MapaScreenState extends ConsumerState<MapaScreen> {
         return AppColors.rangoEstatusColor(clave);
       case MapaColorMode.estatusPredio:
         return _estatusColor(clave);
+      case MapaColorMode.socializacion:
+        return AppColors.socializacionColor(clave == 'SI');
+      case MapaColorMode.caminamiento:
+        return AppColors.caminamientoColor(clave);
     }
   }
 
@@ -1415,6 +1431,9 @@ class _MapaScreenState extends ConsumerState<MapaScreen> {
     return inside;
   }
   Color _predioColor(Predio predio, MapaColorMode mode) {
+    if (_esModoTig(mode)) {
+      return _colorParaClave(_claveColorDe(predio, mode), mode);
+    }
     if (mode == MapaColorMode.tipoPropiedad) {
       return AppColors.tipoPropiedadColor(predio.tipoPropiedad);
     }
@@ -1424,6 +1443,7 @@ class _MapaScreenState extends ConsumerState<MapaScreen> {
     return _estatusColor(_predioEstatus(predio));
   }
   Color _draftPolygonColor(MapaColorMode mode) {
+    if (_esModoTig(mode)) return AppColors.tigGris;
     if (mode == MapaColorMode.tipoPropiedad) {
       return AppColors.tipoPropiedadColor(_tipoPropiedad ?? 'Sin tipo');
     }
@@ -1433,6 +1453,7 @@ class _MapaScreenState extends ConsumerState<MapaScreen> {
     return _estatusColor(_estatusPredio);
   }
   Color _savedPolygonColor(_SavedPolygon polygon, MapaColorMode mode) {
+    if (_esModoTig(mode)) return AppColors.tigGris;
     if (mode == MapaColorMode.tipoPropiedad) {
       return AppColors.tipoPropiedadColor(polygon.tipoPropiedad ?? 'Sin tipo');
     }
@@ -3167,6 +3188,10 @@ class _MapaScreenState extends ConsumerState<MapaScreen> {
     );
   }
   Widget _buildVisualizacionControl(MapaColorMode mode) {
+    // Las opciones de TIG solo aparecen si hay predios de ese proyecto.
+    final hayTig = _esModoTig(mode) ||
+        (ref.watch(prediosMapaProvider).asData?.value ?? const <Predio>[])
+            .any(_esPredioTig);
     return Card(
       elevation: 6,
       child: Padding(
@@ -3192,19 +3217,29 @@ class _MapaScreenState extends ConsumerState<MapaScreen> {
                   isExpanded: true,
                   dropdownColor: AppColors.surface,
                   style: TextStyle(color: AppColors.textPrimary),
-                  items: const [
-                    DropdownMenuItem(
+                  items: [
+                    const DropdownMenuItem(
                       value: MapaColorMode.estatusPredio,
                       child: Text('Estatus de predio'),
                     ),
-                    DropdownMenuItem(
+                    const DropdownMenuItem(
                       value: MapaColorMode.tipoPropiedad,
                       child: Text('Tipo de propiedad'),
                     ),
-                    DropdownMenuItem(
+                    const DropdownMenuItem(
                       value: MapaColorMode.rangoEstatus,
                       child: Text('Rango de estatus'),
                     ),
+                    if (hayTig) ...const [
+                      DropdownMenuItem(
+                        value: MapaColorMode.socializacion,
+                        child: Text('Socialización (TIG)'),
+                      ),
+                      DropdownMenuItem(
+                        value: MapaColorMode.caminamiento,
+                        child: Text('Caminamiento (TIG)'),
+                      ),
+                    ],
                   ],
                   onChanged: (value) {
                     if (value == null) return;
@@ -3253,6 +3288,20 @@ class _MapaScreenState extends ConsumerState<MapaScreen> {
           MapEntry('Liberado', _estatusColor('Liberado')),
           MapEntry('No liberado', _estatusColor('No liberado')),
           MapEntry('Investigación', _estatusColor('Investigación')),
+        ];
+        break;
+      case MapaColorMode.socializacion:
+        titulo = 'Socialización (TIG)';
+        items = [
+          MapEntry('Sí', AppColors.socializacionColor(true)),
+          MapEntry('No', AppColors.socializacionColor(false)),
+        ];
+        break;
+      case MapaColorMode.caminamiento:
+        titulo = 'Caminamiento (TIG)';
+        items = [
+          for (final opcion in Predio.caminamientoOpciones)
+            MapEntry(opcion, AppColors.caminamientoColor(opcion)),
         ];
         break;
     }
@@ -3629,7 +3678,14 @@ class _MapaScreenState extends ConsumerState<MapaScreen> {
             ),
             if (predio.ejido != null && predio.ejido!.isNotEmpty && predio.ejido != '-') ...[
               const SizedBox(height: 4),
-              Text(predio.ejido!, style: Theme.of(context).textTheme.bodySmall),
+              Text(
+                predio.ejido!,
+                style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                      color: Theme.of(context).brightness == Brightness.dark
+                          ? Colors.white
+                          : AppColors.textPrimary,
+                    ),
+              ),
             ],
             const SizedBox(height: 6),
             infoRow('Propietario', predio.nombrePropietario),
@@ -5429,6 +5485,19 @@ class _MapaScreenState extends ConsumerState<MapaScreen> {
     }
 
     final allProps = _flattenFeatureProps(feature, propsMap);
+    if (mode == MapaColorMode.socializacion) {
+      final v = _propValue(allProps, ['socializacion', 'socialización'])
+          ?.trim()
+          .toUpperCase();
+      return AppColors.socializacionColor(
+        const {'SI', 'SÍ', 'TRUE', '1', 'YES'}.contains(v),
+      );
+    }
+    if (mode == MapaColorMode.caminamiento) {
+      return AppColors.caminamientoColor(
+        _propValue(allProps, ['caminamiento']),
+      );
+    }
     if (mode == MapaColorMode.tipoPropiedad) {
       final tipo = _propValue(allProps, [
         'tipo_propiedad',

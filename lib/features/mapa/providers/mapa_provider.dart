@@ -13,6 +13,9 @@ enum MapaColorMode {
 	estatusPredio,
 	tipoPropiedad,
 	rangoEstatus,
+	// Exclusivos del proyecto TIG.
+	socializacion,
+	caminamiento,
 }
 
 /// Estado del proceso de importación / sincronización GeoJSON.

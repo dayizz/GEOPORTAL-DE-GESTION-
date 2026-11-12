@@ -128,6 +128,35 @@ class AppColors {
   static const Color rangoInvestigacion = Color(0xFF808080);     // gris
   static const Color rangoContornoVerde = Color(0xFF00FF00);     // contorno distintivo
 
+  // Simbologia exclusiva del proyecto TIG (Mapa: "Socializacion" y
+  // "Caminamiento").
+  static const Color tigVerde = Color(0xFF2E9E44);
+  static const Color tigRojo = Color(0xFFD63A3A);
+  static const Color tigAmarillo = Color(0xFFFFD600);
+  static const Color tigGris = Color(0xFF9E9E9E);
+
+  static Color socializacionColor(bool socializado) =>
+      socializado ? tigVerde : tigRojo;
+
+  /// Normaliza "Caminamiento" a Realizado / Proceso / Por definir.
+  static String caminamientoClave(String? valor) {
+    final v = (valor ?? '').trim().toLowerCase();
+    if (v.startsWith('realizad')) return 'Realizado';
+    if (v.startsWith('proceso') || v.startsWith('en proceso')) return 'Proceso';
+    return 'Por definir';
+  }
+
+  static Color caminamientoColor(String? valor) {
+    switch (caminamientoClave(valor)) {
+      case 'Realizado':
+        return tigVerde;
+      case 'Proceso':
+        return tigAmarillo;
+      default:
+        return tigGris;
+    }
+  }
+
   static Color estatusPredioColor(String? estatus) {
     final normalizado = norm.normalizeRangoEstatus(estatus);
     if (normalizado == 'Investigación') return rangoInvestigacion;
