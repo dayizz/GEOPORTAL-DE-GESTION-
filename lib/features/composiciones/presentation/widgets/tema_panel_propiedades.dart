@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 
+import '../../../../core/constants/app_colors.dart';
+
 /// Estilo exclusivo de los controles; no altera el contenido de la hoja.
 class TemaPanelPropiedades extends StatelessWidget {
   const TemaPanelPropiedades({super.key, required this.child});
@@ -9,14 +11,18 @@ class TemaPanelPropiedades extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final base = Theme.of(context);
-    const texto = TextStyle(fontFamily: 'Roboto', fontSize: 12, height: 1.3);
-    final contenido = texto.copyWith(color: const Color(0xFF6B7280));
-    const etiqueta = TextStyle(
+    // En tema oscuro el texto va en claro (contrario al fondo del panel).
+    final oscuro = base.brightness == Brightness.dark;
+    final texto = TextStyle(
       fontFamily: 'Roboto',
       fontSize: 12,
       height: 1.3,
-      fontWeight: FontWeight.w600,
+      color: AppColors.textPrimary,
     );
+    final contenido = texto.copyWith(
+      color: oscuro ? AppColors.textPrimary : const Color(0xFF6B7280),
+    );
+    final etiqueta = texto.copyWith(fontWeight: FontWeight.w600);
     return Theme(
       data: base.copyWith(
         textTheme: base.textTheme

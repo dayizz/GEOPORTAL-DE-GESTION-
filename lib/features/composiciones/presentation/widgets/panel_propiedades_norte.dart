@@ -58,7 +58,7 @@ class PanelPropiedadesNorte extends StatelessWidget {
                         padding: const EdgeInsets.all(5),
                         decoration: BoxDecoration(
                           border: Border.all(
-                            color: tipo == tipoActual ? AppColors.primary : Colors.black26,
+                            color: tipo == tipoActual ? AppColors.primary : AppColors.border,
                             width: tipo == tipoActual ? 1.6 : 1,
                           ),
                           borderRadius: BorderRadius.circular(6),
@@ -66,7 +66,7 @@ class PanelPropiedadesNorte extends StatelessWidget {
                         ),
                         child: CustomPaint(
                           size: Size.infinite,
-                          painter: NortePainter(tipo: tipo, color: Colors.black87),
+                          painter: NortePainter(tipo: tipo, color: AppColors.textPrimary),
                         ),
                       ),
                     ),
@@ -112,17 +112,17 @@ class PanelPropiedadesNorte extends StatelessWidget {
             ),
             const SizedBox(height: 8),
             if (mapaActual != null)
-              const Text(
+              Text(
                 'El norte gira automáticamente con la rotación del mapa.',
-                style: TextStyle(fontSize: 12, color: Colors.black54),
+                style: TextStyle(fontSize: 12, color: AppColors.textSecondary),
               )
             else ...[
               if (mapasDisponibles.isEmpty)
-                const Padding(
+                Padding(
                   padding: EdgeInsets.only(bottom: 8),
                   child: Text(
                     'Agrega un mapa a esta hoja para que el norte siga su orientación.',
-                    style: TextStyle(fontSize: 12, color: Colors.black54),
+                    style: TextStyle(fontSize: 12, color: AppColors.textSecondary),
                   ),
                 ),
               Text(

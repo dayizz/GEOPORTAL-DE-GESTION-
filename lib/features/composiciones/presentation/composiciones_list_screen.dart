@@ -81,21 +81,22 @@ class _ComposicionesListScreenState extends ConsumerState<ComposicionesListScree
               children: [
                 Row(
                   children: [
-                    const Text('Proyecto:', style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: Color(0xFF555555))),
+                    Text('Proyecto:', style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: AppColors.textSecondary)),
                     const SizedBox(width: 10),
                     DropdownButtonHideUnderline(
                       child: Container(
                         padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
                         decoration: BoxDecoration(
-                          border: Border.all(color: const Color(0xFFDCDCDC)),
+                          border: Border.all(color: AppColors.border),
                           borderRadius: BorderRadius.circular(10),
-                          color: Colors.white,
+                          color: AppColors.surface,
                         ),
                         child: DropdownButton<String>(
                           value: proyectoActivo,
                           isDense: true,
-                          icon: const Icon(Icons.keyboard_arrow_down_rounded, size: 18, color: Color(0xFF9A9A9A)),
-                          style: const TextStyle(fontSize: 14, color: Colors.black87, fontWeight: FontWeight.w600),
+                          icon: Icon(Icons.keyboard_arrow_down_rounded, size: 18, color: AppColors.textSecondary),
+                          dropdownColor: AppColors.surface,
+                          style: TextStyle(fontSize: 14, color: AppColors.textPrimary, fontWeight: FontWeight.w600),
                           items: proyectosDisponibles.map((p) => DropdownMenuItem(value: p, child: Text(p))).toList(),
                           onChanged: (v) {
                             if (v != null) setState(() => _proyectoActual = v);
@@ -110,7 +111,7 @@ class _ComposicionesListScreenState extends ConsumerState<ComposicionesListScree
                   Container(
                     padding: const EdgeInsets.all(24),
                     decoration: BoxDecoration(
-                      color: Colors.white,
+                      color: AppColors.surface,
                       borderRadius: BorderRadius.circular(14),
                       border: Border.all(color: AppColors.border),
                     ),
@@ -154,7 +155,7 @@ class _ComposicionCard extends ConsumerWidget {
         width: 220,
         padding: const EdgeInsets.all(16),
         decoration: BoxDecoration(
-          color: Colors.white,
+          color: AppColors.surface,
           borderRadius: BorderRadius.circular(14),
           border: Border.all(color: AppColors.border),
         ),
@@ -166,7 +167,7 @@ class _ComposicionCard extends ConsumerWidget {
                 const Icon(Icons.image_outlined, color: AppColors.primary, size: 22),
                 const Spacer(),
                 PopupMenuButton<String>(
-                  icon: const Icon(Icons.more_vert, size: 18),
+                  icon: Icon(Icons.more_vert, size: 18, color: AppColors.textPrimary),
                   onSelected: (value) async {
                     if (value == 'renombrar') {
                       await _renombrar(context, ref);
@@ -184,7 +185,7 @@ class _ComposicionCard extends ConsumerWidget {
             const SizedBox(height: 8),
             Text(
               composicion.nombre,
-              style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14),
+              style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14, color: AppColors.textPrimary),
               maxLines: 2,
               overflow: TextOverflow.ellipsis,
             ),

@@ -88,6 +88,80 @@ class _BalanceScreenState extends ConsumerState<BalanceScreen> {
     return 'Sin proyecto';
   }
 
+  /// Sección "Avance de investigación" (solo TIG): total de registros en
+  /// investigación y distribución de Caminamiento y Socialización de los
+  /// registros de la selección actual, en una misma fila.
+  Widget _buildAvanceInvestigacionTig({
+    required List<Predio> registros,
+    required int enInvestigacion,
+    required NumberFormat fmtInt,
+  }) {
+    final total = registros.length;
+    final caminamiento = <String, int>{
+      for (final opcion in Predio.caminamientoOpciones) opcion: 0,
+    };
+    var socializados = 0;
+    for (final p in registros) {
+      final clave = AppColors.caminamientoClave(p.caminamiento);
+      caminamiento[clave] = (caminamiento[clave] ?? 0) + 1;
+      if (p.socializacion) socializados++;
+    }
+
+    final kpi = SizedBox(
+      height: 96,
+      child: buildKpiPanel(
+        label: 'Total de registros en investigación',
+        value: fmtInt.format(enInvestigacion),
+        icon: Icons.manage_search_outlined,
+        color: AppColors.rangoInvestigacion,
+      ),
+    );
+    final caminamientoBlock = buildEstatusChartBlock(
+      titulo: 'Registros con caminamiento',
+      entries: caminamiento.entries.toList(),
+      total: total,
+      colorFn: AppColors.caminamientoColor,
+      fmtInt: fmtInt,
+    );
+    final socializacionBlock = buildEstatusChartBlock(
+      titulo: 'Registros con socialización',
+      entries: [
+        MapEntry('Sí', socializados),
+        MapEntry('No', total - socializados),
+      ],
+      total: total,
+      colorFn: (k) => AppColors.socializacionColor(k == 'Sí'),
+      fmtInt: fmtInt,
+    );
+
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        if (constraints.maxWidth >= 720) {
+          return Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Expanded(child: kpi),
+              const SizedBox(width: 24),
+              Expanded(child: caminamientoBlock),
+              const SizedBox(width: 24),
+              Expanded(child: socializacionBlock),
+            ],
+          );
+        }
+        return Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            kpi,
+            const SizedBox(height: 20),
+            caminamientoBlock,
+            const SizedBox(height: 20),
+            socializacionBlock,
+          ],
+        );
+      },
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final estadoAcceso = estadoAccesoProyectos(ref);
@@ -309,23 +383,24 @@ class _BalanceScreenState extends ConsumerState<BalanceScreen> {
                             ),
                             decoration: BoxDecoration(
                               border: Border.all(
-                                color: const Color(0xFFDCDCDC),
+                                color: AppColors.border,
                               ),
                               borderRadius: BorderRadius.circular(10),
-                              color: Colors.white,
+                              color: AppColors.surface,
                             ),
                             child: DropdownButton<String>(
                               isExpanded: true,
+                              dropdownColor: AppColors.surface,
                               value: proyectoActivo,
                               isDense: true,
-                              icon: const Icon(
+                              icon: Icon(
                                 Icons.keyboard_arrow_down_rounded,
                                 size: 18,
-                                color: Color(0xFF9A9A9A),
+                                color: AppColors.textSecondary,
                               ),
-                              style: const TextStyle(
+                              style: TextStyle(
                                 fontSize: 14,
-                                color: Colors.black87,
+                                color: AppColors.textPrimary,
                                 fontWeight: FontWeight.w600,
                               ),
                               items: proyectosDisponibles
@@ -364,13 +439,14 @@ class _BalanceScreenState extends ConsumerState<BalanceScreen> {
                             ),
                             decoration: BoxDecoration(
                               border: Border.all(
-                                color: const Color(0xFFDCDCDC),
+                                color: AppColors.border,
                               ),
                               borderRadius: BorderRadius.circular(10),
-                              color: Colors.white,
+                              color: AppColors.surface,
                             ),
                             child: DropdownButton<String>(
                               isExpanded: true,
+                              dropdownColor: AppColors.surface,
                               value:
                                   _grupoActual ==
                                       GrupoInfraestructuraBalance
@@ -383,9 +459,9 @@ class _BalanceScreenState extends ConsumerState<BalanceScreen> {
                                   ? 'Proyecto'
                                   : 'segmento:$_segmentoActual',
                               isDense: true,
-                              style: const TextStyle(
+                              style: TextStyle(
                                 fontSize: 14,
-                                color: Colors.black87,
+                                color: AppColors.textPrimary,
                               ),
                               items: [
                                 const DropdownMenuItem(
@@ -433,6 +509,20 @@ class _BalanceScreenState extends ConsumerState<BalanceScreen> {
                   ],
                 ),
 
+                if (proyectoActivo == 'TIG') ...[
+                  const SizedBox(height: 24),
+                  Text(
+                    'Avance de investigación',
+                    style: Theme.of(context).textTheme.titleLarge
+                        ?.copyWith(fontWeight: FontWeight.bold),
+                  ),
+                  const SizedBox(height: 16),
+                  _buildAvanceInvestigacionTig(
+                    registros: registrosFiltrados,
+                    enInvestigacion: enInvestigacion,
+                    fmtInt: fmtInt,
+                  ),
+                ],
                 const SizedBox(height: 24),
                 Text(
                   'Avance general',
@@ -468,7 +558,7 @@ class _BalanceScreenState extends ConsumerState<BalanceScreen> {
                               Container(
                                 padding: const EdgeInsets.all(16),
                                 decoration: BoxDecoration(
-                                  color: Colors.white,
+                                  color: AppColors.surface,
                                   borderRadius: BorderRadius.circular(14),
                                   border: Border.all(color: AppColors.border),
                                 ),

@@ -105,7 +105,7 @@ class PanelPropiedadesForma extends StatelessWidget {
                         border: Border.all(
                           color: seleccionado
                               ? AppColors.primary
-                              : Colors.black26,
+                              : AppColors.border,
                           width: seleccionado ? 1.6 : 1,
                         ),
                         borderRadius: BorderRadius.circular(6),
@@ -164,7 +164,7 @@ class PanelPropiedadesForma extends StatelessWidget {
                           border: Border.all(
                             color: seleccionado
                                 ? AppColors.primary
-                                : Colors.black26,
+                                : AppColors.border,
                             width: seleccionado ? 1.6 : 1,
                           ),
                           borderRadius: BorderRadius.circular(6),

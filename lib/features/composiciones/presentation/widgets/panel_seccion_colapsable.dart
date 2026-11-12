@@ -1,3 +1,4 @@
+import '../../../../core/constants/app_colors.dart';
 import 'package:flutter/material.dart';
 
 /// Sección colapsable (tipo acordeón) usada en los paneles de propiedades
@@ -30,7 +31,7 @@ class _PanelSeccionColapsableState extends State<PanelSeccionColapsable> {
     return Container(
       margin: const EdgeInsets.only(bottom: 8),
       decoration: BoxDecoration(
-        border: Border.all(color: const Color(0xFFE3E5E9)),
+        border: Border.all(color: AppColors.border),
         borderRadius: BorderRadius.circular(6),
       ),
       child: Column(
@@ -49,7 +50,7 @@ class _PanelSeccionColapsableState extends State<PanelSeccionColapsable> {
                     Icon(
                       widget.icono,
                       size: 15,
-                      color: const Color(0xFF5B6270),
+                      color: AppColors.textSecondary,
                     ),
                     const SizedBox(width: 6),
                   ],

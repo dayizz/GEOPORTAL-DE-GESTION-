@@ -1,3 +1,4 @@
+import '../../../../core/constants/app_colors.dart';
 import 'panel_seccion_colapsable.dart';
 import 'package:flutter/material.dart';
 import '../../models/elemento_composicion.dart';
@@ -188,10 +189,10 @@ class PanelPropiedadesGrafica extends StatelessWidget {
           titulo: 'Tamaño',
           icono: Icons.aspect_ratio,
           children: [
-            const Text(
+            Text(
               'Arrastra las manijas para estirar la gráfica; el contenido se '
               'escala sin deformarse.',
-              style: TextStyle(fontSize: 12, color: Colors.black54),
+              style: TextStyle(fontSize: 12, color: AppColors.textSecondary),
             ),
             const SizedBox(height: 4),
             Align(

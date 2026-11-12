@@ -1,3 +1,4 @@
+import '../../../../core/constants/app_colors.dart';
 import 'panel_seccion_colapsable.dart';
 import 'package:flutter/material.dart';
 import '../../models/elemento_composicion.dart';
@@ -35,9 +36,9 @@ class PanelPropiedadesEscala extends StatelessWidget {
 
   Widget _seccionMapa() {
     if (mapasDisponibles.isEmpty) {
-      return const PanelSeccionColapsable(titulo: 'Mapa asociado', icono: Icons.straighten, children: [Text(
+      return PanelSeccionColapsable(titulo: 'Mapa asociado', icono: Icons.straighten, children: [Text(
         'Agrega un elemento de mapa a esta hoja para poder asociarle una escala.',
-        style: TextStyle(fontSize: 12, color: Colors.black54),
+        style: TextStyle(fontSize: 12, color: AppColors.textSecondary),
       )]);
     }
     final valorValido =

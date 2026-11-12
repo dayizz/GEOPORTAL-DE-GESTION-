@@ -1,3 +1,4 @@
+import '../../../../core/constants/app_colors.dart';
 import 'package:flutter/material.dart';
 import '../../utils/color_hex.dart';
 import 'color_wheel_picker.dart';
@@ -95,7 +96,7 @@ class _ColorSwatchPickerState extends State<ColorSwatchPicker> {
             decoration: BoxDecoration(
               color: colorFromHex(widget.colorHex),
               borderRadius: BorderRadius.circular(4),
-              border: Border.all(color: Colors.black26),
+              border: Border.all(color: AppColors.border),
             ),
             child: sinColor
                 ? CustomPaint(painter: _DiagonalLinePainter())
@@ -113,7 +114,7 @@ class _ColorSwatchPickerState extends State<ColorSwatchPicker> {
             'Sin color',
             style:
                 (widget.textStyle ??
-                        const TextStyle(fontSize: 12, color: Colors.black54))
+                        TextStyle(fontSize: 12, color: AppColors.textSecondary))
                     .copyWith(decoration: TextDecoration.underline),
           ),
         ),

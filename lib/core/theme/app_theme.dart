@@ -22,7 +22,15 @@ class AppTheme {
         error: AppColors.danger,
       ),
       scaffoldBackgroundColor: AppColors.background,
-      textTheme: GoogleFonts.interTextTheme().copyWith(
+      // Base acorde al brillo: sin esto los estilos que no se redefinen
+      // abajo (títulos de diálogos, bodySmall, labels...) quedan en negro
+      // también en tema oscuro.
+      textTheme: GoogleFonts.interTextTheme(
+        (dark ? ThemeData.dark() : ThemeData.light()).textTheme,
+      ).apply(
+        bodyColor: AppColors.textPrimary,
+        displayColor: AppColors.textPrimary,
+      ).copyWith(
         displayLarge: GoogleFonts.inter(
           fontSize: 28,
           fontWeight: FontWeight.bold,

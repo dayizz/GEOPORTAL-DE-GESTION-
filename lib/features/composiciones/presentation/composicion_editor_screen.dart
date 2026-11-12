@@ -1724,8 +1724,12 @@ class _ComposicionEditorScreenState
       todosLosPredios,
       ref.watch(proyectosProvider).valueOrNull ?? const <ProyectoItem>[],
     );
+    // Fondo del área de trabajo acorde al tema; la hoja conserva su color.
+    final oscuro = Theme.of(context).brightness == Brightness.dark;
+    final colorRegla =
+        oscuro ? AppColors.surfaceVariant : const Color(0xFFF4F5F7);
     return Container(
-      color: const Color(0xFFE9ECF2),
+      color: oscuro ? AppColors.background : const Color(0xFFE9ECF2),
       child: LayoutBuilder(
         builder: (context, constraints) {
           const topRulerHeight = 24.0;
@@ -1752,7 +1756,7 @@ class _ComposicionEditorScreenState
                 width: wPx,
                 height: topRulerHeight,
                 child: ColoredBox(
-                  color: const Color(0xFFF4F5F7),
+                  color: colorRegla,
                   child: CustomPaint(
                     painter: _ReglaHojaPainter(
                       longitudMm: anchoMm,
@@ -1769,7 +1773,7 @@ class _ComposicionEditorScreenState
                 bottom: 0,
                 width: leftRulerWidth,
                 child: ColoredBox(
-                  color: const Color(0xFFF4F5F7),
+                  color: colorRegla,
                   child: CustomPaint(
                     painter: _ReglaHojaPainter(
                       longitudMm: constraints.maxHeight / scale,
@@ -1801,7 +1805,7 @@ class _ComposicionEditorScreenState
                         ),
                       ],
                     ),
-                    child: Stack(
+                    child: _TemaHoja(child: Stack(
                       clipBehavior: Clip.none,
                       children: [
                         if (hoja.margenArriba + hoja.margenAbajo + hoja.margenIzquierda + hoja.margenDerecha > 0)
@@ -1917,7 +1921,7 @@ class _ComposicionEditorScreenState
                             child: const SnapIndicator(),
                           ),
                       ],
-                    ),
+                    )),
                   ),
                 ),
               ),
@@ -2323,4 +2327,31 @@ class _ReglaHojaPainter extends CustomPainter {
 
   @override
   bool shouldRepaint(covariant _ReglaHojaPainter oldDelegate) => false;
+}
+
+
+/// Mantiene el texto de la hoja en oscuro aunque la app esté en tema
+/// oscuro: la hoja conserva su propio color (blanco por defecto).
+class _TemaHoja extends StatelessWidget {
+  const _TemaHoja({required this.child});
+
+  final Widget child;
+
+  @override
+  Widget build(BuildContext context) {
+    final base = Theme.of(context);
+    if (base.brightness != Brightness.dark) return child;
+    return Theme(
+      data: base.copyWith(
+        textTheme: base.textTheme.apply(
+          bodyColor: Colors.black,
+          displayColor: Colors.black,
+        ),
+      ),
+      child: DefaultTextStyle.merge(
+        style: const TextStyle(color: Colors.black),
+        child: child,
+      ),
+    );
+  }
 }

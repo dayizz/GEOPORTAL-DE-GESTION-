@@ -1,3 +1,4 @@
+import '../../../../core/constants/app_colors.dart';
 import 'dart:math' as math;
 import 'panel_seccion_colapsable.dart';
 import 'package:flutter/material.dart';
@@ -98,17 +99,17 @@ class PanelPropiedadesTabla extends StatelessWidget {
       titulo: 'Filas y columnas',
       icono: Icons.table_chart_outlined,
       children: [
-        const Text(
+        Text(
           'Doble clic en una celda para escribir. Clic para seleccionarla, '
           'Shift+clic para un rango. '
           'Arrastra las líneas entre columnas o filas para cambiar su tamaño.',
-          style: TextStyle(fontSize: 12, color: Colors.black54),
+          style: TextStyle(fontSize: 12, color: AppColors.textSecondary),
         ),
         if (!haySel) ...[
           const SizedBox(height: 6),
-          const Text(
+          Text(
             'Selecciona una celda para insertar o eliminar filas y columnas junto a ella.',
-            style: TextStyle(fontSize: 12, color: Colors.black87),
+            style: TextStyle(fontSize: 12, color: AppColors.textPrimary),
           ),
         ],
         const SizedBox(height: 6),
@@ -213,8 +214,8 @@ class PanelPropiedadesTabla extends StatelessWidget {
           ],
         ),
         const SizedBox(height: 4),
-        const Text('Escribe la medida y presiona Enter.',
-            style: TextStyle(fontSize: 11, color: Colors.black54)),
+        Text('Escribe la medida y presiona Enter.',
+            style: TextStyle(fontSize: 11, color: AppColors.textSecondary)),
         const SizedBox(height: 4),
         _botonAccion(Icons.view_column_outlined, 'Igualar ancho de todas las columnas',
             () => onChanged((e) => e.copyWith(tablaAnchosColumna: const []))),
@@ -266,7 +267,7 @@ class PanelPropiedadesTabla extends StatelessWidget {
 
   List<Widget> _seccionesCeldas() {
     if (seleccion.isEmpty) {
-      return const [
+      return [
         PanelSeccionColapsable(
           titulo: 'Celdas',
           icono: Icons.grid_on,
@@ -274,7 +275,7 @@ class PanelPropiedadesTabla extends StatelessWidget {
             Text(
               'Selecciona una o varias celdas en la tabla para cambiar su '
               'relleno y estilo de texto.',
-              style: TextStyle(fontSize: 12, color: Colors.black54),
+              style: TextStyle(fontSize: 12, color: AppColors.textSecondary),
             ),
             SizedBox(height: 8),
           ],
@@ -292,7 +293,7 @@ class PanelPropiedadesTabla extends StatelessWidget {
         icono: Icons.format_color_fill,
         children: [
           Text(n == 1 ? '1 celda seleccionada' : '$n celdas seleccionadas',
-              style: const TextStyle(fontSize: 12, color: Colors.black54)),
+              style: TextStyle(fontSize: 12, color: AppColors.textSecondary)),
           const SizedBox(height: 8),
           ColorSwatchPicker(
             label: 'Color de relleno',
@@ -374,10 +375,10 @@ class PanelPropiedadesTabla extends StatelessWidget {
         height: 32,
         decoration: BoxDecoration(
           color: activo ? Colors.blueAccent.withValues(alpha: 0.15) : null,
-          border: Border.all(color: activo ? Colors.blueAccent : Colors.black26),
+          border: Border.all(color: activo ? Colors.blueAccent : AppColors.border),
           borderRadius: BorderRadius.circular(6),
         ),
-        child: Icon(icono, size: 18, color: activo ? Colors.blueAccent : Colors.black87),
+        child: Icon(icono, size: 18, color: activo ? Colors.blueAccent : AppColors.textPrimary),
       ),
     ),
   );
