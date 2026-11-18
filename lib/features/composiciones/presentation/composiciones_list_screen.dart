@@ -171,12 +171,15 @@ class _ComposicionCard extends ConsumerWidget {
                   onSelected: (value) async {
                     if (value == 'renombrar') {
                       await _renombrar(context, ref);
+                    } else if (value == 'duplicar') {
+                      await _duplicar(context, ref);
                     } else if (value == 'eliminar') {
                       await _confirmarEliminar(context, ref);
                     }
                   },
                   itemBuilder: (context) => const [
                     PopupMenuItem(value: 'renombrar', child: Text('Renombrar')),
+                    PopupMenuItem(value: 'duplicar', child: Text('Duplicar')),
                     PopupMenuItem(value: 'eliminar', child: Text('Eliminar')),
                   ],
                 ),
@@ -223,6 +226,28 @@ class _ComposicionCard extends ConsumerWidget {
     );
     if (nuevoNombre == null || nuevoNombre.isEmpty) return;
     await ref.read(composicionesRepositoryProvider).renombrar(composicion.id, nuevoNombre);
+  }
+
+  Future<void> _duplicar(BuildContext context, WidgetRef ref) async {
+    final messenger = ScaffoldMessenger.of(context);
+    final user = ref.read(currentUserProvider);
+    try {
+      final nuevoId = await ref.read(composicionesRepositoryProvider).duplicar(
+        composicion.id,
+        createdByUid: user?.uid,
+        createdByEmail: user?.email,
+      );
+      messenger.showSnackBar(SnackBar(
+        content: Text(nuevoId == null
+            ? 'La composición ya no existe.'
+            : 'Se creó "Copia de ${composicion.nombre}".'),
+      ));
+    } catch (e) {
+      messenger.showSnackBar(SnackBar(
+        content: Text('No se pudo duplicar: $e'),
+        backgroundColor: AppColors.danger,
+      ));
+    }
   }
 
   Future<void> _confirmarEliminar(BuildContext context, WidgetRef ref) async {

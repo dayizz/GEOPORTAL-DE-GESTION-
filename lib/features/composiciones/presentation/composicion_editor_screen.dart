@@ -75,6 +75,32 @@ class _ComposicionEditorScreenState
   int _hojaActivaIndex = 0;
   String? _elementoSeleccionadoId;
   bool _mostrarFiguras = false;
+  // Paneles laterales desplegables. `null` = valor por defecto: abiertos en
+  // escritorio y cerrados en celular, para dar prioridad a la hoja.
+  bool? _capasAbiertasState;
+  bool? _propiedadesAbiertasState;
+  bool get _esMovil => MediaQuery.sizeOf(context).width < 700;
+  bool get _capasAbiertas => _capasAbiertasState ?? !_esMovil;
+  bool get _propiedadesAbiertas => _propiedadesAbiertasState ?? !_esMovil;
+
+  /// En celular solo cabe un panel a la vez sobre la hoja.
+  void _alternarPanel({required bool capas}) => setState(() {
+    if (capas) {
+      _capasAbiertasState = !_capasAbiertas;
+      if (_esMovil && _capasAbiertasState!) _propiedadesAbiertasState = false;
+    } else {
+      _propiedadesAbiertasState = !_propiedadesAbiertas;
+      if (_esMovil && _propiedadesAbiertasState!) _capasAbiertasState = false;
+    }
+  });
+
+  /// Las herramientas que muestran su selector en Propiedades (Hoja,
+  /// Figuras, Gráfica) abren ese panel en celular.
+  void _abrirPropiedadesEnMovil() {
+    if (!_esMovil) return;
+    _propiedadesAbiertasState = true;
+    _capasAbiertasState = false;
+  }
 
   /// Selector de gráficas en el panel Propiedades (en vez de un menú
   /// emergente) y los datos elegidos para la gráfica nueva.
@@ -1173,14 +1199,18 @@ class _ComposicionEditorScreenState
       currentIndex: 7,
       title: composicion.nombre,
       actions: const [],
-      child: Column(
+      child: _esMovil
+          ? _buildCuerpoMovil(todosLosPredios, proyectoItem, importedFeatures, pksFeatures)
+          : Column(
         children: [
           Expanded(
             child: Row(
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
-                _buildBarraLateral(todosLosPredios),
-                const VerticalDivider(width: 1),
+                if (_capasAbiertas) ...[
+                  _buildBarraLateral(todosLosPredios),
+                  const VerticalDivider(width: 1),
+                ],
                 Expanded(
                   child: Column(
                     children: [
@@ -1199,8 +1229,10 @@ class _ComposicionEditorScreenState
                     ],
                   ),
                 ),
-                const VerticalDivider(width: 1),
-                _buildPanelLateralDerecho(),
+                if (_propiedadesAbiertas) ...[
+                  const VerticalDivider(width: 1),
+                  _buildPanelLateralDerecho(),
+                ],
               ],
             ),
           ),
@@ -1209,7 +1241,99 @@ class _ComposicionEditorScreenState
     );
   }
 
+  /// Celular: la hoja ocupa todo el ancho y los paneles de Capas y
+  /// Propiedades se despliegan encima de ella (uno a la vez); tocar fuera
+  /// del panel lo cierra.
+  Widget _buildCuerpoMovil(
+    List<Predio> todosLosPredios,
+    ProyectoItem? proyectoItem,
+    List<Map<String, dynamic>> importedFeatures,
+    List<Map<String, dynamic>> pksFeatures,
+  ) {
+    final anchoPanel = math.min(MediaQuery.sizeOf(context).width * 0.88, 320.0);
+    final hayPanel = _capasAbiertas || _propiedadesAbiertas;
+    Widget panel(Widget hijo) => Material(
+      elevation: 8,
+      color: AppColors.surface,
+      child: SizedBox(width: anchoPanel, child: hijo),
+    );
+    return Column(
+      children: [
+        _buildBarraAccionesSuperior(),
+        const Divider(height: 1),
+        Expanded(
+          child: Stack(
+            children: [
+              Positioned.fill(
+                child: _buildLienzo(todosLosPredios, proyectoItem, importedFeatures, pksFeatures),
+              ),
+              if (hayPanel)
+                Positioned.fill(
+                  child: GestureDetector(
+                    onTap: () => setState(() {
+                      _capasAbiertasState = false;
+                      _propiedadesAbiertasState = false;
+                    }),
+                    child: const ColoredBox(color: Colors.black26),
+                  ),
+                ),
+              if (_capasAbiertas)
+                Positioned(
+                  left: 0, top: 0, bottom: 0,
+                  child: panel(_buildBarraLateral(todosLosPredios)),
+                ),
+              if (_propiedadesAbiertas)
+                Positioned(
+                  right: 0, top: 0, bottom: 0,
+                  child: panel(_buildPanelLateralDerecho()),
+                ),
+            ],
+          ),
+        ),
+        const Divider(height: 1),
+        _buildBarraHojas(),
+      ],
+    );
+  }
+
   Widget _buildBarraAccionesSuperior() {
+    final movil = _esMovil;
+    final barra = _buildBarraAccionesSuperiorContenido();
+    return Row(
+      children: [
+        _botonPanel(capas: true),
+        Expanded(
+          // En celular las herramientas van en una sola fila desplazable
+          // en vez de envolverse en varias filas que le quitan alto a la hoja.
+          child: movil
+              ? SingleChildScrollView(scrollDirection: Axis.horizontal, child: barra)
+              : barra,
+        ),
+        _botonPanel(capas: false),
+      ],
+    );
+  }
+
+  Widget _botonPanel({required bool capas}) {
+    final abierto = capas ? _capasAbiertas : _propiedadesAbiertas;
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 4),
+      child: IconButton(
+        tooltip: '${abierto ? 'Ocultar' : 'Mostrar'} ${capas ? 'capas' : 'propiedades'}',
+        isSelected: abierto,
+        style: IconButton.styleFrom(
+          backgroundColor: abierto ? AppColors.primary.withValues(alpha: 0.12) : null,
+        ),
+        icon: Icon(
+          capas ? Icons.layers_outlined : Icons.tune,
+          color: abierto ? AppColors.primary : AppColors.textPrimary,
+        ),
+        onPressed: () => _alternarPanel(capas: capas),
+      ),
+    );
+  }
+
+  Widget _buildBarraAccionesSuperiorContenido() {
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
       child: Wrap(
@@ -1220,7 +1344,7 @@ class _ComposicionEditorScreenState
                   _herramientaBoton(
                     icon: Icons.description_outlined,
                     tooltip: 'Hoja',
-                    onTap: () => setState(() { _elementoSeleccionadoId = null; _mostrarFiguras = false; _mostrarGraficas = false; }),
+                    onTap: () => setState(() { _elementoSeleccionadoId = null; _mostrarFiguras = false; _mostrarGraficas = false; _abrirPropiedadesEnMovil(); }),
                   ),
                   const SizedBox(width: 6),
                   _herramientaBoton(
@@ -1476,6 +1600,7 @@ class _ComposicionEditorScreenState
       _elementoSeleccionadoId = null;
       _mostrarFiguras = true;
       _mostrarGraficas = false;
+      _abrirPropiedadesEnMovil();
     }),
   );
 
@@ -1674,6 +1799,7 @@ class _ComposicionEditorScreenState
       _mostrarFiguras = false;
       _mostrarGraficas = true;
       _nuevaGraficaProyecto ??= _composicion!.proyecto;
+      _abrirPropiedadesEnMovil();
     }),
   );
 

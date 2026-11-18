@@ -4,6 +4,10 @@ import 'package:intl/intl.dart';
 import '../../../../core/constants/app_colors.dart';
 import '../../utils/balance_calculos.dart';
 
+/// Por debajo de este ancho (celular) las tarjetas se acomodan en filas
+/// de 2 hacia abajo en vez de una fila con desplazamiento horizontal.
+const double _anchoCompacto = 700;
+
 class AvanceGeneralWidget extends StatelessWidget {
   const AvanceGeneralWidget({super.key, required this.avance, this.grupo = GrupoInfraestructuraBalance.predios, this.conFondo = true});
   final AvanceGeneralBalance avance;
@@ -45,6 +49,16 @@ class AvanceGeneralWidget extends StatelessWidget {
         ],
       ],
     );
+    // Pares de tarjetas apilados (filas de 2, cada fila con alto parejo).
+    Widget enFilas(List<Widget> tarjetas) => Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        for (var i = 0; i < tarjetas.length; i += 2) ...[
+          if (i > 0) const SizedBox(height: 8),
+          IntrinsicHeight(child: fila(tarjetas.sublist(i, math.min(i + 2, tarjetas.length)))),
+        ],
+      ],
+    );
     if (grupo == GrupoInfraestructuraBalance.estacionesEdificios ||
         grupo == GrupoInfraestructuraBalance.cruces) {
       final estaciones = grupo == GrupoInfraestructuraBalance.estacionesEdificios;
@@ -54,23 +68,51 @@ class AvanceGeneralWidget extends StatelessWidget {
         0, (sum, p) => sum + medidaPredioBalance(p, usaM2: estaciones),
       );
       final categoria = estaciones ? 'Estaciones y Edif. Auxiliares' : 'Cruces/Transversales';
+      final tarjetas = [
+        tarjeta('Total de registros clasificados en $categoria', enteros.format(registros.length), AppColors.primary),
+        tarjeta('Total no liberados en $categoria', enteros.format(registros.length - liberados), AppColors.danger),
+        tarjeta('Total liberados en $categoria', enteros.format(liberados), AppColors.secondary),
+        tarjeta(estaciones ? 'm² efectivos liberados en $categoria' : 'Km efectivos liberados en $categoria',
+          '${medidas.format(medida)} ${estaciones ? 'm²' : 'km'}', AppColors.secondary),
+      ];
       return LayoutBuilder(builder: (context, constraints) {
+        if (constraints.maxWidth < _anchoCompacto) return enFilas(tarjetas);
         return SingleChildScrollView(
           scrollDirection: Axis.horizontal,
           child: SizedBox(
             width: math.max(880, constraints.maxWidth),
-            child: IntrinsicHeight(child: fila([
-              tarjeta('Total de registros clasificados en $categoria', enteros.format(registros.length), AppColors.primary),
-              tarjeta('Total no liberados en $categoria', enteros.format(registros.length - liberados), AppColors.danger),
-              tarjeta('Total liberados en $categoria', enteros.format(liberados), AppColors.secondary),
-              tarjeta(estaciones ? 'm² efectivos liberados en $categoria' : 'Km efectivos liberados en $categoria',
-                '${medidas.format(medida)} ${estaciones ? 'm²' : 'km'}', AppColors.secondary),
-            ])),
+            child: IntrinsicHeight(child: fila(tarjetas)),
           ),
         );
       });
     }
+    final total = tarjeta('Total de registros clasificados', enteros.format(avance.total), AppColors.primary);
+    final troncal = [
+      tarjeta('Total de predios en troncal', enteros.format(avance.troncal.length), AppColors.primary),
+      tarjeta('Total no liberados en troncal', enteros.format(avance.noLiberadosTroncal), AppColors.danger),
+      tarjeta('Total liberados en troncal', enteros.format(avance.liberadosTroncal), AppColors.secondary),
+      tarjeta('Km efectivos liberados en troncal', '${medidas.format(avance.kmLiberados)} km', AppColors.secondary),
+    ];
+    final estacionesTarjetas = [
+      tarjeta('Total de Estaciones y Edif. Auxiliares', enteros.format(avance.estaciones.length), AppColors.primary),
+      tarjeta('Total no liberados en Estaciones y Edif. Auxiliares', enteros.format(avance.noLiberadosEstaciones), AppColors.danger),
+      tarjeta('Total liberados en Estaciones y Edif. Auxiliares', enteros.format(avance.liberadosEstaciones), AppColors.secondary),
+      tarjeta('m² efectivos liberados en Estaciones y Edif. Auxiliares', '${medidas.format(avance.m2Liberados)} m²', AppColors.secondary),
+    ];
     return LayoutBuilder(builder: (context, constraints) {
+      // Celular: tarjetas en filas de 2 hacia abajo, sin desplazamiento.
+      if (constraints.maxWidth < _anchoCompacto) {
+        return Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            total,
+            const SizedBox(height: 8),
+            enFilas(troncal),
+            const SizedBox(height: 8),
+            enFilas(estacionesTarjetas),
+          ],
+        );
+      }
       return SingleChildScrollView(
         scrollDirection: Axis.horizontal,
         child: SizedBox(
@@ -79,24 +121,14 @@ class AvanceGeneralWidget extends StatelessWidget {
             child: Row(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              Expanded(child: tarjeta('Total de registros clasificados', enteros.format(avance.total), AppColors.primary)),
+              Expanded(child: total),
               const SizedBox(width: 8),
               Expanded(
                 flex: 4,
                 child: Column(children: [
-                  IntrinsicHeight(child: fila([
-                    tarjeta('Total de predios en troncal', enteros.format(avance.troncal.length), AppColors.primary),
-                    tarjeta('Total no liberados en troncal', enteros.format(avance.noLiberadosTroncal), AppColors.danger),
-                    tarjeta('Total liberados en troncal', enteros.format(avance.liberadosTroncal), AppColors.secondary),
-                    tarjeta('Km efectivos liberados en troncal', '${medidas.format(avance.kmLiberados)} km', AppColors.secondary),
-                  ])),
+                  IntrinsicHeight(child: fila(troncal)),
                   const SizedBox(height: 8),
-                  IntrinsicHeight(child: fila([
-                    tarjeta('Total de Estaciones y Edif. Auxiliares', enteros.format(avance.estaciones.length), AppColors.primary),
-                    tarjeta('Total no liberados en Estaciones y Edif. Auxiliares', enteros.format(avance.noLiberadosEstaciones), AppColors.danger),
-                    tarjeta('Total liberados en Estaciones y Edif. Auxiliares', enteros.format(avance.liberadosEstaciones), AppColors.secondary),
-                    tarjeta('m² efectivos liberados en Estaciones y Edif. Auxiliares', '${medidas.format(avance.m2Liberados)} m²', AppColors.secondary),
-                  ])),
+                  IntrinsicHeight(child: fila(estacionesTarjetas)),
                 ]),
               ),
             ],

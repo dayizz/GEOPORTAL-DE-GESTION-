@@ -251,8 +251,7 @@ Widget buildStackedPctBars({
   double anchoBarra = 56,
   double altoBarra = 190,
 }) {
-  return SingleChildScrollView(
-    scrollDirection: Axis.horizontal,
+  return MobileHorizontalScroll(
     child: Row(
       crossAxisAlignment: CrossAxisAlignment.end,
       children: [
