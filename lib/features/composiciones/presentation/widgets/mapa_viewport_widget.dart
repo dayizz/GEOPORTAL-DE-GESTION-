@@ -11,6 +11,7 @@ import 'package:latlong2/latlong.dart';
 import '../../../../core/constants/app_colors.dart';
 import '../../../mapa/utils/geometry_parsing.dart';
 import '../../../mapa/utils/pks_label.dart';
+import '../../../mapa/utils/trazo_metadata.dart';
 import '../../../predios/models/predio.dart';
 
 /// Viewport de mapa de solo datos (sin Riverpod): recibe la lista de
@@ -62,6 +63,8 @@ class MapaViewportWidget extends StatefulWidget {
     this.rotacion = 0,
     this.opacidadMapa = 1,
     this.opacidadPredios = 0.35,
+    this.prediosOcultos = const {},
+    this.trazosOcultos = const {},
   });
 
   final double lat;
@@ -94,6 +97,11 @@ class MapaViewportWidget extends StatefulWidget {
   /// Opacidad (0-1) del relleno/trazo de los polígonos de predios.
   final double opacidadPredios;
 
+  /// "Datos filtrados": categorías de predios (`categoriasPrediosMapa`) y
+  /// tipos de línea del trazo (`tiposLinea`) que no se dibujan.
+  final Set<String> prediosOcultos;
+  final Set<String> trazosOcultos;
+
   @override
   State<MapaViewportWidget> createState() => _MapaViewportWidgetState();
 }
@@ -101,6 +109,8 @@ class MapaViewportWidget extends StatefulWidget {
 class _MapaViewportWidgetState extends State<MapaViewportWidget> {
   final MapController _mapController = MapController();
   List<Polygon>? _poligonos;
+  List<Polyline>? _lineasTrazo;
+  List<Predio>? _prediosVisiblesCache;
   List<Marker>? _etiquetasClave;
   List<Marker>? _etiquetasPks;
   Color? _colorImportados;
@@ -115,12 +125,16 @@ class _MapaViewportWidgetState extends State<MapaViewportWidget> {
   @override
   void didUpdateWidget(covariant MapaViewportWidget oldWidget) {
     super.didUpdateWidget(oldWidget);
-    final cambioPredios = !listEquals(widget.predios, oldWidget.predios);
-    if (cambioPredios ||
-        !listEquals(widget.importedFeatures, oldWidget.importedFeatures) ||
+    final cambioPredios = !listEquals(widget.predios, oldWidget.predios) ||
+        !setEquals(widget.prediosOcultos, oldWidget.prediosOcultos);
+    if (cambioPredios) _prediosVisiblesCache = null;
+    final cambioTrazo = !listEquals(widget.importedFeatures, oldWidget.importedFeatures) ||
+        !setEquals(widget.trazosOcultos, oldWidget.trazosOcultos);
+    if (cambioPredios || cambioTrazo ||
         widget.opacidadPredios != oldWidget.opacidadPredios) {
       _poligonos = null;
     }
+    if (cambioTrazo) _lineasTrazo = null;
     if (widget.estiloClave != oldWidget.estiloClave || cambioPredios || widget.mostrarEtiquetasClave != oldWidget.mostrarEtiquetasClave) {
       _etiquetasClave = null;
     }
@@ -155,9 +169,63 @@ class _MapaViewportWidgetState extends State<MapaViewportWidget> {
     }
   }
 
+  /// Categoría del filtro: "En investigación" (sin tipo de
+  /// infraestructura), "Liberados" o "No liberados".
+  static String _categoriaPredio(Predio p) {
+    if (p.rangoEstatus == 'Investigación') return categoriaPrediosInvestigacion;
+    return Predio.estatusSimplificado(p.rangoEstatus) == 'Liberado'
+        ? categoriaPrediosLiberados
+        : categoriaPrediosNoLiberados;
+  }
+
+  List<Predio> get _prediosVisibles => _prediosVisiblesCache ??=
+      widget.prediosOcultos.isEmpty
+          ? widget.predios
+          : widget.predios
+              .where((p) => !widget.prediosOcultos.contains(_categoriaPredio(p)))
+              .toList(growable: false);
+
+  static Map<String, dynamic>? _geometria(dynamic geometry) {
+    if (geometry is String) {
+      try {
+        geometry = jsonDecode(geometry);
+      } catch (_) {
+        return null;
+      }
+    }
+    return geometry is Map ? Map<String, dynamic>.from(geometry) : null;
+  }
+
+  /// Si [feature] se dibuja: los trazos se filtran por tipo de línea; el
+  /// resto de features importados siempre se dibuja.
+  bool _featureVisible(Map<String, dynamic> feature) =>
+      !esFeatureTrazo(feature) || !widget.trazosOcultos.contains(tipoLineaTrazo(feature));
+
+  /// Líneas del trazo (envolventes `LineString`), con el color de su tipo
+  /// de línea, igual que en la vista Mapa.
+  List<Polyline> _construirLineasTrazo() {
+    final lineas = <Polyline>[];
+    for (final feature in widget.importedFeatures) {
+      if (!_featureVisible(feature)) continue;
+      final color = esFeatureTrazo(feature)
+          ? colorTipoLinea(tipoLineaTrazo(feature))
+          : AppColors.primary;
+      for (final puntos in extractLinesFromGeometry(_geometria(feature['geometry']))) {
+        lineas.add(Polyline(
+          points: puntos,
+          color: color,
+          strokeWidth: 3,
+          strokeCap: StrokeCap.round,
+          strokeJoin: StrokeJoin.round,
+        ));
+      }
+    }
+    return lineas;
+  }
+
   List<Polygon> _construirPoligonos() {
     final poligonos = <Polygon>[];
-    for (final predio in widget.predios) {
+    for (final predio in _prediosVisibles) {
       if (predio.geometry == null) continue;
       final rings = extractRingsFromGeometry(predio.geometry);
       if (rings.isEmpty) continue;
@@ -179,20 +247,19 @@ class _MapaViewportWidgetState extends State<MapaViewportWidget> {
   List<Polygon> _construirPoligonosImportados() {
     final poligonos = <Polygon>[];
     for (final feature in widget.importedFeatures) {
-      final geometry = feature['geometry'];
-      if (geometry is! Map) continue;
-      final polygons = extractPolygonsFromGeometry(
-        Map<String, dynamic>.from(geometry),
-      );
+      if (!_featureVisible(feature)) continue;
+      final polygons = extractPolygonsFromGeometry(_geometria(feature['geometry']));
+      final esTrazo = esFeatureTrazo(feature);
+      final color = esTrazo ? colorTipoLinea(tipoLineaTrazo(feature)) : AppColors.primary;
       for (final rings in polygons) {
         if (rings.isEmpty || rings.first.isEmpty) continue;
         poligonos.add(
           Polygon(
             points: rings.first,
             holePointsList: rings.length > 1 ? rings.sublist(1) : const [],
-            color: AppColors.primary.withValues(alpha: 0.28),
-            borderColor: AppColors.primary,
-            borderStrokeWidth: 1.8,
+            color: color.withValues(alpha: esTrazo ? 0.18 : 0.28),
+            borderColor: color,
+            borderStrokeWidth: esTrazo ? 2.5 : 1.8,
           ),
         );
       }
@@ -263,7 +330,7 @@ class _MapaViewportWidgetState extends State<MapaViewportWidget> {
   List<Marker> _construirEtiquetasClave() {
     if (!widget.mostrarEtiquetasClave) return const [];
     final marcadores = <Marker>[];
-    for (final predio in widget.predios) {
+    for (final predio in _prediosVisibles) {
       final clave = predio.claveCatastral.trim();
       if (clave.isEmpty || predio.geometry == null) continue;
       final rings = extractRingsFromGeometry(predio.geometry);
@@ -326,6 +393,7 @@ class _MapaViewportWidgetState extends State<MapaViewportWidget> {
       _poligonos = null;
     }
     final poligonos = _poligonos ??= [..._construirPoligonos(), ..._construirPoligonosImportados()];
+    final lineasTrazo = _lineasTrazo ??= _construirLineasTrazo();
     final etiquetas = _etiquetasClave ??= _construirEtiquetasClave();
     final etiquetasPks = _etiquetasPks ??= _construirEtiquetasPks();
     // Sin fondo propio: con 'sinMapa' solo se ven los polígonos sobre la
@@ -370,6 +438,7 @@ class _MapaViewportWidgetState extends State<MapaViewportWidget> {
           PolygonLayer(
             polygons: poligonos,
           ),
+          if (lineasTrazo.isNotEmpty) PolylineLayer(polylines: lineasTrazo),
           if (etiquetas.isNotEmpty) MarkerLayer(markers: etiquetas),
           if (etiquetasPks.isNotEmpty) MarkerLayer(markers: etiquetasPks),
         ],

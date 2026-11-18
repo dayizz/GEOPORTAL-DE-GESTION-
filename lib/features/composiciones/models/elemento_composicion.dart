@@ -85,6 +85,16 @@ AlineacionTexto alineacionTextoFromString(String value) {
   );
 }
 
+/// Categorías de predios del filtro "Datos filtrados" de un mapa.
+const categoriaPrediosLiberados = 'Liberados';
+const categoriaPrediosNoLiberados = 'No liberados';
+const categoriaPrediosInvestigacion = 'En investigación';
+const categoriasPrediosMapa = [
+  categoriaPrediosLiberados,
+  categoriaPrediosNoLiberados,
+  categoriaPrediosInvestigacion,
+];
+
 /// Modos de simbología para elementos [TipoElemento.simbologia].
 enum TipoSimbologia { estatus, rangoEstatus, tipoPropiedad }
 
@@ -454,6 +464,10 @@ class ElementoComposicion {
   final EstiloEtiquetaMapa mapaEstiloClave;
   final EstiloEtiquetaMapa mapaEstiloPks;
   final EstiloLinea mapaBordeEstilo;
+  // "Datos filtrados": categorías de predios (`categoriasPrediosMapa`) y
+  // tipos de línea del trazo (`tiposLinea`) que NO se muestran. Vacío = todo.
+  final List<String> mapaPrediosOcultos;
+  final List<String> mapaTrazosOcultos;
 
   // --- Escala gráfica ---
   // Id de un elemento de tipo mapa en la misma hoja del que se deriva la
@@ -553,6 +567,8 @@ class ElementoComposicion {
     this.mapaEstiloClave = const EstiloEtiquetaMapa(),
     this.mapaEstiloPks = const EstiloEtiquetaMapa(),
     this.mapaBordeEstilo = EstiloLinea.continua,
+    this.mapaPrediosOcultos = const [],
+    this.mapaTrazosOcultos = const [],
     this.imagenBase64,
     this.mapaLat,
     this.mapaLng,
@@ -894,6 +910,8 @@ class ElementoComposicion {
     EstiloEtiquetaMapa? mapaEstiloClave,
     EstiloEtiquetaMapa? mapaEstiloPks,
     EstiloLinea? mapaBordeEstilo,
+    List<String>? mapaPrediosOcultos,
+    List<String>? mapaTrazosOcultos,
     bool clearEscalaMapaId = false,
     String? escalaMapaId,
     TipoSimbologia? simbologiaTipo,
@@ -980,6 +998,8 @@ class ElementoComposicion {
       mapaEstiloClave: mapaEstiloClave ?? this.mapaEstiloClave,
       mapaEstiloPks: mapaEstiloPks ?? this.mapaEstiloPks,
       mapaBordeEstilo: mapaBordeEstilo ?? this.mapaBordeEstilo,
+      mapaPrediosOcultos: mapaPrediosOcultos ?? this.mapaPrediosOcultos,
+      mapaTrazosOcultos: mapaTrazosOcultos ?? this.mapaTrazosOcultos,
       escalaMapaId: clearEscalaMapaId ? null : (escalaMapaId ?? this.escalaMapaId),
       simbologiaTipo: simbologiaTipo ?? this.simbologiaTipo,
       simbologiaEstilo: simbologiaEstilo ?? this.simbologiaEstilo,
@@ -1065,6 +1085,8 @@ class ElementoComposicion {
         'mapa_estilo_clave': mapaEstiloClave.toMap(),
         'mapa_estilo_pks': mapaEstiloPks.toMap(),
         'mapa_borde_estilo': mapaBordeEstilo.name,
+        'mapa_predios_ocultos': mapaPrediosOcultos,
+        'mapa_trazos_ocultos': mapaTrazosOcultos,
         'escala_mapa_id': escalaMapaId,
         'simbologia_tipo': simbologiaTipo?.name,
         'simbologia_estilo': simbologiaEstilo.toMap(),
@@ -1168,6 +1190,8 @@ class ElementoComposicion {
       mapaEstiloClave: EstiloEtiquetaMapa.fromMap(map['mapa_estilo_clave'] as Map? ?? {}),
       mapaEstiloPks: EstiloEtiquetaMapa.fromMap(map['mapa_estilo_pks'] as Map? ?? {}),
       mapaBordeEstilo: estiloLineaFromString(map['mapa_borde_estilo'] as String? ?? 'continua'),
+      mapaPrediosOcultos: (map['mapa_predios_ocultos'] as List? ?? const []).map((v) => v.toString()).toList(),
+      mapaTrazosOcultos: (map['mapa_trazos_ocultos'] as List? ?? const []).map((v) => v.toString()).toList(),
       escalaMapaId: map['escala_mapa_id'] as String?,
       simbologiaTipo:
           map['simbologia_tipo'] != null ? tipoSimbologiaFromString(map['simbologia_tipo'] as String) : null,

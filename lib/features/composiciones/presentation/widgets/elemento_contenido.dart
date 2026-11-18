@@ -35,6 +35,7 @@ Widget buildElementoContenidoEstatico(
   ElementoComposicion e, {
   List<Predio> predios = const [],
   List<Map<String, dynamic>> pksFeatures = const [],
+  List<Map<String, dynamic>> importedFeatures = const [],
   List<ElementoComposicion> hojaElementos = const [],
   double scale = 1,
   ProyectoItem? proyectoItem,
@@ -101,6 +102,9 @@ Widget buildElementoContenidoEstatico(
               lng: e.mapaLng ?? -100.35,
               zoom: e.mapaZoom ?? 12,
               predios: predios,
+              importedFeatures: importedFeatures,
+              prediosOcultos: e.mapaPrediosOcultos.toSet(),
+              trazosOcultos: e.mapaTrazosOcultos.toSet(),
               baseLayer: e.mapaBaseLayer ?? 'estandar',
               mostrarEtiquetasClave: e.mapaMostrarClaves ?? false,
               rotacion: e.mapaRotacion ?? 0,

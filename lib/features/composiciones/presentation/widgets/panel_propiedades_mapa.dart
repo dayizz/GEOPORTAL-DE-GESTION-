@@ -4,6 +4,8 @@ import '../../models/elemento_composicion.dart';
 import 'color_swatch_picker.dart';
 import 'panel_seccion_colapsable.dart';
 import 'panel_propiedades_texto.dart' show composicionesFuentes;
+import '../../../mapa/utils/trazo_metadata.dart' show tiposLinea, colorTipoLinea;
+import '../../../../core/constants/app_colors.dart';
 
 const _opcionesBaseLayer = [
   ('estandar', 'Estándar'),
@@ -99,6 +101,8 @@ class PanelPropiedadesMapa extends StatelessWidget {
     required this.onEstiloClaveChanged,
     required this.onEstiloPksChanged,
     required this.onBordeEstiloChanged,
+    required this.onPrediosOcultosChanged,
+    required this.onTrazosOcultosChanged,
   });
 
   final ElementoComposicion elemento;
@@ -117,6 +121,48 @@ class PanelPropiedadesMapa extends StatelessWidget {
   final ValueChanged<EstiloEtiquetaMapa> onEstiloClaveChanged;
   final ValueChanged<EstiloEtiquetaMapa> onEstiloPksChanged;
   final ValueChanged<EstiloLinea> onBordeEstiloChanged;
+  final ValueChanged<List<String>> onPrediosOcultosChanged;
+  final ValueChanged<List<String>> onTrazosOcultosChanged;
+
+  /// Casilla de "Datos filtrados": marcada = la categoría se muestra.
+  Widget _casillaFiltro(String etiqueta, List<String> ocultos,
+      ValueChanged<List<String>> onChanged, {Color? color}) {
+    return CheckboxListTile(
+      dense: true,
+      contentPadding: EdgeInsets.zero,
+      visualDensity: VisualDensity.compact,
+      controlAffinity: ListTileControlAffinity.leading,
+      value: !ocultos.contains(etiqueta),
+      secondary: color == null ? null : Container(width: 18, height: 4, color: color),
+      title: Text(etiqueta, style: const TextStyle(fontSize: 12)),
+      onChanged: (visible) => onChanged(visible == true
+          ? ocultos.where((o) => o != etiqueta).toList()
+          : [...ocultos, etiqueta]),
+    );
+  }
+
+  Widget _seccionDatosFiltrados() {
+    const subtitulo = TextStyle(fontSize: 12, fontWeight: FontWeight.w600);
+    return PanelSeccionColapsable(
+      titulo: 'Datos filtrados',
+      icono: Icons.filter_alt_outlined,
+      children: [
+        const Text('Predios', style: subtitulo),
+        for (final c in categoriasPrediosMapa)
+          _casillaFiltro(c, elemento.mapaPrediosOcultos, onPrediosOcultosChanged),
+        const SizedBox(height: 8),
+        const Text('Trazo', style: subtitulo),
+        for (final t in tiposLinea)
+          _casillaFiltro(t, elemento.mapaTrazosOcultos, onTrazosOcultosChanged,
+              color: colorTipoLinea(t)),
+        Text(
+          'El trazo se toma de las envolventes cargadas en el Mapa.',
+          style: TextStyle(fontSize: 11, color: AppColors.textSecondary),
+        ),
+        const SizedBox(height: 8),
+      ],
+    );
+  }
 
   Widget _estiloEtiqueta(String capa, EstiloEtiquetaMapa estilo,
       ValueChanged<EstiloEtiquetaMapa> onChanged) {
@@ -316,6 +362,7 @@ class PanelPropiedadesMapa extends StatelessWidget {
             ),
           ],
         ),
+        _seccionDatosFiltrados(),
         PanelSeccionColapsable(
           titulo: 'Capas y etiquetas',
           icono: Icons.layers_outlined,

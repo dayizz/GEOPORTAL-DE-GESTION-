@@ -1012,7 +1012,7 @@ class _MapaScreenState extends ConsumerState<MapaScreen> {
         final isEnvelope = nombreArchivoNormalizado(file).contains('ENVOLVENTE') ||
             file.features.any(_isEnvolventeFeature);
         if (isEnvelope) {
-          envelopeFeatures.addAll(_tagSavedEnvelopeFeatures(file.features, proyecto: file.proyecto));
+          envelopeFeatures.addAll(etiquetarFeaturesEnvolvente(file.features, proyecto: file.proyecto));
         }
         if (esArchivoPksGuardado(file)) {
           pksFeatures.addAll(etiquetarFeaturesPks(file.features));
@@ -1034,28 +1034,6 @@ class _MapaScreenState extends ConsumerState<MapaScreen> {
       if (_restoringMapLayersForUid == uid) _restoringMapLayersForUid = null;
     }
   }
-
-  List<Map<String, dynamic>> _tagSavedEnvelopeFeatures(
-    List<Map<String, dynamic>> features, {String? proyecto}
-  ) =>
-      features.map((feature) {
-        final rawProperties = feature['properties'];
-        final properties = rawProperties is Map
-            ? Map<String, dynamic>.from(rawProperties)
-            : <String, dynamic>{};
-        return <String, dynamic>{
-          ...feature,
-          '__import_kind': 'envolvente',
-          '__envolvente': true,
-          'properties': {
-            ...properties,
-            '__import_kind': 'envolvente',
-            '__envolvente': true,
-            'categoria': 'ENVOLVENTE',
-            if (proyecto != null && proyectoTrazo(feature) == 'Sin proyecto') '__proyecto_trazo': proyecto,
-          },
-        };
-      }).toList(growable: false);
 
   String _tileTemplate(MapaBaseLayer layer) {
     if (layer == MapaBaseLayer.satelital) {

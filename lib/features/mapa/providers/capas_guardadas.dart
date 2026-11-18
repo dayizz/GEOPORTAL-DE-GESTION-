@@ -5,6 +5,7 @@ import '../../carga/data/archivos_geojson_repository.dart';
 import '../../carga/providers/carga_provider.dart';
 import '../../carga/utils/geojson_mapper.dart';
 import 'mapa_provider.dart';
+import '../utils/trazo_metadata.dart';
 
 /// Archivos GeoJSON guardados en Firestore que el usuario [uid] puede ver:
 /// todos si es administrador/supervisor, o solo los propios y los de sus
@@ -115,20 +116,60 @@ List<Map<String, dynamic>> etiquetarFeaturesPks(
       };
     }).toList(growable: false);
 
-/// Carga los puntos PKS guardados en [pksPointFeaturesProvider] si aún no
-/// hay ninguno en memoria. Lo usan las vistas que muestran PKS sin pasar
-/// antes por el Mapa (p.ej. Composiciones tras recargar la página).
-Future<void> asegurarPksCargados(WidgetRef ref) async {
-  if (ref.read(pksPointFeaturesProvider).isNotEmpty) return;
+/// Etiqueta los features de un archivo de envolvente guardado como trazo
+/// (mismas marcas que al importarlo en Carga), con su [proyecto] si el
+/// feature no trae uno propio. Lo comparten la vista Mapa y Composiciones
+/// para que `combinarTrazos` reconozca los duplicados.
+List<Map<String, dynamic>> etiquetarFeaturesEnvolvente(
+  List<Map<String, dynamic>> features, {String? proyecto}
+) =>
+    features.map((feature) {
+      final rawProperties = feature['properties'];
+      final properties = rawProperties is Map
+          ? Map<String, dynamic>.from(rawProperties)
+          : <String, dynamic>{};
+      return <String, dynamic>{
+        ...feature,
+        '__import_kind': 'envolvente',
+        '__envolvente': true,
+        'properties': {
+          ...properties,
+          '__import_kind': 'envolvente',
+          '__envolvente': true,
+          'categoria': 'ENVOLVENTE',
+          if (proyecto != null && proyectoTrazo(feature) == 'Sin proyecto') '__proyecto_trazo': proyecto,
+        },
+      };
+    }).toList(growable: false);
+
+/// Carga las capas guardadas que usan las vistas fuera del Mapa (p.ej.
+/// Composiciones tras recargar la página): puntos PKS en
+/// [pksPointFeaturesProvider] y trazos de envolvente en
+/// [importedFeaturesProvider], solo si aún no hay en memoria. Una sola
+/// consulta para ambas.
+Future<void> asegurarCapasGuardadasCargadas(WidgetRef ref) async {
+  final faltanPks = ref.read(pksPointFeaturesProvider).isEmpty;
+  final faltanTrazos = !ref.read(importedFeaturesProvider).any(esFeatureTrazo);
+  if (!faltanPks && !faltanTrazos) return;
   try {
     final archivos = await cargarArchivosGuardadosVisibles(ref);
     if (archivos == null) return;
-    final pks = [
-      for (final file in archivos)
-        if (esArchivoPksGuardado(file)) ...etiquetarFeaturesPks(file.features),
-    ];
-    if (pks.isNotEmpty && ref.read(pksPointFeaturesProvider).isEmpty) {
+    final pks = <Map<String, dynamic>>[];
+    final trazos = <Map<String, dynamic>>[];
+    for (final file in archivos) {
+      if (esArchivoPksGuardado(file)) {
+        pks.addAll(etiquetarFeaturesPks(file.features));
+      } else if (nombreArchivoNormalizado(file).contains('ENVOLVENTE') ||
+          file.features.any(esFeatureTrazo)) {
+        trazos.addAll(etiquetarFeaturesEnvolvente(file.features, proyecto: file.proyecto));
+      }
+    }
+    if (faltanPks && pks.isNotEmpty && ref.read(pksPointFeaturesProvider).isEmpty) {
       ref.read(pksPointFeaturesProvider.notifier).state = pks;
+    }
+    if (faltanTrazos && trazos.isNotEmpty) {
+      ref.read(importedFeaturesProvider.notifier).state =
+          combinarTrazos(ref.read(importedFeaturesProvider), trazos);
     }
   } catch (_) {
     // Best-effort: si falla, el Mapa volverá a intentarlo al abrirse.

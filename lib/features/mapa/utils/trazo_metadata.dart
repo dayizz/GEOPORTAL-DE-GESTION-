@@ -44,3 +44,11 @@ List<Map<String, dynamic>> combinarTrazos(
     f['geometry'], proyectoTrazo(f), tipoLineaTrazo(f), divisionTrazo(f), f['properties'],
   ]))).toList();
 }
+
+/// `true` si [feature] es un trazo de envolvente (importado en Carga o
+/// restaurado de los archivos guardados; ambos lo etiquetan así).
+bool esFeatureTrazo(Map<String, dynamic> feature) {
+  final props = feature['properties'];
+  bool marcado(Map m) => m['__import_kind'] == 'envolvente' || m['__envolvente'] == true;
+  return marcado(feature) || (props is Map && marcado(props));
+}

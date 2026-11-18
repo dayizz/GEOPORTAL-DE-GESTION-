@@ -44,6 +44,7 @@ class ComposicionExportService {
     double dpi = dpiPorDefecto,
     List<Predio> predios = const [],
     List<Map<String, dynamic>> pksFeatures = const [],
+    List<Map<String, dynamic>> importedFeatures = const [],
     ProyectoItem? proyectoItem,
     ResolverDatosGrafica? datosGrafica,
   }) async {
@@ -64,6 +65,7 @@ class ComposicionExportService {
         altoPx: altoPx,
         scale: scale,
         predios: predios, pksFeatures: pksFeatures,
+        importedFeatures: importedFeatures,
         proyectoItem: proyectoItem,
         datosGrafica: datosGrafica,
       ),
@@ -82,10 +84,11 @@ class ComposicionExportService {
     int calidad = 92,
     List<Predio> predios = const [],
     List<Map<String, dynamic>> pksFeatures = const [],
+    List<Map<String, dynamic>> importedFeatures = const [],
     ProyectoItem? proyectoItem,
     ResolverDatosGrafica? datosGrafica,
   }) async {
-    final pngBytes = await capturarHojaPng(context, hoja, indiceHoja: indiceHoja, dpi: dpi, predios: predios, pksFeatures: pksFeatures, proyectoItem: proyectoItem, datosGrafica: datosGrafica);
+    final pngBytes = await capturarHojaPng(context, hoja, indiceHoja: indiceHoja, dpi: dpi, predios: predios, pksFeatures: pksFeatures, importedFeatures: importedFeatures, proyectoItem: proyectoItem, datosGrafica: datosGrafica);
     final decodificada = img.decodePng(pngBytes);
     if (decodificada == null) return pngBytes;
     // Los JPG no soportan transparencia; se aplana sobre blanco.
@@ -105,6 +108,7 @@ class ComposicionExportService {
     double dpi = dpiPorDefecto,
     List<Predio> predios = const [],
     List<Map<String, dynamic>> pksFeatures = const [],
+    List<Map<String, dynamic>> importedFeatures = const [],
     ProyectoItem? proyectoItem,
     ResolverDatosGrafica? datosGrafica,
   }) async {
@@ -113,7 +117,7 @@ class ComposicionExportService {
       final hoja = composicion.hojas[indiceHoja];
       if (!context.mounted) break;
       final pngBytes =
-          await capturarHojaPng(context, hoja, indiceHoja: indiceHoja, dpi: dpi, predios: predios, pksFeatures: pksFeatures, proyectoItem: proyectoItem, datosGrafica: datosGrafica);
+          await capturarHojaPng(context, hoja, indiceHoja: indiceHoja, dpi: dpi, predios: predios, pksFeatures: pksFeatures, importedFeatures: importedFeatures, proyectoItem: proyectoItem, datosGrafica: datosGrafica);
       final (anchoMm, altoMm) = hoja.dimensionesMm;
       final pageFormat = PdfPageFormat(anchoMm * PdfPageFormat.mm, altoMm * PdfPageFormat.mm);
       pdf.addPage(
@@ -136,6 +140,7 @@ class ComposicionExportService {
     double dpi = dpiPorDefecto,
     List<Predio> predios = const [],
     List<Map<String, dynamic>> pksFeatures = const [],
+    List<Map<String, dynamic>> importedFeatures = const [],
     ProyectoItem? proyectoItem,
     ResolverDatosGrafica? datosGrafica,
   }) async {
@@ -144,7 +149,7 @@ class ComposicionExportService {
       final hoja = composicion.hojas[indiceHoja];
       if (!context.mounted) break;
       final pngBytes =
-          await capturarHojaPng(context, hoja, indiceHoja: indiceHoja, dpi: dpi, predios: predios, pksFeatures: pksFeatures, proyectoItem: proyectoItem, datosGrafica: datosGrafica);
+          await capturarHojaPng(context, hoja, indiceHoja: indiceHoja, dpi: dpi, predios: predios, pksFeatures: pksFeatures, importedFeatures: importedFeatures, proyectoItem: proyectoItem, datosGrafica: datosGrafica);
       final (anchoMm, altoMm) = hoja.dimensionesMm;
       slides.add(PptxSlideImage(pngBytes: pngBytes, anchoMm: anchoMm, altoMm: altoMm));
     }

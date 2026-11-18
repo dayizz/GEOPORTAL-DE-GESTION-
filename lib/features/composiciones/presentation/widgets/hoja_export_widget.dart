@@ -25,6 +25,7 @@ class HojaExportWidget extends StatelessWidget {
     required this.scale,
     this.predios = const [],
     this.pksFeatures = const [],
+    this.importedFeatures = const [],
     this.proyectoItem,
     this.datosGrafica,
   });
@@ -36,6 +37,7 @@ class HojaExportWidget extends StatelessWidget {
   final double scale;
   final List<Predio> predios;
   final List<Map<String, dynamic>> pksFeatures;
+  final List<Map<String, dynamic>> importedFeatures;
   final ProyectoItem? proyectoItem;
   final ResolverDatosGrafica? datosGrafica;
 
@@ -66,6 +68,7 @@ class HojaExportWidget extends StatelessWidget {
                       e,
                       predios: predios,
                       pksFeatures: pksFeatures,
+                      importedFeatures: importedFeatures,
                       hojaElementos: hoja.elementos,
                       scale: scale,
                       proyectoItem: proyectoItem,

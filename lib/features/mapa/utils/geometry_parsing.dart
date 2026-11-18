@@ -67,6 +67,22 @@ List<LatLng> extractPointsFromGeometry(Map<String, dynamic>? geometry) {
   return const [];
 }
 
+/// Parseo de geometría `LineString`/`MultiLineString` a líneas de `LatLng`
+/// (p.ej. trazos de envolvente), con el mismo reconocimiento de orden y
+/// UTM que los polígonos.
+List<List<LatLng>> extractLinesFromGeometry(Map<String, dynamic>? geometry) {
+  if (geometry == null) return const [];
+  final type = geometry['type']?.toString().trim().toUpperCase();
+  final coords = geometry['coordinates'];
+  if (type == null || coords is! List || coords.isEmpty) return const [];
+  final lineas = switch (type) {
+    'LINESTRING' => [coords],
+    'MULTILINESTRING' => coords.whereType<List>().toList(),
+    _ => const <List>[],
+  };
+  return lineas.map(_ringToLatLng).where((l) => l.length >= 2).toList(growable: false);
+}
+
 LatLng? _coordToLatLng(List<dynamic> coord) {
   if (coord.length < 2) return null;
   final x = _parseCoord(coord[0]);

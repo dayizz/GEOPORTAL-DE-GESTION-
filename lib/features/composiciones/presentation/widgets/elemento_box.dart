@@ -579,6 +579,8 @@ class _ElementoBoxState extends State<ElementoBox> {
               predios: widget.predios,
               importedFeatures: widget.importedFeatures,
               pksFeatures: widget.pksFeatures,
+              prediosOcultos: e.mapaPrediosOcultos.toSet(),
+              trazosOcultos: e.mapaTrazosOcultos.toSet(),
               interactivo: _editandoMapa,
               onPosicionCambiada: (lat, lng, zoom) =>
                   _mapaPendiente = (lat, lng, zoom),

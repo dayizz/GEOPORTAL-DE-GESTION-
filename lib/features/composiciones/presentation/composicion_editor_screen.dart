@@ -274,7 +274,7 @@ class _ComposicionEditorScreenState
       _inicializar();
       // Los PKS guardados solo se cargaban al abrir el Mapa; sin esto,
       // "Etiquetas de PKS" no mostraba nada al entrar directo aquí.
-      asegurarPksCargados(ref);
+      asegurarCapasGuardadasCargadas(ref);
     });
   }
 
@@ -1069,6 +1069,7 @@ class _ComposicionEditorScreenState
       indiceHoja: _hojaActivaIndex,
       predios: _prediosParaExportar(),
       pksFeatures: ref.read(pksPointFeaturesProvider),
+      importedFeatures: ref.read(importedFeaturesProvider),
       proyectoItem: _proyectoItemParaExportar(),
       datosGrafica: _resolverDatosGrafica(
         ref.read(prediosMapaProvider).valueOrNull ?? const <Predio>[],
@@ -1089,6 +1090,7 @@ class _ComposicionEditorScreenState
       indiceHoja: _hojaActivaIndex,
       predios: _prediosParaExportar(),
       pksFeatures: ref.read(pksPointFeaturesProvider),
+      importedFeatures: ref.read(importedFeaturesProvider),
       proyectoItem: _proyectoItemParaExportar(),
       datosGrafica: _resolverDatosGrafica(
         ref.read(prediosMapaProvider).valueOrNull ?? const <Predio>[],
@@ -1108,6 +1110,7 @@ class _ComposicionEditorScreenState
       _composicion!,
       predios: _prediosParaExportar(),
       pksFeatures: ref.read(pksPointFeaturesProvider),
+      importedFeatures: ref.read(importedFeaturesProvider),
       proyectoItem: _proyectoItemParaExportar(),
       datosGrafica: _resolverDatosGrafica(
         ref.read(prediosMapaProvider).valueOrNull ?? const <Predio>[],
@@ -1127,6 +1130,7 @@ class _ComposicionEditorScreenState
       _composicion!,
       predios: _prediosParaExportar(),
       pksFeatures: ref.read(pksPointFeaturesProvider),
+      importedFeatures: ref.read(importedFeaturesProvider),
       proyectoItem: _proyectoItemParaExportar(),
       datosGrafica: _resolverDatosGrafica(
         ref.read(prediosMapaProvider).valueOrNull ?? const <Predio>[],
@@ -2313,6 +2317,8 @@ class _ComposicionEditorScreenState
             onEstiloClaveChanged: (v) => _actualizarElemento(elemento.id, (e) => e.copyWith(mapaEstiloClave: v)),
             onEstiloPksChanged: (v) => _actualizarElemento(elemento.id, (e) => e.copyWith(mapaEstiloPks: v)),
             onBordeEstiloChanged: (v) => _actualizarElemento(elemento.id, (e) => e.copyWith(mapaBordeEstilo: v)),
+            onPrediosOcultosChanged: (v) => _actualizarElemento(elemento.id, (e) => e.copyWith(mapaPrediosOcultos: v)),
+            onTrazosOcultosChanged: (v) => _actualizarElemento(elemento.id, (e) => e.copyWith(mapaTrazosOcultos: v)),
             onBordeOpacidadChanged: (v) => _actualizarElemento(
               elemento.id,
               (e) => e.copyWith(mapaBordeOpacidad: v),
