@@ -140,18 +140,21 @@ Widget buildElementoContenidoEstatico(
         onTamano: onTamanoEscala,
       );
     case TipoElemento.simbologia:
-      return SimbologiaWidget(tipo: e.simbologiaTipo ?? TipoSimbologia.estatus);
+      return SimbologiaWidget(tipo: e.simbologiaTipo ?? TipoSimbologia.estatus, estilo: e.simbologiaEstilo);
     case TipoElemento.grafica:
       final datos = datosGrafica?.call(e.graficaProyecto) ??
           (predios: predios, proyecto: proyectoItem);
       return GraficaWidget(
         tipo: e.graficaTipo ?? TipoGrafica.kpiPanel,
         predios: prediosGrafica(datos.predios, datos.proyecto, e.graficaFiltro),
+        registros: registrosGraficaSegmento(datos.predios, datos.proyecto, e.graficaFiltro),
+        grupo: grupoGrafica(e.graficaFiltro),
         proyectoItem: datos.proyecto,
         segmento: segmentoDeFiltroGrafica(e.graficaFiltro),
         fondo: (e.graficaFondoActivo ?? true)
             ? colorFromHex(e.graficaFondoHex) ?? Colors.white
             : null,
+        fuente: e.graficaFuente,
         onAspecto: onAspectoGrafica,
       );
   }

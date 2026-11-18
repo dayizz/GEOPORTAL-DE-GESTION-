@@ -35,17 +35,23 @@ List<String> segmentosGrafica(List<Predio> prediosProyecto, ProyectoItem? proyec
   return segmentos;
 }
 
-/// Predios que grafica un elemento con [filtro]: mismo criterio que
-/// Balance (primero el segmento, luego el grupo de infraestructura).
-List<Predio> prediosGrafica(List<Predio> prediosProyecto, ProyectoItem? proyecto, String? filtro) {
+/// Registros del proyecto limitados al segmento del [filtro] (todos los
+/// grupos de infraestructura), igual que `registrosFiltrados` en Balance.
+List<Predio> registrosGraficaSegmento(List<Predio> prediosProyecto, ProyectoItem? proyecto, String? filtro) {
   final segmento = segmentoDeFiltroGrafica(filtro);
-  final registros = segmento == null
+  return segmento == null
       ? prediosProyecto
       : prediosProyecto.where((p) => claveTramoBalance(p.tramo, proyecto) == segmento).toList();
-  final grupo = switch (filtro) {
-    filtroGraficaEstaciones => GrupoInfraestructuraBalance.estacionesEdificios,
-    filtroGraficaCruces => GrupoInfraestructuraBalance.cruces,
-    _ => GrupoInfraestructuraBalance.predios,
-  };
-  return agruparInfraestructuraBalance(registros)[grupo]!;
 }
+
+/// Grupo de infraestructura ("Ver como") del [filtro].
+GrupoInfraestructuraBalance grupoGrafica(String? filtro) => switch (filtro) {
+  filtroGraficaEstaciones => GrupoInfraestructuraBalance.estacionesEdificios,
+  filtroGraficaCruces => GrupoInfraestructuraBalance.cruces,
+  _ => GrupoInfraestructuraBalance.predios,
+};
+
+/// Predios que grafica un elemento con [filtro]: mismo criterio que
+/// Balance (primero el segmento, luego el grupo de infraestructura).
+List<Predio> prediosGrafica(List<Predio> prediosProyecto, ProyectoItem? proyecto, String? filtro) =>
+    agruparInfraestructuraBalance(registrosGraficaSegmento(prediosProyecto, proyecto, filtro))[grupoGrafica(filtro)]!;

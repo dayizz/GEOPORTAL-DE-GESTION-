@@ -1,3 +1,4 @@
+import 'panel_propiedades_texto.dart' show composicionesFuentes;
 import '../../../../core/constants/app_colors.dart';
 import 'panel_seccion_colapsable.dart';
 import 'package:flutter/material.dart';
@@ -184,6 +185,27 @@ class PanelPropiedadesGrafica extends StatelessWidget {
                 ? ElementoComposicion.nombreGrafica(v)
                 : null,
           )),
+        ),
+        PanelSeccionColapsable(
+          titulo: 'Texto',
+          icono: Icons.text_fields,
+          children: [
+            const Text('Tipo de letra', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600)),
+            DropdownButton<String>(
+              value: composicionesFuentes.contains(elemento.graficaFuente) ? elemento.graficaFuente : '',
+              isDense: true,
+              isExpanded: true,
+              items: [
+                const DropdownMenuItem(value: '', child: Text('Predeterminada')),
+                for (final f in composicionesFuentes)
+                  DropdownMenuItem(value: f, child: Text(f)),
+              ],
+              onChanged: (v) {
+                if (v != null) onChanged((e) => e.copyWith(graficaFuente: v));
+              },
+            ),
+            const SizedBox(height: 8),
+          ],
         ),
         PanelSeccionColapsable(
           titulo: 'Tamaño',

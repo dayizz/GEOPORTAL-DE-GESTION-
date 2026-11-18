@@ -1,12 +1,15 @@
 import 'dart:math' as math;
 import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
+import 'package:google_fonts/google_fonts.dart';
 import 'package:intl/intl.dart';
 
 import '../../../../core/constants/app_colors.dart';
 import '../../../estructura/models/proyecto_item.dart';
 import '../../../predios/models/predio.dart';
+import '../../../reportes/presentation/widgets/avance_general_widget.dart';
 import '../../../reportes/presentation/widgets/balance_chart_widgets.dart';
+import '../../../../core/utils/import_normalization.dart' as norm;
 import '../../../reportes/utils/balance_calculos.dart';
 import '../../../reportes/utils/resumen_tramos.dart';
 import '../../models/elemento_composicion.dart';
@@ -32,18 +35,28 @@ class GraficaWidget extends StatelessWidget {
     super.key,
     required this.tipo,
     required this.predios,
+    this.registros,
+    this.grupo = GrupoInfraestructuraBalance.predios,
     this.proyectoItem,
     this.segmento,
     this.fondo = Colors.white,
+    this.fuente,
     this.onAspecto,
   });
 
   final TipoGrafica tipo;
   final List<Predio> predios;
+  // Registros del segmento en todos los grupos de infraestructura (lo que
+  // Balance llama `registrosFiltrados`), base del "Avance general".
+  final List<Predio>? registros;
+  // Grupo "Ver como" del filtro, que define qué tarjetas muestra el KPI.
+  final GrupoInfraestructuraBalance grupo;
   final ProyectoItem? proyectoItem;
   // Segmento del filtro, para limitar las filas del cadenamiento.
   final String? segmento;
   final Color? fondo;
+  // Tipo de letra de todos los textos de la gráfica; null = predeterminado.
+  final String? fuente;
   final ValueChanged<double>? onAspecto;
 
   bool get _conFondo => fondo != null;
@@ -57,7 +70,8 @@ class GraficaWidget extends StatelessWidget {
   double _anchoDiseno() {
     const relleno = 12.0;
     final double contenido = switch (tipo) {
-      TipoGrafica.kpiPanel => 328,
+      // Mismo ancho mínimo que usa `AvanceGeneralWidget` en Balance.
+      TipoGrafica.kpiPanel => grupo == GrupoInfraestructuraBalance.predios ? 1100 : 880,
       TipoGrafica.avanceMensual => _anchoBarras(sparkMonths),
       TipoGrafica.avanceSemanal => _anchoBarras(sparkWeeks),
       TipoGrafica.segmentoTramoFrente => _anchoBarras(groupCountBy(predios, (p) => p.tramo).length),
@@ -88,7 +102,7 @@ class GraficaWidget extends StatelessWidget {
             onTamano: (s) => onAspecto?.call(s.height / ancho),
             child: Padding(
               padding: const EdgeInsets.all(6),
-              child: _contenido(context),
+              child: _conFuente(Builder(builder: _contenido)),
             ),
           ),
         ),
@@ -96,11 +110,25 @@ class GraficaWidget extends StatelessWidget {
     );
   }
 
+  /// Aplica [fuente] a los textos de la gráfica (los estilos de los
+  /// gráficos de Balance heredan la familia del `DefaultTextStyle`).
+  Widget _conFuente(Widget child) {
+    final f = fuente;
+    if (f == null || f.isEmpty) return child;
+    final estilo = f == 'Arial' || !GoogleFonts.asMap().containsKey(f)
+        ? TextStyle(fontFamily: f)
+        : GoogleFonts.getFont(f);
+    return DefaultTextStyle.merge(
+      style: TextStyle(fontFamily: estilo.fontFamily, fontFamilyFallback: estilo.fontFamilyFallback),
+      child: child,
+    );
+  }
+
   Widget _contenido(BuildContext context) {
     final fmtInt = NumberFormat('#,##0', 'es_MX');
     final total = predios.length;
 
-    if (total == 0 && tipo != TipoGrafica.cadenamiento) {
+    if (total == 0 && tipo != TipoGrafica.cadenamiento && tipo != TipoGrafica.kpiPanel) {
       return  Padding(
         padding: const EdgeInsets.symmetric(vertical: 12),
         child: Text(
@@ -113,16 +141,21 @@ class GraficaWidget extends StatelessWidget {
     final Widget content;
     switch (tipo) {
       case TipoGrafica.kpiPanel:
-        content = _buildKpiGrid(fmtInt, total);
+        content = _buildAvanceGeneral(fmtInt);
         break;
       case TipoGrafica.avanceDdv:
-        final liberados = predios.where((p) => p.cop).length;
+        // Mismo criterio que Balance: liberado según `predioEstaLiberado`
+        // y la negociación separada de los no liberados.
+        final liberados = predios.where(predioEstaLiberado).length;
+        final negociacion = predios.where((p) =>
+            norm.stripAccents(p.rangoEstatus).trim().toUpperCase() == 'NEGOCIACION').length;
         final noLiberados = (total - liberados).clamp(0, total);
         content = buildAvanceDdvStatusBar(
           context: context,
           total: total,
           liberado: liberados,
-          noLiberado: noLiberados,
+          noLiberado: noLiberados - negociacion,
+          negociacion: negociacion,
           conFondo: _conFondo,
         );
         break;
@@ -262,39 +295,26 @@ class GraficaWidget extends StatelessWidget {
     return content;
   }
 
-  Widget _buildKpiGrid(NumberFormat fmtInt, int total) {
-    final liberados = predios.where((p) => p.cop).length;
-    final noLiberados = (total - liberados).clamp(0, total);
-    final kmEfectivos = predios.where((p) => p.cop).fold<double>(0, (sum, p) => sum + (p.kmEfectivos ?? 0));
-
-    final cards = [
-      buildKpiPanel(label: 'Total Predios', value: fmtInt.format(total), color: AppColors.primary, icon: Icons.terrain_outlined, conFondo: _conFondo),
-      buildKpiPanel(
-          label: 'Km Efectivos Liberados', value: fmtInt.format(kmEfectivos), color: AppColors.secondary, icon: Icons.straighten, conFondo: _conFondo),
-      buildKpiPanel(
-          label: 'Predios Liberados', value: fmtInt.format(liberados), color: AppColors.secondary, icon: Icons.check_circle_outline, conFondo: _conFondo),
-      buildKpiPanel(
-          label: 'Pendiente Liberar', value: fmtInt.format(noLiberados), color: AppColors.warning, icon: Icons.pending_outlined, conFondo: _conFondo),
-    ];
-
+  /// "Avance general" de Balance: mismas tarjetas y cálculos
+  /// (`AvanceGeneralBalance`) sobre los registros del segmento.
+  Widget _buildAvanceGeneral(NumberFormat fmtInt) {
+    final registros = this.registros ?? predios;
+    final grupos = agruparInfraestructuraBalance(registros);
+    final enInvestigacion = grupos[GrupoInfraestructuraBalance.nulos]!.length +
+        grupos[GrupoInfraestructuraBalance.sinAfectacion]!.length +
+        grupos[GrupoInfraestructuraBalance.otros]!.length;
     return Column(
       mainAxisSize: MainAxisSize.min,
+      crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Row(
-          children: [
-            Expanded(child: SizedBox(height: 66, child: cards[0])),
-            const SizedBox(width: 6),
-            Expanded(child: SizedBox(height: 66, child: cards[1])),
-          ],
-        ),
-        const SizedBox(height: 6),
-        Row(
-          children: [
-            Expanded(child: SizedBox(height: 66, child: cards[2])),
-            const SizedBox(width: 6),
-            Expanded(child: SizedBox(height: 66, child: cards[3])),
-          ],
-        ),
+        AvanceGeneralWidget(avance: AvanceGeneralBalance(registros), grupo: grupo, conFondo: _conFondo),
+        if (grupo == GrupoInfraestructuraBalance.predios) ...[
+          const SizedBox(height: 8),
+          Text(
+            'Total de registros en investigación: ${fmtInt.format(enInvestigacion)}',
+            style: const TextStyle(fontSize: 13, color: Colors.black87),
+          ),
+        ],
       ],
     );
   }

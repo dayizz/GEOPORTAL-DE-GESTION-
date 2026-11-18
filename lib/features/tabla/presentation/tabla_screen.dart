@@ -9,6 +9,7 @@ import 'package:intl/intl.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'package:excel/excel.dart' hide Border;
 import 'dart:async';
+import 'dart:convert';
 import 'dart:math' as math;
 import '../../../shared/widgets/app_scaffold.dart';
 import '../../../shared/widgets/estado_acceso_proyectos.dart';
@@ -25,6 +26,18 @@ import '../../propietarios/providers/propietarios_provider.dart';
 import '../../auth/providers/auth_provider.dart';
 import '../../estructura/providers/proyectos_provider.dart';
 import '../../../core/utils/import_normalization.dart' as norm;
+
+enum _FormatoExport { xlsx, geojson }
+
+enum _ContenidoExport {
+  todos('Todos los registros', ''),
+  liberado('Liberado', '_Liberado'),
+  noLiberado('No liberado', '_NoLiberado');
+
+  const _ContenidoExport(this.etiqueta, this.sufijoArchivo);
+  final String etiqueta;
+  final String sufijoArchivo;
+}
 
 class TablaScreen extends ConsumerStatefulWidget {
   const TablaScreen({super.key});
@@ -522,21 +535,22 @@ class _TablaScreenState extends ConsumerState<TablaScreen> {
         ),
         IconButton(
           icon: const Icon(Icons.download),
-          tooltip: 'Exportar a Excel',
+          tooltip: 'Exportar',
           onPressed: () {
             final prediosAsync = ref.read(prediosListProvider);
             final prediosList = prediosAsync.asData?.value ?? [];
             final allPredios = prediosList
                 .map((p) => _prediosOptimistas[p.id] ?? p).toList()
               ..sort(compararPrediosGestion);
-            final filtered = _applyFilters(allPredios);
+            // Todos los registros del proyecto en uso (sin búsqueda ni
+            // filtros de la tabla); el contenido se elige en el diálogo.
             final proyectoOrdenado = allPredios
                 .where((p) => _predioProyecto(p) == _proyectoActual)
                 .toList(growable: false);
             final idPorPredio = <String, int>{
               for (var i = 0; i < proyectoOrdenado.length; i++) proyectoOrdenado[i].id: i + 1,
             };
-            _exportToExcel(filtered, idPorPredio);
+            _mostrarDialogoExportar(proyectoOrdenado, idPorPredio, allPredios);
           },
         ),
       ],
@@ -544,111 +558,262 @@ class _TablaScreenState extends ConsumerState<TablaScreen> {
     );
   }
 
-  Future<void> _exportToExcel(List<Predio> predios, Map<String, int> idPorPredio) async {
+  /// Ventana previa a la descarga: formato (XLSX / GeoJSON) y contenido
+  /// (todos, liberados o no liberados) sobre el proyecto en uso.
+  Future<void> _mostrarDialogoExportar(
+    List<Predio> predios,
+    Map<String, int> idPorPredio,
+    List<Predio> todosLosPredios,
+  ) async {
     if (predios.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('No hay datos para exportar')),
+        SnackBar(content: Text('No hay registros en el proyecto $_proyectoActual')),
       );
       return;
     }
+    bool esLiberado(Predio p) => Predio.estatusSimplificado(p.rangoEstatus) == 'Liberado';
+    final liberados = predios.where(esLiberado).length;
+    final conteos = {
+      _ContenidoExport.todos: predios.length,
+      _ContenidoExport.liberado: liberados,
+      _ContenidoExport.noLiberado: predios.length - liberados,
+    };
+    var formato = _FormatoExport.xlsx;
+    var contenido = _ContenidoExport.todos;
 
+    final confirmado = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) => StatefulBuilder(
+        builder: (context, setModal) {
+          final seleccionados = conteos[contenido]!;
+          return AlertDialog(
+            title: Text('Exportar · $_proyectoActual'),
+            content: SizedBox(
+              width: 380,
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Text('Tipo de archivo', style: TextStyle(fontWeight: FontWeight.bold)),
+                  const SizedBox(height: 8),
+                  SegmentedButton<_FormatoExport>(
+                    segments: const [
+                      ButtonSegment(
+                        value: _FormatoExport.xlsx,
+                        label: Text('XLSX'),
+                        icon: Icon(Icons.table_chart_outlined),
+                      ),
+                      ButtonSegment(
+                        value: _FormatoExport.geojson,
+                        label: Text('GeoJSON'),
+                        icon: Icon(Icons.map_outlined),
+                      ),
+                    ],
+                    selected: {formato},
+                    onSelectionChanged: (s) => setModal(() => formato = s.first),
+                  ),
+                  const SizedBox(height: 20),
+                  const Text('Contenido', style: TextStyle(fontWeight: FontWeight.bold)),
+                  RadioGroup<_ContenidoExport>(
+                    groupValue: contenido,
+                    onChanged: (v) {
+                      if (v != null) setModal(() => contenido = v);
+                    },
+                    child: Column(
+                      children: [
+                        for (final c in _ContenidoExport.values)
+                          RadioListTile<_ContenidoExport>(
+                            contentPadding: EdgeInsets.zero,
+                            dense: true,
+                            value: c,
+                            title: Text(c.etiqueta),
+                            subtitle: Text('${conteos[c]} registros'),
+                          ),
+                      ],
+                    ),
+                  ),
+                  if (formato == _FormatoExport.geojson)
+                    Padding(
+                      padding: const EdgeInsets.only(top: 8),
+                      child: Text(
+                        'Los registros sin polígono se incluyen sin geometría.',
+                        style: TextStyle(fontSize: 12, color: AppColors.textSecondary),
+                      ),
+                    ),
+                ],
+              ),
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(dialogContext, false),
+                child: const Text('Cancelar'),
+              ),
+              FilledButton.icon(
+                style: FilledButton.styleFrom(minimumSize: const Size(0, 40)),
+                onPressed: seleccionados == 0 ? null : () => Navigator.pop(dialogContext, true),
+                icon: const Icon(Icons.download),
+                label: Text('Descargar ($seleccionados)'),
+              ),
+            ],
+          );
+        },
+      ),
+    );
+    if (confirmado != true || !mounted) return;
+
+    final seleccion = switch (contenido) {
+      _ContenidoExport.todos => predios,
+      _ContenidoExport.liberado => predios.where(esLiberado).toList(),
+      _ContenidoExport.noLiberado => predios.where((p) => !esLiberado(p)).toList(),
+    };
+    await _exportar(seleccion, idPorPredio, todosLosPredios, formato, contenido);
+  }
+
+  List<String> _encabezadosExport() => [
+    'ID', 'CLAVE', 'PROYECTO', 'T/F/S', 'TIPO', 'TIPO DE INFRAESTRUCTURA', 'ESTADO', 'MUNICIPIO',
+    'EJIDO', 'PROPIETARIO', 'KM INICIO', 'KM FIN', 'KM EFECTIVOS',
+    'SUPERFICIE M2', 'COP', 'FECHA DE LIBERACION', 'EXPEDIENTE', 'DWG', 'PLANO PDF', 'BDT',
+    'ESTATUS', 'LIBERACIÓN',
+    'IDENTIFICACION', 'LEVANTAMIENTO', 'NEGOCIACION', 'ANUENCIA',
+    if (_proyectoActual == 'TIG') ...['SOCIALIZACION', 'CAMINAMIENTO'],
+    'SUPERFICIE FIRMADA', 'OBSERVACIONES', 'FECHA LIMITE DE PAGO',
+    'RESPONSABLE JURIDICO',
+  ];
+
+  List<String> _filaExport(Predio p, Map<String, int> idPorPredio) => [
+    idPorPredio[p.id]?.toString() ?? '',
+    p.claveCatastral,
+    _predioProyecto(p),
+    p.tramo,
+    p.tipoPropiedad,
+    p.estructura ?? '',
+    p.estado ?? '',
+    p.municipio ?? '',
+    p.ejido ?? '',
+    p.propietarioNombre ?? '',
+    p.kmInicio != null ? norm.formatKmPk(p.kmInicio!) : '',
+    p.kmFin != null ? norm.formatKmPk(p.kmFin!) : '',
+    p.kmEfectivos?.toString() ?? '',
+    p.superficie?.toString() ?? '',
+    p.cop ? 'SI' : 'NO',
+    p.copFecha != null ? '${p.copFecha!.day}/${p.copFecha!.month}/${p.copFecha!.year}' : '',
+    _pdfUrlFor(p) ?? '',
+    p.poligonoDwg ?? '',
+    p.planoPdf ?? '',
+    p.bdt ?? '',
+    p.rangoEstatus,
+    Predio.estatusSimplificado(p.rangoEstatus),
+    p.identificacion ? 'SI' : 'NO',
+    p.levantamiento ? 'SI' : 'NO',
+    p.negociacion ? 'SI' : 'NO',
+    p.anuencia ? 'SI' : 'NO',
+    if (_proyectoActual == 'TIG') ...[
+      p.socializacion ? 'SI' : 'NO',
+      p.caminamiento ?? '',
+    ],
+    p.superficieFirmada?.toString() ?? '',
+    p.situacionSocial ?? '',
+    p.fechaLimitePago != null
+        ? '${p.fechaLimitePago!.day}/${p.fechaLimitePago!.month}/${p.fechaLimitePago!.year}'
+        : '',
+    p.responsableJuridico ?? '',
+  ];
+
+  Uint8List _generarXlsx(List<Predio> predios, Map<String, int> idPorPredio) {
+    final excel = Excel.createExcel();
+    final nombreHoja = 'Gestion $_proyectoActual';
+    final sheet = excel[nombreHoja];
+    // Quitar la hoja vacía por defecto que crea `createExcel`.
+    final porDefecto = excel.getDefaultSheet();
+    if (porDefecto != null && porDefecto != nombreHoja) {
+      excel.setDefaultSheet(nombreHoja);
+      excel.delete(porDefecto);
+    }
+    final headers = _encabezadosExport();
+    for (var i = 0; i < headers.length; i++) {
+      sheet.cell(CellIndex.indexByColumnRow(columnIndex: i, rowIndex: 0)).value = TextCellValue(headers[i]);
+    }
+    for (var row = 0; row < predios.length; row++) {
+      final rowData = _filaExport(predios[row], idPorPredio);
+      for (var col = 0; col < rowData.length; col++) {
+        sheet.cell(CellIndex.indexByColumnRow(columnIndex: col, rowIndex: row + 1)).value =
+            TextCellValue(rowData[col]);
+      }
+    }
+    final bytes = excel.encode();
+    if (bytes == null) throw Exception('Error al codificar Excel');
+    return Uint8List.fromList(bytes);
+  }
+
+  /// FeatureCollection (WGS84) con las mismas columnas del XLSX como
+  /// propiedades. Los registros que comparten polígono (`polygonRefId` o
+  /// misma clave catastral) toman la geometría de su ancla.
+  Uint8List _generarGeojson(
+    List<Predio> predios,
+    Map<String, int> idPorPredio,
+    List<Predio> todosLosPredios,
+  ) {
+    final porId = {for (final p in todosLosPredios) p.id: p};
+    final porClave = <String, Map<String, dynamic>>{};
+    for (final p in todosLosPredios) {
+      if (p.geometry != null && p.claveCatastral.trim().isNotEmpty) {
+        porClave.putIfAbsent(p.claveCatastral.trim(), () => p.geometry!);
+      }
+    }
+    final headers = _encabezadosExport();
+    final features = [
+      for (final p in predios)
+        {
+          'type': 'Feature',
+          'properties': {
+            for (final (i, valor) in _filaExport(p, idPorPredio).indexed) headers[i]: valor,
+          },
+          'geometry': p.geometry ??
+              porId[p.polygonRefId]?.geometry ??
+              porClave[p.claveCatastral.trim()],
+        },
+    ];
+    final collection = {
+      'type': 'FeatureCollection',
+      'name': 'Gestion_$_proyectoActual',
+      'features': features,
+    };
+    return Uint8List.fromList(utf8.encode(jsonEncode(collection)));
+  }
+
+  Future<void> _exportar(
+    List<Predio> predios,
+    Map<String, int> idPorPredio,
+    List<Predio> todosLosPredios,
+    _FormatoExport formato,
+    _ContenidoExport contenido,
+  ) async {
     try {
-      final excel = Excel.createExcel();
-      final sheet = excel['Gestion $_proyectoActual'];
       final fecha = DateFormat('ddMMyyyy').format(DateTime.now());
-      final fileName = 'Gestion_${_proyectoActual}_$fecha.xlsx';
-      
-      // Headers
-      final headers = [
-        'ID', 'CLAVE', 'PROYECTO', 'T/F/S', 'TIPO', 'TIPO DE INFRAESTRUCTURA', 'ESTADO', 'MUNICIPIO',
-        'EJIDO', 'PROPIETARIO', 'KM INICIO', 'KM FIN', 'KM EFECTIVOS',
-        'SUPERFICIE M2', 'COP', 'FECHA DE LIBERACION', 'EXPEDIENTE', 'DWG', 'PLANO PDF', 'BDT',
-        'ESTATUS', 'LIBERACIÓN',
-        'IDENTIFICACION', 'LEVANTAMIENTO', 'NEGOCIACION', 'ANUENCIA',
-        if (_proyectoActual == 'TIG') ...['SOCIALIZACION', 'CAMINAMIENTO'],
-        'SUPERFICIE FIRMADA', 'OBSERVACIONES', 'FECHA LIMITE DE PAGO',
-        'RESPONSABLE JURIDICO',
-      ];
-      
-      for (var i = 0; i < headers.length; i++) {
-        sheet.cell(CellIndex.indexByColumnRow(columnIndex: i, rowIndex: 0)).value = TextCellValue(headers[i]);
-      }
-      
-      // Data rows
-      for (var row = 0; row < predios.length; row++) {
-        final p = predios[row];
-        final rowData = [
-          idPorPredio[p.id]?.toString() ?? '',
-          p.claveCatastral,
-          _predioProyecto(p),
-          p.tramo,
-          p.tipoPropiedad,
-          p.estructura ?? '',
-          p.estado ?? '',
-          p.municipio ?? '',
-          p.ejido ?? '',
-          p.propietarioNombre ?? '',
-          p.kmInicio != null ? norm.formatKmPk(p.kmInicio!) : '',
-          p.kmFin != null ? norm.formatKmPk(p.kmFin!) : '',
-          p.kmEfectivos?.toString() ?? '',
-          p.superficie?.toString() ?? '',
-          p.cop ? 'SI' : 'NO',
-          p.copFecha != null ? '${p.copFecha!.day}/${p.copFecha!.month}/${p.copFecha!.year}' : '',
-          _pdfUrlFor(p) ?? '',
-          p.poligonoDwg ?? '',
-          p.planoPdf ?? '',
-          p.bdt ?? '',
-          p.rangoEstatus,
-          Predio.estatusSimplificado(p.rangoEstatus),
-          p.identificacion ? 'SI' : 'NO',
-          p.levantamiento ? 'SI' : 'NO',
-          p.negociacion ? 'SI' : 'NO',
-          p.anuencia ? 'SI' : 'NO',
-          if (_proyectoActual == 'TIG') ...[
-            p.socializacion ? 'SI' : 'NO',
-            p.caminamiento ?? '',
-          ],
-          p.superficieFirmada?.toString() ?? '',
-          p.situacionSocial ?? '',
-          p.fechaLimitePago != null
-              ? '${p.fechaLimitePago!.day}/${p.fechaLimitePago!.month}/${p.fechaLimitePago!.year}'
-              : '',
-          p.responsableJuridico ?? '',
-        ];
-        
-        for (var col = 0; col < rowData.length; col++) {
-          sheet.cell(CellIndex.indexByColumnRow(columnIndex: col, rowIndex: row + 1)).value = TextCellValue(rowData[col].toString());
-        }
-      }
-      
-      final bytes = excel.encode();
-      if (bytes == null) {
-        throw Exception('Error al codificar Excel');
-      }
-      
-      // Para web, usar una solución diferente
+      final sufijo = contenido.sufijoArchivo;
+      final esXlsx = formato == _FormatoExport.xlsx;
+      final fileName = 'Gestion_$_proyectoActual${sufijo}_$fecha.${esXlsx ? 'xlsx' : 'geojson'}';
+      final mimeType = esXlsx
+          ? 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+          : 'application/geo+json';
+      final bytes = esXlsx
+          ? _generarXlsx(predios, idPorPredio)
+          : _generarGeojson(predios, idPorPredio, todosLosPredios);
+
       if (kIsWeb) {
-        await downloadBytesForBrowser(
-          Uint8List.fromList(bytes),
-          fileName: fileName,
-          mimeType: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
-        );
+        await downloadBytesForBrowser(bytes, fileName: fileName, mimeType: mimeType);
       } else {
         // En desktop, share_plus abre un popover de macOS que requiere un
         // rect de anclaje (sharePositionOrigin); sin él no se muestra nada
         // y el archivo se queda solo en el directorio temporal, dando la
         // impresión de que la descarga no hizo nada. Se guarda directo en
         // Descargas, igual que el resto de las exportaciones de la app.
-        await downloadBytes(
-          Uint8List.fromList(bytes),
-          fileName: fileName,
-          mimeType: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
-        );
+        await downloadBytes(bytes, fileName: fileName, mimeType: mimeType);
       }
-      
+
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Exportados ${predios.length} registros')),
+          SnackBar(content: Text('Exportados ${predios.length} registros ($fileName)')),
         );
       }
     } catch (e) {

@@ -133,9 +133,16 @@ class _MapaScreenState extends ConsumerState<MapaScreen> {
       !_proyectosTrazoOcultos.contains(proyectoTrazo(feature)) &&
       !_divisionesTrazoOcultas.contains('${proyectoTrazo(feature)}|${divisionTrazo(feature)}');
 
-  void _mostrarFiltradoTrazo() {
+  void _mostrarFiltradoTrazo([BuildContext? botonContext]) {
+    // Esquina inferior izquierda del botón, para abrir el diálogo debajo.
+    final boton = botonContext?.findRenderObject() as RenderBox?;
+    final ancla = boton != null && boton.hasSize
+        ? boton.localToGlobal(boton.size.bottomLeft(Offset.zero))
+        : const Offset(16, 72);
     final features = ref.read(importedFeaturesProvider).where(_isEnvolventeFeature).toList();
     final proyectos = features.map(proyectoTrazo).toSet().toList()..sort();
+    // Proyectos con su lista de T/F/S desplegada; todos inician contraídos.
+    final proyectosExpandidos = <String>{};
     showDialog<void>(context: context, builder: (dialogContext) => StatefulBuilder(
       builder: (context, setModal) {
         void cambiar(Set<String> ocultos, String clave, bool visible) {
@@ -145,7 +152,10 @@ class _MapaScreenState extends ConsumerState<MapaScreen> {
           });
           setModal(() {});
         }
+        // Se abre a la izquierda, bajo los botones donde está su icono.
         return AlertDialog(
+          alignment: Alignment.topLeft,
+          insetPadding: EdgeInsets.fromLTRB(ancla.dx, ancla.dy + 8, 16, 24),
           title: const Text('Filtrado de trazo'),
           content: SizedBox(width: 420, child: SingleChildScrollView(child: Column(
             mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.start,
@@ -160,19 +170,37 @@ class _MapaScreenState extends ConsumerState<MapaScreen> {
               const Divider(),
               const Text('Proyectos y T/F/S', style: TextStyle(fontWeight: FontWeight.bold)),
               if (features.isEmpty) const Text('No hay trazos cargados.'),
-              for (final proyecto in proyectos) ...[
+              for (final proyecto in proyectos) ...() {
+                final divisiones = features.where((f) => proyectoTrazo(f) == proyecto)
+                    .map(divisionTrazo).toSet().toList()..sort();
+                final ocultas = divisiones
+                    .where((d) => _divisionesTrazoOcultas.contains('$proyecto|$d')).length;
+                final expandido = proyectosExpandidos.contains(proyecto);
+                return [
                 SwitchListTile(contentPadding: EdgeInsets.zero,
-                  title: Text(proyecto), value: !_proyectosTrazoOcultos.contains(proyecto),
+                  secondary: IconButton(
+                    tooltip: expandido ? 'Ocultar T/F/S' : 'Mostrar T/F/S',
+                    icon: Icon(expandido ? Icons.expand_more : Icons.chevron_right),
+                    onPressed: () => setModal(() {
+                      if (expandido) { proyectosExpandidos.remove(proyecto); }
+                      else { proyectosExpandidos.add(proyecto); }
+                    }),
+                  ),
+                  title: Text(proyecto),
+                  subtitle: Text(ocultas == 0
+                      ? '${divisiones.length} T/F/S'
+                      : '${divisiones.length} T/F/S · $ocultas oculto${ocultas == 1 ? '' : 's'}'),
+                  value: !_proyectosTrazoOcultos.contains(proyecto),
                   onChanged: (v) => cambiar(_proyectosTrazoOcultos, proyecto, v)),
-                for (final division in (features.where((f) => proyectoTrazo(f) == proyecto)
-                    .map(divisionTrazo).toSet().toList()..sort()))
-                  Padding(padding: const EdgeInsets.only(left: 16), child: CheckboxListTile(
+                if (expandido) for (final division in divisiones)
+                  Padding(padding: const EdgeInsets.only(left: 40), child: CheckboxListTile(
                     title: Text(division), dense: true,
                     value: !_divisionesTrazoOcultas.contains('$proyecto|$division'),
                     onChanged: _proyectosTrazoOcultos.contains(proyecto) ? null :
                       (v) => cambiar(_divisionesTrazoOcultas, '$proyecto|$division', v ?? false),
                   )),
-              ],
+                ];
+              }(),
             ],
           ))),
           actions: [TextButton(onPressed: () => Navigator.pop(dialogContext), child: const Text('Cerrar'))],
@@ -213,6 +241,16 @@ class _MapaScreenState extends ConsumerState<MapaScreen> {
     _manualPredioSearchCtrl.dispose();
     super.dispose();
   }
+  Widget _buildFiltradoTrazoButton() => Material(
+    color: AppColors.surface, elevation: 4,
+    borderRadius: BorderRadius.circular(10),
+    child: Builder(builder: (botonContext) => IconButton(
+      tooltip: 'Filtrado de trazo',
+      icon: const Icon(Icons.timeline),
+      onPressed: () => _mostrarFiltradoTrazo(botonContext),
+    )),
+  );
+
   List<Widget> _buildMapToolButtons() => [
     Material(
       color: AppColors.surface,
@@ -266,15 +304,6 @@ class _MapaScreenState extends ConsumerState<MapaScreen> {
                 : AppColors.textPrimary,
           ),
         ),
-      ),
-    ),
-    Material(
-      color: AppColors.surface, elevation: 4,
-      borderRadius: BorderRadius.circular(10),
-      child: IconButton(
-        tooltip: 'Filtrado de trazo',
-        icon: const Icon(Icons.timeline),
-        onPressed: _mostrarFiltradoTrazo,
       ),
     ),
     Material(
@@ -831,6 +860,7 @@ class _MapaScreenState extends ConsumerState<MapaScreen> {
                     _buildCapturaToggleButton(),
                     _buildCapturaPantallaButton(),
                     _buildLabelsButton(),
+                    _buildFiltradoTrazoButton(),
                     ..._buildMapToolButtons(),
                   ])
                 else
@@ -873,6 +903,8 @@ class _MapaScreenState extends ConsumerState<MapaScreen> {
                 _buildCapturaPantallaButton(),
                 const SizedBox(width: 8),
                 _buildLabelsButton(),
+                const SizedBox(width: 8),
+                _buildFiltradoTrazoButton(),
               ],
             ),
           ),

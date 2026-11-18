@@ -5,9 +5,12 @@ import '../../../../core/constants/app_colors.dart';
 import '../../utils/balance_calculos.dart';
 
 class AvanceGeneralWidget extends StatelessWidget {
-  const AvanceGeneralWidget({super.key, required this.avance, this.grupo = GrupoInfraestructuraBalance.predios});
+  const AvanceGeneralWidget({super.key, required this.avance, this.grupo = GrupoInfraestructuraBalance.predios, this.conFondo = true});
   final AvanceGeneralBalance avance;
   final GrupoInfraestructuraBalance grupo;
+  // `false` quita el relleno de las tarjetas (conserva borde y texto); lo
+  // usan las gráficas "sin fondo" de Composiciones.
+  final bool conFondo;
 
   @override
   Widget build(BuildContext context) {
@@ -16,7 +19,7 @@ class AvanceGeneralWidget extends StatelessWidget {
     Widget tarjeta(String label, String value, Color color) => Container(
       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
       decoration: BoxDecoration(
-        color: color.withValues(alpha: 0.08),
+        color: conFondo ? color.withValues(alpha: 0.08) : null,
         border: Border.all(color: color.withValues(alpha: 0.26)),
         borderRadius: BorderRadius.circular(10),
       ),

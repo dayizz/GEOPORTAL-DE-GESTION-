@@ -834,6 +834,7 @@ class _ComposicionEditorScreenState
     if (elemento != null) setState(() => _elementoSeleccionadoId = elemento.id);
     final carpetas = _hojaActiva.carpetas;
     final accion = await _mostrarMenu(posicion, [
+      _itemMenu('renombrar', Icons.edit_outlined, 'Renombrar', enabled: elemento != null),
       _itemMenu('copiar', Icons.copy, 'Copiar', enabled: elemento != null),
       _itemMenu('pegar', Icons.content_paste, 'Pegar', enabled: _elementoCopiado != null),
       _itemMenu('eliminar', Icons.delete_outline, 'Eliminar',
@@ -853,6 +854,11 @@ class _ComposicionEditorScreenState
       return;
     }
     switch (accion) {
+      case 'renombrar':
+        final nombre = await pedirNombreCapa(context, 'Renombrar capa', elemento!.nombreCapa);
+        if (nombre != null && mounted) {
+          _actualizarElemento(elemento.id, (e) => e.copyWith(nombreCapa: nombre));
+        }
       case 'sacar':
         _actualizarElemento(elemento!.id, (e) => e.copyWith(clearCarpetaId: true));
       case 'copiar':
@@ -1275,7 +1281,7 @@ class _ComposicionEditorScreenState
                 onTap: _importarImagen,
               ),
               const SizedBox(width: 8),
-              _accionSuperior(
+              Builder(builder: (botonContext) => _accionSuperior(
                 icon: _exportando
                     ? Icons.hourglass_top_outlined
                     : Icons.print_outlined,
@@ -1290,13 +1296,18 @@ class _ComposicionEditorScreenState
                           ('pdf', 'Exportar PDF', _exportarPdf),
                           ('pptx', 'Exportar PPTX', _exportarPptx),
                         ];
+                        // Menú anclado justo debajo del botón de exportar.
+                        final boton = botonContext.findRenderObject()! as RenderBox;
+                        final overlay = Overlay.of(botonContext).context.findRenderObject()! as RenderBox;
+                        final esquina = boton.localToGlobal(
+                          boton.size.bottomLeft(Offset.zero),
+                          ancestor: overlay,
+                        );
                         showMenu<String>(
-                          context: context,
-                          position: const RelativeRect.fromLTRB(
-                            1000,
-                            120,
-                            24,
-                            0,
+                          context: botonContext,
+                          position: RelativeRect.fromRect(
+                            esquina & boton.size,
+                            Offset.zero & overlay.size,
                           ),
                           items: [
                             for (final (value, label, action) in actions)
@@ -1308,7 +1319,7 @@ class _ComposicionEditorScreenState
                           ],
                         );
                       },
-              ),
+              )),
               const SizedBox(width: 8),
               _accionSuperior(
                 icon: Icons.save_outlined,
@@ -2226,10 +2237,7 @@ class _ComposicionEditorScreenState
         if (elemento.tipo == TipoElemento.simbologia)
           PanelPropiedadesSimbologia(
             elemento: elemento,
-            onTipoChanged: (v) => _actualizarElemento(
-              elemento.id,
-              (e) => e.copyWith(simbologiaTipo: v),
-            ),
+            onChanged: (f) => _actualizarElemento(elemento.id, f),
           ),
         if (elemento.tipo == TipoElemento.tabla)
           PanelPropiedadesTabla(

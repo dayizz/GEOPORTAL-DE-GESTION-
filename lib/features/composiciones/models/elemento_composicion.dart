@@ -173,6 +173,118 @@ class EstiloEtiquetaMapa {
   );
 }
 
+/// Estilo tipográfico de una parte de la simbología (título o etiquetas).
+class EstiloTextoSimbologia {
+  const EstiloTextoSimbologia({
+    this.fuente = 'Inter',
+    this.tamano = 8.5,
+    this.grosor = 400,
+    this.cursiva = false,
+    this.colorHex = '#DE000000',
+  });
+  final String fuente;
+  final double tamano;
+  final int grosor; // 100-900 (FontWeight.w100 ... w900)
+  final bool cursiva;
+  final String colorHex;
+
+  EstiloTextoSimbologia copyWith({String? fuente, double? tamano,
+    int? grosor, bool? cursiva, String? colorHex}) =>
+      EstiloTextoSimbologia(fuente: fuente ?? this.fuente,
+        tamano: tamano ?? this.tamano, grosor: grosor ?? this.grosor,
+        cursiva: cursiva ?? this.cursiva, colorHex: colorHex ?? this.colorHex);
+
+  Map<String, dynamic> toMap() => {
+    'fuente': fuente, 'tamano': tamano, 'grosor': grosor,
+    'cursiva': cursiva, 'color': colorHex,
+  };
+
+  factory EstiloTextoSimbologia.fromMap(Map map, EstiloTextoSimbologia base) =>
+      EstiloTextoSimbologia(
+        fuente: map['fuente'] as String? ?? base.fuente,
+        tamano: (map['tamano'] as num?)?.toDouble() ?? base.tamano,
+        grosor: (map['grosor'] as num?)?.toInt() ?? base.grosor,
+        cursiva: map['cursiva'] as bool? ?? base.cursiva,
+        colorHex: map['color'] as String? ?? base.colorHex,
+      );
+}
+
+/// Estilo de un elemento [TipoElemento.simbologia]: título (automático o
+/// personalizado), tipografía del título y de las etiquetas, tamaño de
+/// símbolo, separación símbolo-texto, columnas y fondo.
+class EstiloSimbologia {
+  const EstiloSimbologia({
+    this.tituloPersonalizado = false,
+    this.tituloTexto = '',
+    this.estiloTitulo = tituloPorDefecto,
+    this.estiloEtiquetas = const EstiloTextoSimbologia(),
+    this.tamanoSimbolo = 10,
+    this.separacion = 5,
+    this.columnas = 1,
+    this.fondoActivo = true,
+    this.fondoColorHex = '#FFFFFF',
+    this.fondoOpacidad = 0.92,
+  });
+  static const tituloPorDefecto =
+      EstiloTextoSimbologia(tamano: 10, grosor: 700);
+
+  final bool tituloPersonalizado;
+  final String tituloTexto;
+  final EstiloTextoSimbologia estiloTitulo;
+  final EstiloTextoSimbologia estiloEtiquetas;
+  final double tamanoSimbolo; // px
+  final double separacion; // px entre símbolo y texto
+  final int columnas; // 1-4
+  final bool fondoActivo;
+  final String fondoColorHex;
+  final double fondoOpacidad; // 0-1
+
+  EstiloSimbologia copyWith({bool? tituloPersonalizado, String? tituloTexto,
+    EstiloTextoSimbologia? estiloTitulo, EstiloTextoSimbologia? estiloEtiquetas,
+    double? tamanoSimbolo, double? separacion, int? columnas,
+    bool? fondoActivo, String? fondoColorHex, double? fondoOpacidad}) =>
+      EstiloSimbologia(
+        tituloPersonalizado: tituloPersonalizado ?? this.tituloPersonalizado,
+        tituloTexto: tituloTexto ?? this.tituloTexto,
+        estiloTitulo: estiloTitulo ?? this.estiloTitulo,
+        estiloEtiquetas: estiloEtiquetas ?? this.estiloEtiquetas,
+        tamanoSimbolo: tamanoSimbolo ?? this.tamanoSimbolo,
+        separacion: separacion ?? this.separacion,
+        columnas: columnas ?? this.columnas,
+        fondoActivo: fondoActivo ?? this.fondoActivo,
+        fondoColorHex: fondoColorHex ?? this.fondoColorHex,
+        fondoOpacidad: fondoOpacidad ?? this.fondoOpacidad,
+      );
+
+  Map<String, dynamic> toMap() => {
+    'titulo_personalizado': tituloPersonalizado,
+    'titulo_texto': tituloTexto,
+    'estilo_titulo': estiloTitulo.toMap(),
+    'estilo_etiquetas': estiloEtiquetas.toMap(),
+    'tamano_simbolo': tamanoSimbolo,
+    'separacion': separacion,
+    'columnas': columnas,
+    'fondo_activo': fondoActivo,
+    'fondo_color': fondoColorHex,
+    'fondo_opacidad': fondoOpacidad,
+  };
+
+  factory EstiloSimbologia.fromMap(Map map) => EstiloSimbologia(
+    tituloPersonalizado: map['titulo_personalizado'] as bool? ?? false,
+    tituloTexto: map['titulo_texto'] as String? ?? '',
+    estiloTitulo: EstiloTextoSimbologia.fromMap(
+        map['estilo_titulo'] as Map? ?? const {}, tituloPorDefecto),
+    estiloEtiquetas: EstiloTextoSimbologia.fromMap(
+        map['estilo_etiquetas'] as Map? ?? const {}, const EstiloTextoSimbologia()),
+    tamanoSimbolo: (map['tamano_simbolo'] as num?)?.toDouble() ?? 10,
+    separacion: (map['separacion'] as num?)?.toDouble() ?? 5,
+    columnas: ((map['columnas'] as num?)?.toInt() ?? 1).clamp(1, 4),
+    fondoActivo: map['fondo_activo'] as bool? ?? true,
+    fondoColorHex: map['fondo_color'] as String? ?? '#FFFFFF',
+    fondoOpacidad: (map['fondo_opacidad'] as num?)?.toDouble() ?? 0.92,
+  );
+}
+
 /// Estilo de una celda de tabla. Cada campo `null` usa el valor por
 /// defecto de la celda (ver [EstiloCeldaTabla.efectivo]), así que solo se
 /// guarda lo que el usuario cambió.
@@ -350,6 +462,7 @@ class ElementoComposicion {
 
   // --- Simbología ---
   final TipoSimbologia? simbologiaTipo;
+  final EstiloSimbologia simbologiaEstilo;
 
   // --- Gráfica (Balance) ---
   final List<List<String>> tablaCeldas;
@@ -370,6 +483,7 @@ class ElementoComposicion {
   final String? graficaFiltro;
   final bool? graficaFondoActivo; // null = sí (fondo blanco, como antes)
   final String? graficaFondoHex; // `#AARRGGBB`: incluye la opacidad
+  final String? graficaFuente; // null = tipo de letra predeterminado
 
   // --- Estilo de escala ---
   final TipoEscala? escalaTipo;
@@ -446,6 +560,7 @@ class ElementoComposicion {
     this.mapaProyecto,
     this.escalaMapaId,
     this.simbologiaTipo,
+    this.simbologiaEstilo = const EstiloSimbologia(),
     this.tablaCeldas = const [],
     this.tablaBordeEstilo,
     this.tablaBordeColorHex,
@@ -458,6 +573,7 @@ class ElementoComposicion {
     this.graficaFiltro,
     this.graficaFondoActivo,
     this.graficaFondoHex,
+    this.graficaFuente,
     this.iconoNombre,
     this.iconoColorHex,
     this.norteTipo,
@@ -781,6 +897,7 @@ class ElementoComposicion {
     bool clearEscalaMapaId = false,
     String? escalaMapaId,
     TipoSimbologia? simbologiaTipo,
+    EstiloSimbologia? simbologiaEstilo,
     List<List<String>>? tablaCeldas,
     EstiloLinea? tablaBordeEstilo,
     String? tablaBordeColorHex,
@@ -794,6 +911,7 @@ class ElementoComposicion {
     String? graficaFiltro,
     bool? graficaFondoActivo,
     String? graficaFondoHex,
+    String? graficaFuente,
     String? iconoNombre,
     String? iconoColorHex,
     TipoNorte? norteTipo,
@@ -864,6 +982,7 @@ class ElementoComposicion {
       mapaBordeEstilo: mapaBordeEstilo ?? this.mapaBordeEstilo,
       escalaMapaId: clearEscalaMapaId ? null : (escalaMapaId ?? this.escalaMapaId),
       simbologiaTipo: simbologiaTipo ?? this.simbologiaTipo,
+      simbologiaEstilo: simbologiaEstilo ?? this.simbologiaEstilo,
       tablaCeldas: tablaCeldas ?? this.tablaCeldas,
       tablaBordeEstilo: tablaBordeEstilo ?? this.tablaBordeEstilo,
       tablaBordeColorHex: tablaBordeColorHex ?? this.tablaBordeColorHex,
@@ -876,6 +995,7 @@ class ElementoComposicion {
       graficaFiltro: clearGraficaFiltro ? null : (graficaFiltro ?? this.graficaFiltro),
       graficaFondoActivo: graficaFondoActivo ?? this.graficaFondoActivo,
       graficaFondoHex: graficaFondoHex ?? this.graficaFondoHex,
+      graficaFuente: graficaFuente ?? this.graficaFuente,
       iconoNombre: iconoNombre ?? this.iconoNombre,
       iconoColorHex: iconoColorHex ?? this.iconoColorHex,
       norteTipo: norteTipo ?? this.norteTipo,
@@ -947,6 +1067,7 @@ class ElementoComposicion {
         'mapa_borde_estilo': mapaBordeEstilo.name,
         'escala_mapa_id': escalaMapaId,
         'simbologia_tipo': simbologiaTipo?.name,
+        'simbologia_estilo': simbologiaEstilo.toMap(),
         'tabla_celdas': tablaCeldas.map((fila) => {'celdas': fila}).toList(),
         'tabla_borde_estilo': tablaBordeEstilo?.name,
         'tabla_borde_color': tablaBordeColorHex,
@@ -959,6 +1080,7 @@ class ElementoComposicion {
         'grafica_filtro': graficaFiltro,
         'grafica_fondo_activo': graficaFondoActivo,
         'grafica_fondo': graficaFondoHex,
+        'grafica_fuente': graficaFuente,
         'icono_nombre': iconoNombre,
         'icono_color': iconoColorHex,
         'norte_tipo': norteTipo?.name,
@@ -1049,6 +1171,7 @@ class ElementoComposicion {
       escalaMapaId: map['escala_mapa_id'] as String?,
       simbologiaTipo:
           map['simbologia_tipo'] != null ? tipoSimbologiaFromString(map['simbologia_tipo'] as String) : null,
+      simbologiaEstilo: EstiloSimbologia.fromMap(map['simbologia_estilo'] as Map? ?? const {}),
       tablaCeldas: (map['tabla_celdas'] as List? ?? const []).map((fila) => ((fila as Map)['celdas'] as List).map((v) => v?.toString() ?? '').toList()).toList(),
       tablaBordeEstilo: map['tabla_borde_estilo'] != null
           ? estiloLineaFromString(map['tabla_borde_estilo'] as String)
@@ -1065,6 +1188,7 @@ class ElementoComposicion {
       graficaFiltro: map['grafica_filtro'] as String?,
       graficaFondoActivo: map['grafica_fondo_activo'] as bool?,
       graficaFondoHex: map['grafica_fondo'] as String?,
+      graficaFuente: map['grafica_fuente'] as String?,
       iconoNombre: map['icono_nombre'] as String?,
       iconoColorHex: map['icono_color'] as String?,
       norteTipo: map['norte_tipo'] != null ? tipoNorteFromString(map['norte_tipo'] as String) : null,

@@ -577,11 +577,12 @@ Widget buildCadenamientoFilaCard(CadenamientoFila fila, {bool conFondo = true}) 
         Container(
           width: double.infinity,
           padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-          color: AppColors.primaryDark,
+          // Sin fondo: el encabezado pierde la franja y el texto toma su color.
+          color: conFondo ? AppColors.primaryDark : null,
           child: Text(
             '${fila.codigo}  ·  km ${norm.formatKmPk(fila.pkInicioKm)} a ${norm.formatKmPk(fila.pkFinKm)}  ·  '
             '${formatKmLength(fila.pkFinKm - fila.pkInicioKm)}',
-            style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w700, fontSize: 13),
+            style: TextStyle(color: conFondo ? Colors.white : AppColors.primaryDark, fontWeight: FontWeight.w700, fontSize: 13),
           ),
         ),
         if (fila.columnas.isEmpty)

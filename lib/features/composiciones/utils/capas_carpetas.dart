@@ -155,3 +155,22 @@ Hoja cambiarElementosDeCarpeta(
   String id,
   ElementoComposicion Function(ElementoComposicion) f,
 ) => hoja.copyWith(elementos: [for (final e in hoja.elementos) e.carpetaId == id ? f(e) : e]);
+
+/// Mete el elemento [elementoId] en la carpeta [carpetaId] (al soltarlo
+/// encima de ella en el panel). Queda al frente de los elementos de la
+/// carpeta; si la carpeta está vacía conserva su z-index. La carpeta se
+/// expande para que se vea el resultado.
+Hoja meterEnCarpeta(Hoja hoja, String elementoId, String carpetaId) {
+  final elemento = hoja.elementos.where((e) => e.id == elementoId).firstOrNull;
+  if (elemento == null || !hoja.carpetas.any((c) => c.id == carpetaId)) return hoja;
+  final expandida = cambiarCarpeta(hoja, carpetaId, (c) => c.copyWith(expandida: true));
+  if (elemento.carpetaId == carpetaId) return expandida;
+  final movido = elemento.copyWith(carpetaId: carpetaId);
+  final resto = [for (final e in hoja.elementos) if (e.id != elementoId) e];
+  // Índice del miembro más al frente (el último en `elementos`).
+  final ultimo = resto.lastIndexWhere((e) => e.carpetaId == carpetaId);
+  final original = hoja.elementos.indexWhere((e) => e.id == elementoId);
+  final destino = ultimo == -1 ? original.clamp(0, resto.length) : ultimo + 1;
+  resto.insert(destino, movido);
+  return expandida.copyWith(elementos: resto);
+}
