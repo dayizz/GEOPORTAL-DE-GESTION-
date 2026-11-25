@@ -91,12 +91,22 @@ bool canAccessCarga(String? perfil) =>
     canManageOperationalData(perfil) ||
     normalizePerfil(perfil) == perfilOperativoAuxiliar;
 
-bool canAccessProyectosCatalogo(String? perfil) => canManageOperationalData(perfil);
+/// Todos los perfiles ven el catálogo; Gestor y Operativo auxiliar solo
+/// con sus proyectos asignados (el filtro se aplica en la pantalla).
+bool canAccessProyectosCatalogo(String? perfil) => canEditPredios(perfil);
 
 bool canAccessReportes(String? perfil) => canManageOperationalData(perfil);
 
-/// "Composiciones": por ahora solo visible para Administrador.
-bool canAccessComposiciones(String? perfil) => isPerfilAdministrador(perfil);
+/// "Composiciones": Administrador, Supervisor Institucional y Gestor de
+/// proyecto (este último solo con sus proyectos asignados).
+bool canAccessComposiciones(String? perfil) =>
+    isPerfilAdministrador(perfil) ||
+    isPerfilSupervisorInstitucional(perfil) ||
+    isPerfilGestor(perfil);
+
+/// Crear/editar proyectos del catálogo (Estructura › Proyectos): solo
+/// Administrador. Al Gestor de proyecto los proyectos se le asignan.
+bool canManageProyectos(String? perfil) => isPerfilAdministrador(perfil);
 
 bool canAccessRouteByPerfil(String route, String? perfil) {
   if (route == '/estructura' || route.startsWith('/estructura/')) {
@@ -123,8 +133,10 @@ bool canAccessRouteByPerfil(String route, String? perfil) {
     return canEditPredios(perfil);
   }
 
+  // Crear y editar registros: todos los perfiles operativos, incluido
+  // Operativo auxiliar.
   if (route.endsWith('/nuevo') || route.endsWith('/editar')) {
-    return canManageOperationalData(perfil);
+    return canEditPredios(perfil);
   }
 
   return true;

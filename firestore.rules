@@ -108,7 +108,8 @@ service cloud.firestore {
         && request.resource.data.keys().hasAll(['nombre', 'tipo_persona'])
         && isString(request.resource.data.nombre, 1, 120)
         && isString(request.resource.data.tipo_persona, 1, 20);
-      allow delete: if isAdmin();
+      // Cualquier usuario autenticado puede eliminar propietarios.
+      allow delete: if isSignedIn();
     }
 
     // Archivos importados
@@ -161,20 +162,22 @@ service cloud.firestore {
     // Catalogo de proyectos y su cadenamiento (Estructura > Proyectos).
     match /proyectos/{proyectoId} {
       allow read: if isSignedIn();
-      allow create, update: if isSignedIn() && (isAdmin() || isGestor())
+      // Solo Administrador crea/edita proyectos; al Gestor se le asignan.
+      allow create, update: if isAdmin()
         && request.resource.data.keys().hasAll(['nombre', 'descripcion', 'activo'])
         && isString(request.resource.data.nombre, 1, 60)
         && isString(request.resource.data.descripcion, 0, 500);
       allow delete: if isAdmin();
     }
 
-    // Vista "Composiciones": por ahora solo Administrador (misma regla
-    // que canAccessComposiciones() en el cliente). El borrado no se
+    // Vista "Composiciones": Administrador, Supervisor Institucional y
+    // Gestor de proyecto (misma regla que canAccessComposiciones() en el
+    // cliente; el Gestor ve solo sus proyectos, filtrado en el cliente). El borrado no se
     // restringe al uid que la creo -aprendiendo del bug ya corregido en
     // archivos_geojson, donde esa restriccion dejaba a la mayoria de los
     // perfiles sin poder borrar nada que no hubieran subido ellos mismos.
     function puedeComposiciones() {
-      return isAdmin();
+      return isAdmin() || isSupervisorInstitucional() || isGestor();
     }
     match /composiciones/{composicionId} {
       allow read: if puedeComposiciones();

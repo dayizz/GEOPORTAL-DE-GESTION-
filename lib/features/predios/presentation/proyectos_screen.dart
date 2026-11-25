@@ -5,6 +5,7 @@ import '../../../shared/widgets/app_scaffold.dart';
 import '../../../core/constants/app_colors.dart';
 import '../models/proyecto.dart';
 import '../providers/proyectos_provider.dart';
+import '../../auth/providers/auth_provider.dart';
 
 class ProyectosScreen extends ConsumerStatefulWidget {
   const ProyectosScreen({super.key});
@@ -54,9 +55,35 @@ class _ProyectosScreenState extends ConsumerState<ProyectosScreen> {
     return proyectos.where((p) => p.proyecto == proyecto).length;
   }
 
+  /// Administrador y Supervisor Institucional ven todos los proyectos;
+  /// Gestor y Operativo auxiliar solo los que tienen asignados.
+  List<String> _proyectosVisibles() {
+    if (ref.watch(canAccessAllProjectsProvider)) return _proyectos;
+    final asignados = ref.watch(currentUserAssignedProjectsProvider).toSet();
+    return _proyectos
+        .where((p) => asignados.contains(p) || (p == 'TMQ' && asignados.contains('TQM')))
+        .toList(growable: false);
+  }
+
   @override
   Widget build(BuildContext context) {
-    final allProyectos = ref.watch(proyectosProvider);
+    final proyectosVisibles = _proyectosVisibles();
+    if (proyectosVisibles.isEmpty) {
+      return const AppScaffold(
+        currentIndex: 1,
+        title: 'Proyectos Capturados',
+        child: Center(
+          child: Text('Sin proyecto asignado', style: TextStyle(color: Colors.grey, fontSize: 16)),
+        ),
+      );
+    }
+    if (!proyectosVisibles.contains(_proyectoActual)) {
+      _proyectoActual = proyectosVisibles.first;
+    }
+    final allProyectos = ref
+        .watch(proyectosProvider)
+        .where((p) => proyectosVisibles.contains(p.proyecto))
+        .toList(growable: false);
     final filtered = _applyFilters(allProyectos);
     final activeFilters = (_filtroTipo != null ? 1 : 0);
 
@@ -87,7 +114,7 @@ class _ProyectosScreenState extends ConsumerState<ProyectosScreen> {
       ],
       child: Column(
         children: [
-          _buildTopBar(filtered.length, allProyectos),
+          _buildTopBar(filtered.length, allProyectos, proyectosVisibles),
           const Divider(height: 1),
           Expanded(
             child: _buildTable(filtered),
@@ -97,7 +124,7 @@ class _ProyectosScreenState extends ConsumerState<ProyectosScreen> {
     );
   }
 
-  Widget _buildTopBar(int visible, List<Proyecto> allProyectos) {
+  Widget _buildTopBar(int visible, List<Proyecto> allProyectos, List<String> proyectosVisibles) {
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
       child: Column(
@@ -107,7 +134,7 @@ class _ProyectosScreenState extends ConsumerState<ProyectosScreen> {
             child: SingleChildScrollView(
               scrollDirection: Axis.horizontal,
               child: Row(
-                children: _proyectos
+                children: proyectosVisibles
                     .map(
                       (proyecto) => Padding(
                         padding: const EdgeInsets.only(right: 8),

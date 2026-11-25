@@ -981,7 +981,7 @@ class _ProyectosTab extends ConsumerWidget {
     final proyectosAsync = ref.watch(proyectosProvider);
     final currentIsAdminAsync = ref.watch(currentUserIsAdminProvider);
     final perfil = ref.watch(currentUserPerfilProvider);
-    final canManageProjects = currentIsAdminAsync.valueOrNull == true || isPerfilAdministrador(perfil) || isPerfilGestor(perfil);
+    final canManageProjects = currentIsAdminAsync.valueOrNull == true || canManageProyectos(perfil);
 
     return proyectosAsync.when(
       loading: () => const Scaffold(body: Center(child: CircularProgressIndicator())),
