@@ -558,7 +558,7 @@ class _CargaArchivoScreenState extends ConsumerState<CargaArchivoScreen> {
                         ),
                         items: const [
                           DropdownMenuItem(value: 'predios', child: Text('Predios')),
-                          DropdownMenuItem(value: 'envolvente', child: Text('Envolvente')),
+                          DropdownMenuItem(value: 'envolvente', child: Text('Trazo')),
                           DropdownMenuItem(value: 'pks', child: Text('PKs')),
                         ],
                         onChanged: (value) {

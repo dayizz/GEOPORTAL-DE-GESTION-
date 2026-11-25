@@ -2,11 +2,12 @@ import 'dart:convert';
 import 'package:flutter/material.dart';
 import '../../../core/utils/import_normalization.dart' as norm;
 
-const tiposLinea = ['Envolvente de proyecto', 'DDV histórico', 'Eje de carga', 'Eje de pasajeros'];
+const tiposLinea = ['Envolvente de proyecto', 'DDV histórico', 'Eje de carga', 'Eje de pasajeros', 'Eje de proyecto'];
 Color colorTipoLinea(String tipo) => switch (tipo) {
   'DDV histórico' => const Color(0xFF006A4E),
   'Eje de carga' => const Color(0xFF001F54),
   'Eje de pasajeros' => const Color(0xFFE53935),
+  'Eje de proyecto' => const Color(0xFF722F37),
   _ => const Color(0xFFFF8C00),
 };
 String _clave(String value) => norm.stripAccents(value).toUpperCase().replaceAll(RegExp(r'[^A-Z0-9]'), '');
