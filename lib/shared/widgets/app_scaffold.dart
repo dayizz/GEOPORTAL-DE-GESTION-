@@ -50,16 +50,16 @@ class AppScaffold extends ConsumerWidget {
       isVisible: (perfil) => canAccessRouteByPerfil('/balance', perfil),
     ),
     _NavItem(
-      icon: Icons.upload_file_outlined,
-      label: 'Archivos',
-      route: '/carga',
-      isVisible: (perfil) => canAccessRouteByPerfil('/carga', perfil),
-    ),
-    _NavItem(
       icon: Icons.folder_outlined,
       label: 'Gestion',
       route: '/tabla',
       isVisible: (perfil) => canAccessRouteByPerfil('/tabla', perfil),
+    ),
+    _NavItem(
+      icon: Icons.upload_file_outlined,
+      label: 'Archivos',
+      route: '/carga',
+      isVisible: (perfil) => canAccessRouteByPerfil('/carga', perfil),
     ),
     _NavItem(
       icon: Icons.receipt_long_outlined,
@@ -68,10 +68,10 @@ class AppScaffold extends ConsumerWidget {
       isVisible: (perfil) => canAccessRouteByPerfil('/reportes', perfil),
     ),
     _NavItem(
-      icon: Icons.person_outlined,
-      label: 'Perfil',
-      route: '/perfil',
-      isVisible: (perfil) => canAccessRouteByPerfil('/perfil', perfil),
+      icon: Icons.image_outlined,
+      label: 'Composiciones',
+      route: '/composiciones',
+      isVisible: (perfil) => canAccessRouteByPerfil('/composiciones', perfil),
     ),
     _NavItem(
       icon: Icons.account_tree_outlined,
@@ -80,10 +80,10 @@ class AppScaffold extends ConsumerWidget {
       isVisible: (perfil) => canAccessRouteByPerfil('/estructura', perfil),
     ),
     _NavItem(
-      icon: Icons.image_outlined,
-      label: 'Composiciones',
-      route: '/composiciones',
-      isVisible: (perfil) => canAccessRouteByPerfil('/composiciones', perfil),
+      icon: Icons.person_outlined,
+      label: 'Perfil',
+      route: '/perfil',
+      isVisible: (perfil) => canAccessRouteByPerfil('/perfil', perfil),
     ),
   ];
   static const double _desktopRailWidth = 88;

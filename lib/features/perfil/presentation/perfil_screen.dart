@@ -72,7 +72,7 @@ class PerfilScreen extends ConsumerWidget {
     final nf = DateFormat('dd/MM/yyyy HH:mm');
 
     return AppScaffold(
-      currentIndex: 5,
+      currentIndex: 7,
       title: 'Perfil',
       actions: [
         IconButton(

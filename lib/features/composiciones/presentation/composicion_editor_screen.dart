@@ -1176,7 +1176,7 @@ class _ComposicionEditorScreenState
   Widget build(BuildContext context) {
     if (_error != null) {
       return AppScaffold(
-        currentIndex: 7,
+        currentIndex: 5,
         title: 'Composiciones',
         child: Center(child: Text(_error!)),
       );
@@ -1184,7 +1184,7 @@ class _ComposicionEditorScreenState
 
     if (_cargando || _composicion == null) {
       return const AppScaffold(
-        currentIndex: 7,
+        currentIndex: 5,
         title: 'Composiciones',
         child: Center(child: CircularProgressIndicator()),
       );
@@ -1200,7 +1200,7 @@ class _ComposicionEditorScreenState
     );
 
     return AppScaffold(
-      currentIndex: 7,
+      currentIndex: 5,
       title: composicion.nombre,
       actions: const [],
       child: _esMovil

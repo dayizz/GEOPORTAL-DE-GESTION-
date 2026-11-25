@@ -323,7 +323,7 @@ class _TablaScreenState extends ConsumerState<TablaScreen> {
     final estadoAcceso = estadoAccesoProyectos(ref);
     if (estadoAcceso != null) {
       return AppScaffold(
-        currentIndex: 3,
+        currentIndex: 2,
         title: 'Gestión',
         child: estadoAcceso,
       );
@@ -525,7 +525,7 @@ class _TablaScreenState extends ConsumerState<TablaScreen> {
     }
 
     return AppScaffold(
-      currentIndex: 3,
+      currentIndex: 2,
       title: 'Gestion',
       actions: [
         IconButton(

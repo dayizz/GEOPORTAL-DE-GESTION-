@@ -23,7 +23,7 @@ class GestionPredioDetailScreen extends ConsumerWidget {
     final isDemo = ref.watch(demoModeProvider);
 
     return AppScaffold(
-      currentIndex: 3,
+      currentIndex: 2,
       title: 'Detalle de Predio - Gestión',
       actions: [
         predioAsync.whenOrNull(

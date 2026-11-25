@@ -45,7 +45,6 @@ class _CargaArchivoScreenState extends ConsumerState<CargaArchivoScreen> {
   bool _loading = false;
   bool _sincronizando = false;
   String? _eliminandoFileId;
-  bool _eliminandoTodos = false;
   List<Map<String, dynamic>> _preview = [];
   PlatformFile? _archivoSeleccionado;
   Map<String, dynamic>? _geoJsonData;
@@ -896,7 +895,7 @@ class _CargaArchivoScreenState extends ConsumerState<CargaArchivoScreen> {
   /// ve que la operación sigue en curso y no necesita reintentar creyendo
   /// que no hizo nada.
   Future<void> _eliminarArchivo(ImportedFile file) async {
-    if (_eliminandoFileId != null || _eliminandoTodos) return;
+    if (_eliminandoFileId != null) return;
     setState(() => _eliminandoFileId = file.id);
     try {
       // Borrar primero en Firestore: si falla, no se toca la UI ni Gestión,
@@ -958,59 +957,6 @@ class _CargaArchivoScreenState extends ConsumerState<CargaArchivoScreen> {
       }
     } finally {
       if (mounted) setState(() => _eliminandoFileId = null);
-    }
-  }
-
-  Future<void> _eliminarTodos(List<ImportedFile> files) async {
-    if (_eliminandoFileId != null || _eliminandoTodos) return;
-    setState(() => _eliminandoTodos = true);
-    try {
-      // Borrar primero en Firestore: si falla, no se toca la UI ni Gestión,
-      // para no hacerle creer al usuario que los archivos se eliminaron
-      // cuando en realidad los documentos siguen existiendo.
-      final ids = files.map((f) => f.bdId).whereType<String>().toList();
-      if (ids.isNotEmpty) {
-        try {
-          final repo = ref.read(archivosGeoJsonRepositoryProvider);
-          await repo.deleteAll(ids);
-        } catch (e) {
-          if (mounted) {
-            _mostrarSnackBar(
-              'No se pudieron eliminar los archivos: $e',
-              exito: false,
-            );
-          }
-          return;
-        }
-      }
-
-      final claves = <String>{};
-      for (final file in files) {
-        claves.addAll(
-          file.clavesCatastrales.isNotEmpty
-              ? file.clavesCatastrales
-              : extractClavesFromFeatures(file.features),
-        );
-      }
-
-      final eliminadosGestion = await _eliminarPrediosDeGestionPorClaves(claves);
-
-      ref.read(cargaProvider.notifier).clearAll();
-      ref.read(importedFeaturesProvider.notifier).state = const [];
-      ref.read(pksPointFeaturesProvider.notifier).state = const [];
-      ref.read(importacionAsyncProvider.notifier).reset();
-
-      ref.invalidate(prediosListProvider);
-      ref.invalidate(prediosMapaProvider);
-      if (mounted) {
-        _mostrarSnackBar(
-          eliminadosGestion > 0
-              ? 'Archivos eliminados y $eliminadosGestion predio(s) removido(s) de Gestión.'
-              : 'Archivos eliminados de Gestión y Mapa.',
-        );
-      }
-    } finally {
-      if (mounted) setState(() => _eliminandoTodos = false);
     }
   }
 
@@ -2372,7 +2318,7 @@ class _CargaArchivoScreenState extends ConsumerState<CargaArchivoScreen> {
     final isBusy = _loading || _sincronizando;
 
     return AppScaffold(
-      currentIndex: 2,
+      currentIndex: 3,
       title: 'Carga de Archivos',
       child: Stack(
         children: [
@@ -2773,7 +2719,6 @@ class _CargaArchivoScreenState extends ConsumerState<CargaArchivoScreen> {
                     isAdminApproverUser(ref.watch(currentUserProvider) ?? FirebaseAuth.instance.currentUser);
                 final uid = (ref.watch(currentUserProvider) ?? FirebaseAuth.instance.currentUser)?.uid;
                 final proyectosAsignados = ref.watch(currentUserAssignedProjectsProvider);
-                final puedeEliminar = isAdmin || isPerfilGestor(perfil) || isPerfilOperativoAuxiliar(perfil);
                 final importedFiles = _visibleFiles(
                   allFiles,
                   isAdmin: isAdmin,
@@ -2818,46 +2763,6 @@ class _CargaArchivoScreenState extends ConsumerState<CargaArchivoScreen> {
                         Text(
                           'Archivos importados (${importedFiles.length})',
                           style: Theme.of(context).textTheme.titleMedium,
-                        ),
-                        if (puedeEliminar)
-                        TextButton.icon(
-                          onPressed: (_eliminandoTodos || _eliminandoFileId != null)
-                              ? null
-                              : () => showDialog(
-                                    context: context,
-                                    builder: (ctx) => AlertDialog(
-                                      title: const Text('Eliminar todos'),
-                                      content: const Text(
-                                        '¿Eliminar todos los archivos importados? Se borrarán también de la base de datos.',
-                                      ),
-                                      actions: [
-                                        TextButton(
-                                          onPressed: () => Navigator.pop(ctx),
-                                          child: const Text('Cancelar'),
-                                        ),
-                                        TextButton(
-                                          onPressed: () {
-                                            Navigator.pop(ctx);
-                                            _eliminarTodos(importedFiles);
-                                          },
-                                          child: const Text('Eliminar todos',
-                                              style: TextStyle(color: AppColors.danger)),
-                                        ),
-                                      ],
-                                    ),
-                                  ),
-                          icon: _eliminandoTodos
-                              ? const SizedBox(
-                                  width: 14,
-                                  height: 14,
-                                  child: CircularProgressIndicator(strokeWidth: 2),
-                                )
-                              : const Icon(Icons.delete_sweep_outlined, size: 16, color: AppColors.danger),
-                          label: Text(
-                            _eliminandoTodos ? 'Eliminando...' : 'Eliminar todos',
-                            style: const TextStyle(fontSize: 12, color: AppColors.danger),
-                          ),
-                          style: TextButton.styleFrom(padding: const EdgeInsets.symmetric(horizontal: 8)),
                         ),
                       ],
                     ),
@@ -3087,7 +2992,7 @@ class _CargaArchivoScreenState extends ConsumerState<CargaArchivoScreen> {
                           color: AppColors.danger),
                   padding: EdgeInsets.zero,
                   constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
-                  onPressed: (_eliminandoFileId != null || _eliminandoTodos)
+                  onPressed: (_eliminandoFileId != null)
                       ? null
                       : () => showDialog(
                             context: context,

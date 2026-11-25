@@ -32,7 +32,7 @@ class _PropietariosListScreenState extends ConsumerState<PropietariosListScreen>
     final proyectosVigentes = ref.watch(proyectosCodigosProvider);
 
     return AppScaffold(
-      currentIndex: 2,
+      currentIndex: 3,
       title: AppStrings.propietarios,
       floatingActionButton: FloatingActionButton.extended(
         icon: const Icon(Icons.person_add),

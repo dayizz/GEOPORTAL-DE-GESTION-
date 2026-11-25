@@ -26,7 +26,7 @@ class _ComposicionesListScreenState extends ConsumerState<ComposicionesListScree
     final estadoAcceso = estadoAccesoProyectos(ref);
     if (estadoAcceso != null) {
       return AppScaffold(
-        currentIndex: 7,
+        currentIndex: 5,
         title: 'Composiciones',
         child: estadoAcceso,
       );
@@ -40,7 +40,7 @@ class _ComposicionesListScreenState extends ConsumerState<ComposicionesListScree
 
     if (proyectosDisponibles.isEmpty) {
       return AppScaffold(
-        currentIndex: 7,
+        currentIndex: 5,
         title: 'Composiciones',
         child: const Center(
           child: Text('Sin proyecto asignado', style: TextStyle(color: Colors.grey, fontSize: 16)),
@@ -60,7 +60,7 @@ class _ComposicionesListScreenState extends ConsumerState<ComposicionesListScree
     final composicionesAsync = ref.watch(composicionesProvider);
 
     return AppScaffold(
-      currentIndex: 7,
+      currentIndex: 5,
       title: 'Composiciones  •  $proyectoActivo',
       floatingActionButton: FloatingActionButton.extended(
         onPressed: () => context.go('/composiciones/nuevo?proyecto=$proyectoActivo'),
