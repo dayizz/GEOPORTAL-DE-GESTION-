@@ -1235,10 +1235,12 @@ class _MapaScreenState extends ConsumerState<MapaScreen> {
     final grupos = <String, List<Predio>>{};
     for (final predio in predios) {
       String? ownerId;
-      final clave = import_norm.normalizeCode(predio.claveCatastral);
+      final clave = import_norm.llaveClaveProyecto(predio.claveCatastral, predio.proyecto);
       if (clave != null && anclasPorClave.containsKey(clave)) {
-        // Una clave representa un solo polígono físico aunque existan varias
-        // filas de Gestión o más de un feature vectorial con esa clave.
+        // Una clave (dentro de un mismo proyecto) representa un solo polígono
+        // físico aunque existan varias filas de Gestión o más de un feature
+        // vectorial con esa clave. Claves iguales de proyectos distintos son
+        // predios distintos y nunca se agrupan.
         ownerId = anclasPorClave[clave];
       } else if (predio.geometry != null) {
         ownerId = predio.id;
@@ -1247,7 +1249,8 @@ class _MapaScreenState extends ConsumerState<MapaScreen> {
         final referenced = porId[predio.polygonRefId];
         final claveAncla = referenced == null
             ? null
-            : import_norm.normalizeCode(referenced.claveCatastral);
+            : import_norm.llaveClaveProyecto(
+                referenced.claveCatastral, referenced.proyecto);
         ownerId = claveAncla == null
             ? predio.polygonRefId
             : anclasPorClave[claveAncla] ?? predio.polygonRefId;
@@ -1303,7 +1306,7 @@ class _MapaScreenState extends ConsumerState<MapaScreen> {
     final anclas = <String, String>{};
     for (final predio in predios) {
       if (predio.geometry == null) continue;
-      final clave = import_norm.normalizeCode(predio.claveCatastral);
+      final clave = import_norm.llaveClaveProyecto(predio.claveCatastral, predio.proyecto);
       if (clave != null) anclas.putIfAbsent(clave, () => predio.id);
     }
     return anclas;
@@ -1316,16 +1319,16 @@ class _MapaScreenState extends ConsumerState<MapaScreen> {
   /// Gestión) para no perder el contexto de afectaciones repetidas.
   List<Predio> _afectacionesDeGrupo(Predio predio, Map<String, Predio> prediosById) {
     final anclasPorClave = _anclasGeometricasPorClave(prediosById.values);
-    final clave = import_norm.normalizeCode(predio.claveCatastral);
+    final clave = import_norm.llaveClaveProyecto(predio.claveCatastral, predio.proyecto);
     final ownerId = (clave == null ? null : anclasPorClave[clave]) ??
         (predio.geometry != null ? predio.id : (predio.polygonRefId ?? predio.id));
-    final claveAncla = import_norm.normalizeCode(
-      prediosById[ownerId]?.claveCatastral ?? predio.claveCatastral,
-    );
+    final ancla = prediosById[ownerId] ?? predio;
+    final claveAncla =
+        import_norm.llaveClaveProyecto(ancla.claveCatastral, ancla.proyecto);
     final grupo = prediosById.values
         .where((p) {
           final mismaClave = claveAncla != null &&
-              import_norm.normalizeCode(p.claveCatastral) == claveAncla;
+              import_norm.llaveClaveProyecto(p.claveCatastral, p.proyecto) == claveAncla;
           return p.id == ownerId || p.polygonRefId == ownerId || mismaClave;
         })
         .toList();
@@ -2663,7 +2666,7 @@ class _MapaScreenState extends ConsumerState<MapaScreen> {
     try {
       final predios = prediosById?.values ?? const <Predio>[];
       final anclasPorClave = _anclasGeometricasPorClave(predios);
-      final clave = import_norm.normalizeCode(predio.claveCatastral);
+      final clave = import_norm.llaveClaveProyecto(predio.claveCatastral, predio.proyecto);
       final anclaId = clave == null ? null : anclasPorClave[clave];
       var geometry = anclaId == null
           ? predio.geometry

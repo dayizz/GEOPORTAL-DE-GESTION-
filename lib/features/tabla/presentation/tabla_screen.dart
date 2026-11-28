@@ -756,8 +756,10 @@ class _TablaScreenState extends ConsumerState<TablaScreen> {
     final porId = {for (final p in todosLosPredios) p.id: p};
     final porClave = <String, Map<String, dynamic>>{};
     for (final p in todosLosPredios) {
-      if (p.geometry != null && p.claveCatastral.trim().isNotEmpty) {
-        porClave.putIfAbsent(p.claveCatastral.trim(), () => p.geometry!);
+      // Por clave + proyecto: la misma clave en otro proyecto es otro predio.
+      final llave = norm.llaveClaveProyecto(p.claveCatastral, p.proyecto);
+      if (p.geometry != null && llave != null) {
+        porClave.putIfAbsent(llave, () => p.geometry!);
       }
     }
     final headers = _encabezadosExport();
@@ -770,7 +772,7 @@ class _TablaScreenState extends ConsumerState<TablaScreen> {
           },
           'geometry': p.geometry ??
               porId[p.polygonRefId]?.geometry ??
-              porClave[p.claveCatastral.trim()],
+              porClave[norm.llaveClaveProyecto(p.claveCatastral, p.proyecto)],
         },
     ];
     final collection = {

@@ -96,6 +96,17 @@ class SincronizacionService {
     'objectid',        'OBJECTID',
   ];
 
+  /// Campos que genera el propio sistema (ids de documentos, vínculos,
+  /// marcas de sincronización y fechas) y que nunca deben copiarse desde
+  /// las properties de un GeoJSON importado.
+  static const _camposInternosDelSistema = {
+    'id', 'predio_id', 'polygon_ref_id', 'propietario_id',
+    'clave_catastral_db', 'created_at', 'updated_at', 'geometry',
+  };
+
+  static bool _esCampoInternoDelSistema(String key) =>
+      key.startsWith('_') || _camposInternosDelSistema.contains(key);
+
   /// Extrae la clave catastral de las properties del feature.
   String? _extractId(Map<String, dynamic> props) {
     for (final key in _idKeys) {
@@ -773,10 +784,16 @@ class SincronizacionService {
     // Eliminar claves con valor null para no pisar datos existentes
     data.removeWhere((k, v) => v == null);
     
-    // Incluir TODAS las propiedades originales del GeoJSON que no estén ya en data
+    // Incluir TODAS las propiedades originales del GeoJSON que no estén ya en data,
+    // salvo los campos internos del sistema: un GeoJSON exportado desde el
+    // propio geoportal trae `id`, `polygon_ref_id`, `propietario_id`,
+    // `_predioId`, `_sync*`, etc. de OTROS registros. Copiarlos hacía que
+    // `createPredio` escribiera sobre el documento con ese `id` (incluso de
+    // otro proyecto) o que el predio quedara vinculado a un polígono ajeno.
     if (propsOriginal != null) {
       for (final entry in propsOriginal.entries) {
         final key = entry.key;
+        if (_esCampoInternoDelSistema(key)) continue;
         if (!data.containsKey(key) && entry.value != null) {
           final sanitizedValue = _sanitizeForFirestore(entry.value);
           final valueStr = sanitizedValue.toString().trim();
@@ -876,7 +893,14 @@ class SincronizacionService {
     List<Map<String, dynamic>> features, {
     int concurrency = _defaultSyncConcurrency,
     void Function(int procesados, int total)? onProgress,
+    String? proyecto,
   }) async {
+    // Proyecto elegido en la encuesta de importación: es el que manda. Una
+    // misma clave puede existir en varios proyectos y cada uno maneja sus
+    // datos por separado, así que no se deja que el proyecto lo "adivine"
+    // el contenido del archivo (que puede venir de una exportación con
+    // otro proyecto en sus propiedades).
+    final proyectoForzado = norm.normalizeProyectoCodigo(proyecto);
     if (features.isEmpty) {
       return const SincronizacionResultado(
         resultados: [],
@@ -908,6 +932,7 @@ class SincronizacionService {
         (lane) => _processLane(
           lane,
           vecesVistaPorClave: vecesVistaPorClave,
+          proyectoForzado: proyectoForzado,
           onOutcome: (outcome) {
             resultadosByIndex[outcome.featureIndex] = outcome.result;
             encontrados += outcome.encontrados;
@@ -990,9 +1015,15 @@ class SincronizacionService {
     List<MapEntry<int, Map<String, dynamic>>> lane, {
     required Map<String, int> vecesVistaPorClave,
     required void Function(_FeatureSyncOutcome outcome) onOutcome,
+    String? proyectoForzado,
   }) async {
     for (final item in lane) {
-      final outcome = await _processFeature(item.key, item.value, vecesVistaPorClave);
+      final outcome = await _processFeature(
+        item.key,
+        item.value,
+        vecesVistaPorClave,
+        proyectoForzado: proyectoForzado,
+      );
       onOutcome(outcome);
     }
   }
@@ -1000,8 +1031,9 @@ class SincronizacionService {
   Future<_FeatureSyncOutcome> _processFeature(
     int featureIndex,
     Map<String, dynamic> feature,
-    Map<String, int> vecesVistaPorClave,
-  ) async {
+    Map<String, int> vecesVistaPorClave, {
+    String? proyectoForzado,
+  }) async {
     final featureNumber = featureIndex + 1;
 
     final rawPropsInicial = feature['properties'];
@@ -1045,6 +1077,7 @@ class SincronizacionService {
         geometry,
         propsOriginal: propsOriginal,
       );
+      if (proyectoForzado != null) predioData['proyecto'] = proyectoForzado;
 
       final nombreProp = predioData['propietario_nombre'] as String?;
       if (nombreProp != null && nombreProp.isNotEmpty) {
@@ -1060,21 +1093,20 @@ class SincronizacionService {
         }
       }
 
-      // Si ya existe EXACTAMENTE un registro con esta clave y este mismo
-      // archivo no la había traído antes, se fusiona en ese registro en vez
-      // de crear uno nuevo -join vectorial+tabular, heredando datos
-      // mutuamente-. Si este archivo YA trajo la misma clave antes
-      // (`esRepetidoEnArchivo`), es una afectación repetida real y se crea
-      // un registro nuevo vinculado al mismo polígono (ver
-      // `PrediosRepository.upsertPredioPorClave`).
-      final vecesVista = (vecesVistaPorClave[claveNormalizada] ?? 0) + 1;
-      vecesVistaPorClave[claveNormalizada] = vecesVista;
-      final esRepetidoEnArchivo = vecesVista > 1;
+      // La N-ésima vez que este archivo trae la clave (por proyecto) se
+      // empata con el N-ésimo registro existente de esa clave -join
+      // vectorial+tabular, heredando datos mutuamente-. Si el archivo la
+      // trae más veces de las que hay registradas, es una afectación
+      // repetida real y se crea un registro nuevo vinculado al mismo
+      // polígono (ver `PrediosRepository.upsertPredioPorClave`).
+      final llave = '${predioData['proyecto'] ?? ''}|$claveNormalizada';
+      final ocurrencia = (vecesVistaPorClave[llave] ?? 0) + 1;
+      vecesVistaPorClave[llave] = ocurrencia;
 
       final resultado = await _withRetry(
         () => _prediosRepo.upsertPredioPorClave(
           predioData,
-          forzarNuevoRegistro: esRepetidoEnArchivo,
+          ocurrenciaEnArchivo: ocurrencia,
         ),
         operationName: 'upsertPredioPorClave',
       );
@@ -1123,7 +1155,8 @@ class SincronizacionService {
           'clave_catastral': clave,
           'tramo': 'S/T',
           'tipo_propiedad': tipoPropiedad,
-          if (_resolveProyecto(props) case final proyecto?) 'proyecto': proyecto,
+          if (proyectoForzado ?? _resolveProyecto(props) case final proyecto?)
+            'proyecto': proyecto,
           if (geometry != null) 'geometry': geometry,
           if (geometry != null) 'poligono_insertado': true,
           'cop': false,

@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../carga/utils/geojson_mapper.dart';
+import '../../../core/utils/import_normalization.dart' as norm;
 import '../models/predio.dart';
 import '../../estructura/providers/proyectos_provider.dart';
 
@@ -16,13 +17,18 @@ class LocalPrediosNotifier extends StateNotifier<List<Predio>> {
 
   final Ref _ref;
 
-  int removeByClaves(Set<String> clavesNormalizadas) {
+  /// Quita los predios locales con esas claves. Si se indica [proyecto],
+  /// solo los de ese proyecto (la misma clave en otro proyecto es otro predio).
+  int removeByClaves(Set<String> clavesNormalizadas, {String? proyecto}) {
     if (clavesNormalizadas.isEmpty || state.isEmpty) return 0;
     final before = state.length;
+    final proyectoNorm = norm.normalizeProyectoCodigo(proyecto);
     state = state
         .where(
-          (predio) => !clavesNormalizadas
-              .contains(predio.claveCatastral.trim().toUpperCase()),
+          (predio) => !(clavesNormalizadas
+                  .contains(predio.claveCatastral.trim().toUpperCase()) &&
+              (proyectoNorm == null ||
+                  norm.normalizeProyectoCodigo(predio.proyecto) == proyectoNorm)),
         )
         .toList(growable: false);
     return before - state.length;

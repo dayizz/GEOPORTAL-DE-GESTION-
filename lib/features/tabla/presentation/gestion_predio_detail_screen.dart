@@ -73,7 +73,10 @@ class GestionPredioDetailScreen extends ConsumerWidget {
                   .watch(prediosListProvider)
                   .asData
                   ?.value
-                  .where((p) => p.claveCatastral == predio.claveCatastral)
+                  .where((p) =>
+                      p.claveCatastral == predio.claveCatastral &&
+                      norm.normalizeProyectoCodigo(p.proyecto) ==
+                          norm.normalizeProyectoCodigo(predio.proyecto))
                   .length ??
               1;
 

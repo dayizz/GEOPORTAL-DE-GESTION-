@@ -523,25 +523,51 @@ class PrediosRepository {
     await batch.commit();
   }
 
+  /// Proyecto normalizado de un documento/payload ('TQM' es el alias
+  /// heredado de 'TMQ'). `null` si no trae proyecto.
+  String? _proyectoDe(Map<String, dynamic>? data) =>
+      norm.normalizeProyectoCodigo(data?['proyecto']?.toString());
+
   /// Todos los documentos que comparten `claveCatastral` (opcionalmente
   /// excluyendo uno), usado para detectar afectaciones repetidas del mismo
   /// predio físico al importar o vincular.
+  ///
+  /// Si se indica [proyecto], solo cuentan los documentos de ESE proyecto:
+  /// claves genéricas como "N/D-36" se repiten entre proyectos (TQS, TIG,
+  /// TQI...) y antes una importación de TQS terminaba fusionándose con -o
+  /// contando como hermano a- el registro de otro proyecto, dejando
+  /// polígonos sin empatar y registros duplicados.
+  ///
+  /// El resultado va ordenado del más antiguo al más reciente (y por id
+  /// como desempate) para que la N-ésima aparición de una clave en un
+  /// archivo siempre caiga sobre el mismo registro existente.
   Future<List<QueryDocumentSnapshot<Map<String, dynamic>>>> _buscarDocsPorClave(
     String claveCatastral, {
     String? excluirId,
+    String? proyecto,
   }) async {
     final clave = claveCatastral.trim();
     if (clave.isEmpty) return const [];
     final query = await _predios.where('clave_catastral', isEqualTo: clave).get();
-    return query.docs.where((d) => d.id != excluirId).toList();
+    final docs = query.docs.where((d) {
+      if (d.id == excluirId) return false;
+      // Sin proyecto solo empata con registros que tampoco lo tienen:
+      // nunca se mezclan datos de un proyecto con otro.
+      return _proyectoDe(d.data()) == proyecto;
+    }).toList();
+    docs.sort((a, b) {
+      final ca = _timestampToIso(a.data()['created_at']) ?? '';
+      final cb = _timestampToIso(b.data()['created_at']) ?? '';
+      final c = ca.compareTo(cb);
+      return c != 0 ? c : a.id.compareTo(b.id);
+    });
+    return docs;
   }
 
-  /// Si un predio recién creado (sin geometría propia) tiene hermanos con la
-  /// misma clave catastral, busca el polígono que ya comparten (uno con
-  /// `geometry` propia, o el ancla que alguno de ellos ya referencia) para
-  /// heredar el mismo vínculo y aparecer en el mismo polígono del mapa.
-  Future<String?> buscarPoligonoAnclaPorClave(String claveCatastral) async {
-    final hermanos = await _buscarDocsPorClave(claveCatastral);
+  /// Polígono que comparten los registros de una clave: el primero con
+  /// `geometry` propia o, si ninguno la tiene, el ancla que alguno ya
+  /// referencia en `polygon_ref_id`.
+  String? _anclaDe(List<QueryDocumentSnapshot<Map<String, dynamic>>> hermanos) {
     for (final doc in hermanos) {
       if (doc.data()['geometry'] != null) return doc.id;
     }
@@ -552,14 +578,30 @@ class PrediosRepository {
     return null;
   }
 
-  /// Asegura que todos los registros con la misma clave apunten a una sola
-  /// ancla vectorial, incluso si una importación anterior dejó otro vínculo
-  /// o geometría duplicada.
+  /// Si un predio recién creado (sin geometría propia) tiene hermanos con la
+  /// misma clave catastral, busca el polígono que ya comparten (uno con
+  /// `geometry` propia, o el ancla que alguno de ellos ya referencia) para
+  /// heredar el mismo vínculo y aparecer en el mismo polígono del mapa.
+  Future<String?> buscarPoligonoAnclaPorClave(
+    String claveCatastral, {
+    String? proyecto,
+  }) async {
+    return _anclaDe(await _buscarDocsPorClave(claveCatastral, proyecto: proyecto));
+  }
+
+  /// Asegura que todos los registros con la misma clave (y proyecto, si se
+  /// indica) apunten a una sola ancla vectorial, incluso si una importación
+  /// anterior dejó otro vínculo o geometría duplicada.
   Future<void> autoVincularHermanosPorClave({
     required String claveCatastral,
     required String idAncla,
+    String? proyecto,
   }) async {
-    final hermanos = await _buscarDocsPorClave(claveCatastral, excluirId: idAncla);
+    final hermanos = await _buscarDocsPorClave(
+      claveCatastral,
+      excluirId: idAncla,
+      proyecto: proyecto,
+    );
     if (hermanos.isEmpty) return;
 
     final batch = _firestore.batch();
@@ -579,55 +621,73 @@ class PrediosRepository {
   }
 
   /// Guarda una fila/feature importado, decidiendo si debe fusionarse con
-  /// un registro existente de la misma clave o crear uno nuevo:
+  /// un registro existente de la misma clave y proyecto o crear uno nuevo.
   ///
-  /// - 0 registros previos con esa clave -> se crea uno nuevo (caso normal).
-  /// - Exactamente 1 registro previo, y esta es la PRIMERA vez que el
-  ///   archivo que se está importando trae esta clave (`forzarNuevoRegistro
-  ///   == false`) -> se FUSIONA con ese registro (join): normalmente es el
-  ///   "otro lado" del mismo predio físico (el vectorial -GeoJSON, con
-  ///   geometría- y el tabular -XLSX, con propietario/superficie/etc.-
-  ///   descrito en dos archivos distintos), heredando datos mutuamente sin
-  ///   duplicar el registro en Gestión.
-  /// - 2+ registros previos, o el archivo actual ya trajo esta misma clave
-  ///   antes (`forzarNuevoRegistro == true`) -> esta fila representa una
-  ///   afectación repetida distinta sobre el mismo predio físico (relación
-  ///   1:N real: la misma clave aparece más de una vez DENTRO del mismo
-  ///   archivo de origen): se crea un registro nuevo vinculado al mismo
-  ///   polígono (`polygon_ref_id`), sin duplicar la geometría.
+  /// [ocurrenciaEnArchivo] es cuántas veces (1, 2, 3...) el archivo que se
+  /// está importando ya ha traído esta clave, contando la fila actual. La
+  /// N-ésima aparición se empata con el N-ésimo registro existente de esa
+  /// clave (ordenados del más antiguo al más reciente):
   ///
-  /// Importante: la fusión NUNCA compara el contenido de los campos para
-  /// decidir -dos archivos que describen el mismo predio (geojson+xlsx)
-  /// pueden traer valores ligeramente distintos para el mismo campo sin que
-  /// eso signifique una afectación distinta-. La única señal confiable de
-  /// "relación 1:N real" es que el propio archivo de origen liste la misma
-  /// clave más de una vez; por eso quien llama a este método (los
-  /// importadores) es quien indica `forzarNuevoRegistro` cuando detecta esa
-  /// repetición dentro del archivo.
+  /// - Si existe ese registro -> se FUSIONA con él (join): normalmente es
+  ///   el "otro lado" del mismo predio (vectorial -GeoJSON, con geometría-
+  ///   y tabular -XLSX, con propietario/superficie/etc.-), heredando datos
+  ///   mutuamente sin duplicarlo. Volver a importar el mismo archivo
+  ///   tampoco duplica nada: cada fila cae sobre el mismo registro.
+  /// - Si no existe (el archivo trae la clave más veces de las que ya hay
+  ///   registradas) -> es una afectación repetida real (relación 1:N): se
+  ///   crea un registro nuevo vinculado al mismo polígono
+  ///   (`polygon_ref_id`), sin duplicar la geometría.
+  ///
+  /// Antes solo se fusionaba cuando había EXACTAMENTE un registro previo:
+  /// si el XLSX (con la clave repetida 2-3 veces) se subía antes que el
+  /// GeoJSON, cada polígono creaba un registro adicional en vez de
+  /// empatarse con los existentes.
+  ///
+  /// La fusión NUNCA compara el contenido de los campos para decidir -dos
+  /// archivos que describen el mismo predio pueden traer valores
+  /// ligeramente distintos sin que eso signifique una afectación distinta-.
   Future<UpsertPorClaveResult> upsertPredioPorClave(
     Map<String, dynamic> payload, {
-    bool forzarNuevoRegistro = false,
+    int ocurrenciaEnArchivo = 1,
   }) async {
     final clave = payload['clave_catastral']?.toString().trim() ?? '';
     if (clave.isEmpty) {
       return UpsertPorClaveResult(predio: await createPredio(payload), fusionado: false);
     }
 
-    final hermanos = await _buscarDocsPorClave(clave);
+    final proyecto = _proyectoDe(payload);
+    final hermanos = await _buscarDocsPorClave(clave, proyecto: proyecto);
     final tieneGeometriaEntrante = payload['geometry'] != null;
-    final anclaExistente = await buscarPoligonoAnclaPorClave(clave);
+    final anclaExistente = _anclaDe(hermanos);
+    final ocurrencia = ocurrenciaEnArchivo < 1 ? 1 : ocurrenciaEnArchivo;
 
-    if (hermanos.length == 1 && !forzarNuevoRegistro) {
-      final doc = hermanos.first;
-      final update = _mergeParaActualizar(doc.data(), payload);
+    if (ocurrencia <= hermanos.length) {
+      final doc = hermanos[ocurrencia - 1];
+      final entrante = Map<String, dynamic>.from(payload);
+      // Un solo polígono por clave: si ya hay un ancla distinta a este
+      // registro, la geometría entrante no se le copia (sigue vinculado).
+      if (anclaExistente != null && anclaExistente != doc.id) {
+        entrante.remove('geometry');
+        entrante.remove('poligono_insertado');
+      }
+      final update = _mergeParaActualizar(doc.data(), entrante);
       final combinado = <String, dynamic>{...doc.data(), ...update};
       if (norm.aplicarEstatusInfraestructura(combinado)) {
         update['estructura'] = 'SIN TIPO';
         update['rango_estatus'] = 'Investigación';
       }
+      final adoptaGeometria = update['geometry'] != null;
       update['updated_at'] = _isoNow();
       _encodeGeometryForWrite(update);
       await doc.reference.set(update, SetOptions(merge: true));
+      if (adoptaGeometria) {
+        // Este registro pasa a ser el ancla: los demás de la clave apuntan a él.
+        await autoVincularHermanosPorClave(
+          claveCatastral: clave,
+          idAncla: doc.id,
+          proyecto: proyecto,
+        );
+      }
       final actualizado = await getPredioById(doc.id);
       return UpsertPorClaveResult(predio: actualizado!, fusionado: true);
     }
@@ -645,7 +705,11 @@ class PrediosRepository {
     final idAncla = anclaExistente ??
         (tieneGeometriaEntrante ? creado.id : null);
     if (idAncla != null) {
-      await autoVincularHermanosPorClave(claveCatastral: clave, idAncla: idAncla);
+      await autoVincularHermanosPorClave(
+        claveCatastral: clave,
+        idAncla: idAncla,
+        proyecto: proyecto,
+      );
     }
     return UpsertPorClaveResult(predio: creado, fusionado: false);
   }

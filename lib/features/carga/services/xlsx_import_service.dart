@@ -532,7 +532,14 @@ class XlsxImportService {
     return best;
   }
 
-  Future<XlsxImportResult> importar(XlsxParseResult parseResult) async {
+  /// [proyecto] es el elegido en la encuesta de importación y se aplica a
+  /// TODAS las filas de predios: la misma clave puede existir en varios
+  /// proyectos y cada uno maneja sus datos por separado.
+  Future<XlsxImportResult> importar(
+    XlsxParseResult parseResult, {
+    String? proyecto,
+  }) async {
+    final proyectoForzado = norm.normalizeProyectoCodigo(proyecto);
     final repo = _importacionRepository;
     if (repo == null) {
       throw StateError(
@@ -557,7 +564,10 @@ class XlsxImportService {
       // provocaba una condición de carrera: ambas leían el mismo estado
       // "vacío" antes de que la otra escribiera, y las dos terminaban
       // fusionándose en el mismo documento, perdiendo una de las dos filas.
-      final lanes = _buildLanesParaHoja(hoja.rows);
+      final filas = proyectoForzado != null && hoja.tabla == XlsxTargetTable.predios
+          ? [for (final r in hoja.rows) {...r, 'proyecto': proyectoForzado}]
+          : hoja.rows;
+      final lanes = _buildLanesParaHoja(filas);
       // Cuenta cuántas veces se ha visto cada clave DENTRO de este mismo
       // archivo: es la única señal confiable de relación 1:N real (ver
       // comentario en `PrediosRepository.upsertPredioPorClave`). Dos filas
@@ -597,7 +607,7 @@ class XlsxImportService {
   Future<_ImportRowResult> _importarFila({
     required XlsxSheetImport hoja,
     required Map<String, dynamic> row,
-    bool esRepetidoEnArchivo = false,
+    int ocurrenciaEnArchivo = 1,
   }) async {
     final repo = _importacionRepository;
     if (repo == null) {
@@ -617,7 +627,7 @@ class XlsxImportService {
 
         final result = await repo.upsertPredioConPropietario(
           row,
-          esRepetidoEnArchivo: esRepetidoEnArchivo,
+          ocurrenciaEnArchivo: ocurrenciaEnArchivo,
         );
         return _ImportRowResult(
           creados: result.creado ? 1 : 0,
@@ -665,16 +675,18 @@ class XlsxImportService {
   }) async {
     for (final row in lane) {
       final clave = row['clave_catastral']?.toString().trim();
-      var esRepetidoEnArchivo = false;
+      var ocurrencia = 1;
       if (clave != null && clave.isNotEmpty) {
-        final vecesVista = (vecesVistaPorClave[clave] ?? 0) + 1;
-        vecesVistaPorClave[clave] = vecesVista;
-        esRepetidoEnArchivo = vecesVista > 1;
+        // Se cuenta por clave + proyecto: la misma clave genérica (p.ej.
+        // "N/D-36") puede venir de proyectos distintos en un mismo archivo.
+        final llave = '${row['proyecto'] ?? ''}|$clave';
+        ocurrencia = (vecesVistaPorClave[llave] ?? 0) + 1;
+        vecesVistaPorClave[llave] = ocurrencia;
       }
       final result = await _importarFila(
         hoja: hoja,
         row: row,
-        esRepetidoEnArchivo: esRepetidoEnArchivo,
+        ocurrenciaEnArchivo: ocurrencia,
       );
       onResult(result);
     }

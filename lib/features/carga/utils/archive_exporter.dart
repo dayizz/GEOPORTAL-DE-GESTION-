@@ -5,6 +5,7 @@ import 'package:excel/excel.dart';
 
 import '../../predios/models/predio.dart';
 import '../providers/carga_provider.dart';
+import '../../../core/utils/import_normalization.dart' as norm;
 import 'geojson_mapper.dart';
 
 class ArchiveExportPayload {
@@ -35,6 +36,17 @@ Future<ArchiveExportPayload> buildArchiveExportPayload({
   required String formato,
   String? fallbackProject,
 }) async {
+  // Solo los registros del proyecto del archivo: una misma clave puede
+  // existir en varios proyectos y cada uno maneja sus datos por separado.
+  // Antes se combinaba cada clave con el registro de CUALQUIER proyecto
+  // (p.ej. un "N/D-36" de TQS salía con los datos e id del "N/D-36" de TIG).
+  final proyectoArchivo =
+      norm.normalizeProyectoCodigo(file.proyecto ?? fallbackProject);
+  if (proyectoArchivo != null) {
+    currentPredios = currentPredios
+        .where((p) => norm.normalizeProyectoCodigo(p.proyecto) == proyectoArchivo)
+        .toList(growable: false);
+  }
   if (formato == 'geojson') {
     return _buildGeoJsonPayload(file, currentPredios);
   }

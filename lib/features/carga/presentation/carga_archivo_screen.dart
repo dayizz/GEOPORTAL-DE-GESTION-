@@ -11,6 +11,7 @@ import 'package:go_router/go_router.dart';
 import 'package:share_plus/share_plus.dart';
 import '../../../core/constants/app_colors.dart';
 import '../../../core/firebase/firebase_config.dart';
+import '../../../core/utils/import_normalization.dart' as norm;
 import '../../../shared/widgets/app_scaffold.dart';
 import '../../mapa/providers/mapa_provider.dart';
 import '../../mapa/utils/pks_label.dart';
@@ -697,6 +698,7 @@ class _CargaArchivoScreenState extends ConsumerState<CargaArchivoScreen> {
       final syncService = ref.read(sincronizacionServiceProvider);
       final resultado = await syncService.sincronizar(
         features,
+        proyecto: _proyectoImportacion,
         onProgress: (procesados, total) {
           ref.read(importacionAsyncProvider.notifier).actualizar(
             procesados: procesados,
@@ -935,7 +937,10 @@ class _CargaArchivoScreenState extends ConsumerState<CargaArchivoScreen> {
           ? file.clavesCatastrales.toSet()
           : extractClavesFromFeatures(file.features);
 
-      final eliminadosGestion = await _eliminarPrediosDeGestionPorClaves(claves);
+      final eliminadosGestion = await _eliminarPrediosDeGestionPorClaves(
+        claves,
+        proyecto: file.proyecto,
+      );
 
       ref.read(cargaProvider.notifier).removeFile(file.id);
       if (shouldClearMap) {
@@ -960,13 +965,23 @@ class _CargaArchivoScreenState extends ConsumerState<CargaArchivoScreen> {
     }
   }
 
-  Future<int> _eliminarPrediosDeGestionPorClaves(Set<String> claves) async {
+  /// Borra de Gestión los predios de un archivo eliminado. Solo los del
+  /// [proyecto] del archivo: la misma clave puede existir en otros
+  /// proyectos y esos registros NO pertenecen a este archivo (antes se
+  /// borraban también). Archivos antiguos sin proyecto guardado conservan
+  /// el comportamiento anterior (solo por clave).
+  Future<int> _eliminarPrediosDeGestionPorClaves(
+    Set<String> claves, {
+    String? proyecto,
+  }) async {
     if (claves.isEmpty) return 0;
 
     var eliminados = 0;
+    final proyectoArchivo = norm.normalizeProyectoCodigo(proyecto);
 
-    eliminados +=
-        ref.read(localPrediosProvider.notifier).removeByClaves(claves);
+    eliminados += ref
+        .read(localPrediosProvider.notifier)
+        .removeByClaves(claves, proyecto: proyectoArchivo);
 
     try {
       // Se consulta el repositorio SIN restringir por proyecto asignado al
@@ -984,7 +999,9 @@ class _CargaArchivoScreenState extends ConsumerState<CargaArchivoScreen> {
       final predios = await repo.getPredios(limit: 100000);
       final toDelete = predios.where((p) {
         final clave = p.claveCatastral.trim().toUpperCase();
-        return !p.id.startsWith('local-') && claves.contains(clave);
+        final mismoProyecto = proyectoArchivo == null ||
+            norm.normalizeProyectoCodigo(p.proyecto) == proyectoArchivo;
+        return !p.id.startsWith('local-') && claves.contains(clave) && mismoProyecto;
       }).toList(growable: false);
 
       for (final predio in toDelete) {
@@ -1027,7 +1044,10 @@ class _CargaArchivoScreenState extends ConsumerState<CargaArchivoScreen> {
 
     try {
       final service = ref.read(xlsxImportServiceProvider);
-      final resultado = await service.importar(parseResult);
+      final resultado = await service.importar(
+        parseResult,
+        proyecto: _proyectoImportacion,
+      );
 
       ref.invalidate(prediosListProvider);
       ref.invalidate(prediosMapaProvider);

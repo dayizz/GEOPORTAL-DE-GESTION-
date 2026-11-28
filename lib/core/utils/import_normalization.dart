@@ -371,3 +371,21 @@ bool aplicarEstatusInfraestructura(Map<String, dynamic> data) {
   }
   return false;
 }
+
+/// Código de proyecto normalizado (MAYÚSCULAS, sin espacios; 'TQM' es el
+/// alias heredado de 'TMQ'). `null` si viene vacío.
+String? normalizeProyectoCodigo(String? proyecto) {
+  final p = (proyecto ?? '').trim().toUpperCase();
+  if (p.isEmpty) return null;
+  return p == 'TQM' ? 'TMQ' : p;
+}
+
+/// Llave para agrupar registros del MISMO predio: clave catastral + proyecto.
+/// Una misma clave (p.ej. "N/D-36") puede existir en varios proyectos y
+/// cada proyecto maneja sus datos por separado, así que nunca se agrupa,
+/// empata ni borra solo por clave. Devuelve `null` si no hay clave.
+String? llaveClaveProyecto(String? clave, String? proyecto) {
+  final c = normalizeCode(clave);
+  if (c == null) return null;
+  return '${normalizeProyectoCodigo(proyecto) ?? ''}|$c';
+}

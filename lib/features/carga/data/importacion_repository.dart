@@ -34,7 +34,7 @@ class ImportacionRepository {
 
   Future<ImportacionUpsertResult> upsertPredioConPropietario(
     Map<String, dynamic> row, {
-    bool esRepetidoEnArchivo = false,
+    int ocurrenciaEnArchivo = 1,
   }) async {
     final clave = row['clave_catastral']?.toString().trim() ?? '';
     if (clave.isEmpty) {
@@ -56,16 +56,15 @@ class ImportacionRepository {
       payload['propietario_nombre'] = propietario.nombreCompleto;
     }
 
-    // Si ya existe exactamente un registro con esta clave y este archivo no
-    // la había traído antes, esta fila se FUSIONA con él (join): típicamente
-    // es el "lado vectorial" del mismo predio, creado desde un GeoJSON,
-    // heredando datos mutuamente. Si `esRepetidoEnArchivo` es true (el
-    // propio archivo que se está importando ya trajo esta misma clave antes)
-    // se trata como una afectación repetida real y se crea un registro
-    // nuevo vinculado al mismo polígono, sin importar cuántos hermanos haya.
+    // La N-ésima vez que este archivo trae la clave se empata con el
+    // N-ésimo registro existente de esa clave y proyecto (join con el "lado
+    // vectorial" creado desde un GeoJSON, o el mismo registro si se vuelve
+    // a importar el archivo). Si el archivo la trae más veces de las que ya
+    // hay registradas, se crea una afectación nueva vinculada al mismo
+    // polígono (ver `PrediosRepository.upsertPredioPorClave`).
     final resultado = await _prediosRepository.upsertPredioPorClave(
       payload,
-      forzarNuevoRegistro: esRepetidoEnArchivo,
+      ocurrenciaEnArchivo: ocurrenciaEnArchivo,
     );
 
     return ImportacionUpsertResult(
